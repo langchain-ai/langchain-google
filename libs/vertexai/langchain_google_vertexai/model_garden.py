@@ -161,25 +161,30 @@ _FALLBACK_MAX_OUTPUT_TOKENS: int = 4096
 """Fallback max output tokens when the model has no profile entry."""
 
 
-def _get_anthropic_profile_max_output_tokens(model_name: str) -> int:
+def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
     """Look up the max output tokens for an Anthropic model from its profile.
 
-    Returns the profile's `max_output_tokens` if known, else the fallback default.
+    Returns the profile's `max_output_tokens` when known. Falls back to
+    `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, has no profile
+    entry, or whose profile lacks a `max_output_tokens` key.
     """
-    profile = _ANTHROPIC_PROFILES.get(model_name) or {}
-    return profile.get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
+    profile = _ANTHROPIC_PROFILES.get(model_name) if model_name else None
+    return (profile or {}).get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
 
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     async_client: Any = Field(default=None, exclude=True)
 
-    max_output_tokens: int | None = Field(default=None, alias="max_tokens")
+    max_output_tokens: int = Field(
+        default=_FALLBACK_MAX_OUTPUT_TOKENS, alias="max_tokens"
+    )
     """Denotes the number of tokens to predict per generation.
 
     If not explicitly set, this is set dynamically using the model's
     `max_output_tokens` from its
     [model profile](https://docs.langchain.com/oss/python/langchain/models#model-profiles).
-    Falls back to 4096 for models without a profile entry.
+    Falls back to 4096 when no profile entry exists for the model or when the
+    profile is missing `max_output_tokens`.
     """
 
     access_token: str | None = None
@@ -226,10 +231,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         max_tokens_keys = ("max_output_tokens", "max_tokens")
         if not any(values.get(k) is not None for k in max_tokens_keys):
             model = values.get("model_name") or values.get("model")
-            if model:
-                values["max_output_tokens"] = _get_anthropic_profile_max_output_tokens(
-                    model
-                )
+            values["max_output_tokens"] = _get_anthropic_profile_max_output_tokens(
+                model
+            )
         return values
 
     @model_validator(mode="before")

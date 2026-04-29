@@ -1,4 +1,6 @@
 """Anthropic-on-Vertex model profile data.
 
-All edits should be made in `profile_augmentations.toml`.
+`_profiles.py` is auto-generated from models.dev via the `langchain-profiles`
+CLI tool — do not edit it manually. Apply manual overrides in
+`profile_augmentations.toml`.
 """

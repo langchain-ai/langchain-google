@@ -414,6 +414,53 @@ def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
     assert llm.max_output_tokens == 512
 
 
+def test_anthropic_vertex_no_model_falls_back() -> None:
+    """No model_name → still get the fallback default (avoids `max_tokens=None`)."""
+    llm = ChatAnthropicVertex(
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_model_alias_resolves_profile() -> None:
+    """`model=` alias should resolve the same profile as `model_name=`."""
+    llm = ChatAnthropicVertex(
+        model="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 64000
+
+
+def test_anthropic_profiles_smoke() -> None:
+    """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
+    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+
+    assert _PROFILES
+    sample = next(iter(_PROFILES.values()))
+    assert "max_output_tokens" in sample
+
+
+def test_anthropic_vertex_profile_missing_max_output_tokens(
+    monkeypatch: Any,
+) -> None:
+    """Profile entry exists but lacks `max_output_tokens` → fallback to 4096."""
+    from langchain_google_vertexai import model_garden
+
+    monkeypatch.setitem(
+        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        "claude-test-no-output-key",
+        {"name": "Test"},
+    )
+    llm = ChatAnthropicVertex(
+        model_name="claude-test-no-output-key",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
 def test_profile() -> None:
     model = ChatVertexAI(
         model="gemini-2.0-flash", project="test-project", location="moon-dark1"
