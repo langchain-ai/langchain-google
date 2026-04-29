@@ -1172,7 +1172,7 @@ def test_parse_chat_history_gemini_video_offset_validation() -> None:
 
 
 def test_validate_video_metadata_accepts_proto_instance() -> None:
-    """``VideoMetadata`` proto instances should validate via attribute access."""
+    """`VideoMetadata` proto instances should validate via attribute access."""
     from google.cloud.aiplatform_v1beta1.types import VideoMetadata
 
     valid = VideoMetadata(
@@ -1203,7 +1203,7 @@ def test_validate_video_metadata_rejects_non_mapping_input(
     video_metadata: object,
 ) -> None:
     """Non-mapping, non-proto input must surface a clear ValueError instead
-    of an opaque ``AttributeError`` from a missing ``.get`` method."""
+    of an opaque `AttributeError` from a missing `.get` method."""
     with pytest.raises(ValueError, match="must be a mapping"):
         _validate_video_metadata(video_metadata)
 
@@ -1211,18 +1211,18 @@ def test_validate_video_metadata_rejects_non_mapping_input(
 @pytest.mark.parametrize(
     "video_metadata",
     [
-        # ``float(None)`` would TypeError without the guard.
+        # `float(None)` would TypeError without the guard.
         {"start_offset": {"seconds": None, "nanos": None}},
-        # ``float('abc')`` would ValueError without the guard.
+        # `float('abc')` would ValueError without the guard.
         {"start_offset": {"seconds": "abc"}},
-        # Garbage string with the ``s`` suffix.
+        # Garbage string with the `s` suffix.
         {"start_offset": "abcs"},
     ],
 )
 def test_validate_video_metadata_tolerates_unparseable_values(
     video_metadata: dict,
 ) -> None:
-    """Permissive ``_to_seconds`` returns ``None`` for unparseable shapes so
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
     only true validation failures (negative offsets, start > end) raise."""
     # Should not raise -- unparseable values are treated as "not present"
     # and the proto constructor will surface a clearer error if needed.

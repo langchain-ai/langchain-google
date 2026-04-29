@@ -217,22 +217,22 @@ class _GeminiGenerateContentKwargs(TypedDict):
 def _validate_video_metadata(video_metadata: object) -> None:
     """Validate user-supplied video metadata before sending to Vertex AI.
 
-    The Vertex API surfaces an opaque ``400 invalid argument`` when video
-    offsets are negative or ``start_offset`` exceeds ``end_offset``. This
+    The Vertex API surfaces an opaque `400 invalid argument` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
     helper checks the obvious cases up front and raises a clearer error so
     callers do not have to debug the underlying API response.
 
     Args:
-        video_metadata: Raw ``video_metadata`` from a media part. Accepts
-            a ``Mapping`` (e.g. ``dict``) or a ``VideoMetadata`` proto-like
-            instance with ``start_offset``/``end_offset`` attributes. Each
-            offset may be a number of seconds, a ``{"seconds": int,
-            "nanos": int}`` mapping, a ``google.protobuf.duration_pb2.
-            Duration`` instance, or a string like ``"10s"``.
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) or a `VideoMetadata` proto-like
+            instance with `start_offset`/`end_offset` attributes. Each
+            offset may be a number of seconds, a `{"seconds": int,
+            "nanos": int}` mapping, a `google.protobuf.duration_pb2.
+            Duration` instance, or a string like `"10s"`.
 
     Raises:
-        ValueError: If an offset is negative, ``start_offset`` is greater
-            than ``end_offset``, or ``video_metadata`` is not a mapping or
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
             proto-like object exposing offset fields.
     """
 
@@ -268,8 +268,8 @@ def _validate_video_metadata(video_metadata: object) -> None:
     elif hasattr(video_metadata, "start_offset") or hasattr(
         video_metadata, "end_offset"
     ):
-        # Proto-like object (e.g. ``VideoMetadata`` instance). Read fields
-        # via attribute access instead of ``.get`` so we don't regress
+        # Proto-like object (e.g. `VideoMetadata` instance). Read fields
+        # via attribute access instead of `.get` so we don't regress
         # callers that already pass a constructed proto.
         raw_start = getattr(video_metadata, "start_offset", None)
         raw_end = getattr(video_metadata, "end_offset", None)
