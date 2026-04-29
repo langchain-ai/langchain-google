@@ -1,0 +1,14 @@
+# FastAPI web framework
+fastapi>=0.104.0
+
+# ASGI server
+uvicorn[standard]>=0.24.0
+
+# BigQuery client
+google-cloud-bigquery>=3.13.0
+
+# Template rendering
+jinja2>=3.1.2
+
+# Server-Sent Events for real-time updates
+sse-starlette>=1.6.5

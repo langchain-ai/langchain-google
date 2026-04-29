@@ -135,7 +135,7 @@ def _format_json_schema_to_gapic(
                 )
             return _format_json_schema_to_gapic(value[0], parent_key, required_fields)
         elif key == "anyOf":
-            if len(value) == 2 and any(v.get("type") == "null" for v in value):
+            if any(v.get("type") == "null" for v in value):
                 non_null_type = next(v for v in value if v.get("type") != "null")
                 converted_schema.update(
                     _format_json_schema_to_gapic(

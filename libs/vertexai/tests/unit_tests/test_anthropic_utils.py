@@ -16,6 +16,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.messages.content import create_image_block, create_text_block
 from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
@@ -785,6 +786,43 @@ def test_format_messages_anthropic_with_mixed_messages() -> None:
         (
             [
                 AIMessage(
+                    content_blocks=[
+                        create_text_block(text="Text content"),
+                        create_image_block(url="https://example.com/image.png"),
+                        create_image_block(base64="/9j/4AAQSk", mime_type="image/png"),
+                        create_image_block(file_id="1"),
+                    ]
+                ),
+            ],
+            None,
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Text content"},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "url",
+                                "url": "https://example.com/image.png",
+                            },
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": "/9j/4AAQSk",
+                            },
+                        },
+                        {"type": "image", "source": {"type": "file", "file_id": "1"}},
+                    ],
+                }
+            ],
+        ),
+        (
+            [
+                AIMessage(
                     content=[
                         {"type": "text", "text": "Text content"},
                         {
@@ -1315,6 +1353,121 @@ def test_tool_message_preserves_cache_control() -> None:
     }
 
 
+def test_format_messages_tool_message_with_image_blocks() -> None:
+    """Test image blocks in ToolMessage content are converted to Anthropic format.
+
+    LangChain image blocks use {"type": "image", "base64": ..., "mime_type": ...}
+    but Anthropic expects {"type": "image", "source": {"type": "base64", ...}}.
+    This conversion must happen even when images are nested inside tool_result content.
+    """
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "screenshot.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "base64": "iVBORw0KGgo=",
+                    "mime_type": "image/png",
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    tool_result = formatted[1]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == "call_1"
+
+    image_block = tool_result["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgo=",
+        },
+    }
+
+
+def test_format_messages_tool_message_with_url_image_block() -> None:
+    """Test URL image blocks in ToolMessage are converted."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "img.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "url": "https://example.com/image.png",
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    image_block = formatted[1]["content"][0]["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {"type": "url", "url": "https://example.com/image.png"},
+    }
+
+
+def test_format_messages_tool_message_with_already_formatted_image() -> None:
+    """Test that image blocks already in Anthropic format are passed through."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "img.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "iVBORw0KGgo=",
+                    },
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    image_block = formatted[1]["content"][0]["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgo=",
+        },
+    }
+
+
 @pytest.mark.parametrize(
     ("image_url", "expected_media_type"),
     [
@@ -1344,3 +1497,58 @@ def test_format_image(image_url: str, expected_media_type: str) -> None:
         }
 
         mock_loader_instance.load_bytes.assert_called_once_with(image_url)
+
+
+def test_format_messages_anthropic_system_not_first() -> None:
+    """Test that system messages are accepted when not at position 0.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1022
+    """
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content="Hi there!"),
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="What is 2+2?"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
+
+    assert system_messages == [{"type": "text", "text": "You are a helpful assistant."}]
+    # System message should be extracted; remaining messages should be formatted
+    assert len(formatted_messages) == 3
+    assert formatted_messages[0]["role"] == "user"
+    assert formatted_messages[1]["role"] == "assistant"
+    assert formatted_messages[2]["role"] == "user"
+
+
+def test_format_messages_anthropic_consecutive_system_merged() -> None:
+    """Test that consecutive system messages are merged into one."""
+    messages = [
+        SystemMessage(content="Rule 1."),
+        SystemMessage(content="Rule 2."),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
+
+    # Consecutive system messages should be merged
+    assert system_messages == [
+        {"type": "text", "text": "Rule 1."},
+        {"type": "text", "text": "Rule 2."},
+    ]
+    assert len(formatted_messages) == 1
+    assert formatted_messages[0]["role"] == "user"
+
+
+def test_format_messages_anthropic_multiple_non_consecutive_system_raises() -> None:
+    """Test that multiple non-consecutive system messages raise an error."""
+    messages = [
+        SystemMessage(content="First system."),
+        HumanMessage(content="Hello"),
+        SystemMessage(content="Second system."),
+        HumanMessage(content="World"),
+    ]
+    with pytest.raises(ValueError, match="multiple non-consecutive system messages"):
+        _format_messages_anthropic(messages, project="test-project")

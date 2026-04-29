@@ -194,6 +194,8 @@ The `google-genai` library requires creating a client object for all API calls.
   - **Prohibited:** `gemini-1.5-flash`
   - **Prohibited:** `gemini-1.5-pro`
   - **Prohibited:** `gemini-pro`
+  - **Prohibited:** `gemini-3-pro-preview` (discontinued March 26, 2026; use `gemini-3.1-pro-preview` instead)
+  - **Prohibited:** `gemini-embedding-001` (use `gemini-embedding-2-preview` instead)
 
 ## Basic inference
 
@@ -659,6 +661,20 @@ print(response.text)
 ## Other APIs
 
 The list of APIs and capabilities above are not comprehensive. If users ask you to generate code for a capability not provided above, refer them to ai.google.dev/gemini-api/docs.
+
+## Model profiles
+
+Model profiles are generated using the `langchain-profiles` CLI from the **main `langchain` monorepo** (`../langchain/libs/model-profiles`). The `--data-dir` must point to the directory containing `profile_augmentations.toml`, not the top-level package directory.
+
+```bash
+# Run from the langchain monorepo's model-profiles directory
+cd ../langchain/libs/model-profiles
+
+# Refresh Google GenAI profiles
+echo y | uv run langchain-profiles refresh --provider google --data-dir /path/to/langchain-google/libs/genai/langchain_google_genai/data
+```
+
+The `echo y |` pipe is required because the tool prompts for confirmation when writing outside its own working directory.
 
 ## Running tests
 
