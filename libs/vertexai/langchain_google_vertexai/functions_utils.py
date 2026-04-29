@@ -82,9 +82,9 @@ def _format_json_schema_to_gapic_v1(schema: dict[str, Any]) -> dict[str, Any]:
                 converted_schema["properties"][pkey] = _format_json_schema_to_gapic_v1(
                     pvalue
                 )
-        elif key in ("anyOf", "oneOf"):
+        elif key == "anyOf":
             valid_candidates = [c for c in value if c.get("type") != "null"]
-            converted_schema[key] = [
+            converted_schema["anyOf"] = [
                 _format_json_schema_to_gapic_v1(c) for c in valid_candidates
             ]
             continue
@@ -138,8 +138,7 @@ def _format_json_schema_to_gapic(
         elif key == "anyOf":
             valid_candidates = [v for v in value if v.get("type") != "null"]
 
-            # A filtered-out null means the field is optional; drop it from
-            # the parent's `required` list so the schema stays consistent.
+            # A filtered null marks the field optional; mirror that in `required`.
             if len(valid_candidates) < len(value):
                 if required_fields and parent_key in required_fields:
                     required_fields.remove(parent_key)
@@ -148,14 +147,12 @@ def _format_json_schema_to_gapic(
                 continue
 
             if len(valid_candidates) == 1:
-                # Unwrap simple `T | None` into the inner type.
                 converted_schema.update(
                     _format_json_schema_to_gapic(
                         valid_candidates[0], parent_key, required_fields
                     )
                 )
             else:
-                # Preserve real unions (e.g. `str | int | None`) as anyOf.
                 converted_schema["anyOf"] = [
                     _format_json_schema_to_gapic(
                         candidate, "anyOf", schema.get("required", [])
