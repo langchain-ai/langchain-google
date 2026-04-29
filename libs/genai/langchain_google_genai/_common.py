@@ -76,14 +76,14 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         # Automatically uses Vertex AI with API key
-        llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         ```
 
         Or programmatically:
 
         ```python
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             api_key="your-api-key",
             project="your-project-id",
             vertexai=True,  # Explicitly use Vertex AI
@@ -223,7 +223,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             api_key="your-api-key",
             project="your-project-id",
             vertexai=True,

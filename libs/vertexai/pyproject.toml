@@ -12,7 +12,7 @@ authors = []
 version = "3.2.2"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
-    "langchain-core>=1.2.7,<2.0.0",
+    "langchain-core>=1.3.2,<2.0.0",
     "google-cloud-aiplatform>=1.97.0,<2.0.0",
     "google-cloud-storage>=2.18.0,<4.0.0",
     "httpx>=0.28.0,<1.0.0",
@@ -22,7 +22,7 @@ dependencies = [
     "bottleneck>=1.4.0,<2.0.0",
     "numexpr>=2.8.6,<3.0.0",
     "pyarrow>=19.0.1,<24.0.0",
-    "langchain-tests>=1.0.1",
+    "langchain-tests>=1.1.4",
     "google-cloud-vectorsearch>=0.2.0",
 ]
 
@@ -44,7 +44,6 @@ testing = [
   "pytest-asyncio",
   "pytest-retry",
   "pytest-recording",
-  "langchain-core[testing]",
 ]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
@@ -90,6 +89,9 @@ test_integration = [
     "langchain-mistralai>=0.2.12,<2.0.0",
     "langchain-tests>=1.0.0,<2.0.0",
 ]
+
+[tool.uv]
+constraint-dependencies = ["urllib3>=2.6.3"]
 
 [tool.ruff]
 fix = true

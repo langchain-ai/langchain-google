@@ -470,7 +470,7 @@ def test_tuned_model_name() -> None:
     Tuned models must be specified using the full resource name.
     """
     llm = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
         max_tokens=500,
@@ -495,7 +495,7 @@ def test_default_params_gemini() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-2-5-flash", project="test-project")
+        model = ChatVertexAI(model="gemini-2-5-flash", project="test-project")
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
@@ -521,7 +521,7 @@ def test_default_params_gemini() -> None:
 def test_generation_config_gemini() -> None:
     """Test that generation config is set correctly in the request when overridden."""
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         project="test-project",
         temperature=0.2,
         top_k=3,
@@ -557,7 +557,7 @@ def test_safety_settings_gemini_init() -> None:
         )
     ]
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         temperature=0.2,
         top_k=3,
         project="test-project",
@@ -570,7 +570,7 @@ def test_safety_settings_gemini_init() -> None:
 def test_safety_settings_gemini() -> None:
     """Test that safety settings are set correctly in the request."""
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
+        model="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
     )
     expected_safety_setting = SafetySetting(
         category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
@@ -1494,7 +1494,7 @@ def test_parser_multiple_tools() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-2.5-pro", project="test-project")
+        model = ChatVertexAI(model="gemini-2.5-pro", project="test-project")
         message = HumanMessage(content="Hello")
         parser = PydanticToolsParser(tools=[Add, Multiply])
         llm = model | parser
@@ -1915,7 +1915,7 @@ def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
         name: str = Field(description="Person's name")
         age: int = Field(gt=0, le=150, description="Person's age")
 
-    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
 
     # This should not raise any errors when creating structured output
     structured_llm = llm.with_structured_output(TestModel, method="json_mode")
@@ -1949,7 +1949,7 @@ def test_json_mode_pydantic_v1_backward_compatibility() -> None:
         name: str
         age: int
 
-    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
 
     # V1 models should work without issues
     structured_llm = llm.with_structured_output(V1Model, method="json_mode")
@@ -2253,3 +2253,109 @@ def test_get_num_tokens_from_messages_multimodal(
         request_dict = call_args[0][0]
         assert "contents" in request_dict
         assert len(request_dict["contents"]) > 0
+
+
+class TestAnthropicVertexCacheControl:
+    """Regression tests for https://github.com/langchain-ai/langchain-google/issues/1612."""
+
+    def _make_model(self) -> ChatAnthropicVertex:
+        return ChatAnthropicVertex(project="test-project", location="test-location")
+
+    def test_cache_control_applied_to_last_dict_block(self) -> None:
+        """cache_control kwarg is injected into the last content block."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_applied_to_string_content(self) -> None:
+        """String content is converted to a list block with cache_control."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hi")],
+            cache_control={"type": "ephemeral"},
+        )
+        last_msg = params["messages"][-1]
+        assert isinstance(last_msg["content"], list)
+        assert last_msg["content"][-1]["type"] == "text"
+        assert last_msg["content"][-1]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_cache_control_leaves_messages_unchanged(self) -> None:
+        """Without cache_control, messages are not modified."""
+        model = self._make_model()
+        params = model._format_params(messages=[HumanMessage("Hello")])
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert "cache_control" not in last_block
+
+    def test_cache_control_targets_last_message(self) -> None:
+        """With multiple messages, cache_control goes on the last one."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                HumanMessage("First"),
+                AIMessage("Response"),
+                HumanMessage("Second"),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        first_block = params["messages"][0]["content"][-1]
+        assert "cache_control" not in first_block
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_none_is_ignored(self) -> None:
+        """Explicitly passing cache_control=None has no effect."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control=None,
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert "cache_control" not in last_block
+
+    def test_cache_control_not_in_top_level_params(self) -> None:
+        """cache_control must never appear as a top-level API parameter."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+
+    def test_cache_control_with_system_message(self) -> None:
+        """cache_control works when conversation includes a system message."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                SystemMessage("You are helpful."),
+                HumanMessage("Hello"),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_with_multipart_content(self) -> None:
+        """cache_control is applied to the last block of multipart content."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "Describe this:"},
+                        {"type": "text", "text": "A sunny day."},
+                    ]
+                ),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        blocks = params["messages"][-1]["content"]
+        assert "cache_control" not in blocks[0]
+        assert blocks[-1]["cache_control"] == {"type": "ephemeral"}

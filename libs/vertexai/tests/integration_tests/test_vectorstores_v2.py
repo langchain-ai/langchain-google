@@ -27,11 +27,10 @@ from langchain_google_vertexai.vectorstores.vectorstores import (
 
 @pytest.fixture(scope="module")
 def embeddings() -> VertexAIEmbeddings:
-    return VertexAIEmbeddings(model_name="text-embedding-005")  # type: ignore
+    return VertexAIEmbeddings(model="text-embedding-005")
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.extended
 def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     """Initializes a VectorSearchVectorStore for V2 batch updates."""
     project_id = os.environ["PROJECT_ID"]
@@ -86,7 +85,6 @@ def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
 
 
 @pytest.fixture
-@pytest.mark.extended
 def datastore_vector_store_v2(
     embeddings: VertexAIEmbeddings,
 ) -> VectorSearchVectorStoreDatastore:
@@ -104,7 +102,6 @@ def datastore_vector_store_v2(
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.extended
 def semantic_search_collection():
     """Creates a collection with semantic search support and cleans up after tests."""
     project_id = os.environ["PROJECT_ID"]
