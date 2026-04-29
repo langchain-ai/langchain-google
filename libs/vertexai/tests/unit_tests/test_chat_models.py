@@ -2219,6 +2219,36 @@ def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> 
         assert call_kwargs.get("timeout") is None
 
 
+def test_gemini_response_to_chat_result_emits_string_modality() -> None:
+    """`response_metadata["usage_metadata"]` exposes modality as a string (#1053)."""
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hi"}], "role": "model"},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 4,
+                "candidates_token_count": 1,
+                "total_token_count": 5,
+                "prompt_tokens_details": [{"modality": 1, "token_count": 4}],
+                "candidates_tokens_details": [{"modality": 1, "token_count": 1}],
+            },
+        }
+    )
+    result = llm._gemini_response_to_chat_result(response)
+    generation_info = result.generations[0].generation_info
+    assert generation_info is not None
+    usage = generation_info["usage_metadata"]
+    assert usage["prompt_tokens_details"][0]["modality"] == "TEXT"
+    assert usage["candidates_tokens_details"][0]["modality"] == "TEXT"
+
+
 def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
     """Test get_num_tokens_from_messages uses count_tokens API properly."""
     llm = ChatVertexAI(
