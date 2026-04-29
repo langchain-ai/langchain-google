@@ -10,11 +10,10 @@ from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
 @pytest.mark.extended
-@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_system_cache() -> None:
     """Test chat with system message having cache control."""
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = "us-east5"
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -26,19 +25,18 @@ def test_anthropic_system_cache() -> None:
     )
     message = HumanMessage(content="Hello! What can you do for me?")
 
-    response = model.invoke([context, message], model_name="claude-sonnet-4-5@20250929")
+    response = model.invoke([context, message], model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert "usage_metadata" in response.additional_kwargs
-    assert "cache_creation_input_tokens" in response.additional_kwargs["usage_metadata"]
+    assert response.usage_metadata is not None
+    assert "cache_creation_input_tokens" in response.response_metadata["usage"]
 
 
 @pytest.mark.extended
-@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_mixed_cache() -> None:
     """Test chat with different cache control types."""
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = "us-east5"
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -63,18 +61,17 @@ def test_anthropic_mixed_cache() -> None:
         ]
     )
 
-    response = model.invoke([context, message], model_name="claude-sonnet-4-5@20250929")
+    response = model.invoke([context, message], model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
-    assert "usage_metadata" in response.additional_kwargs
+    assert response.usage_metadata is not None
 
 
 @pytest.mark.extended
-@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_conversation_cache() -> None:
     """Test chat conversation with cache control."""
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = "us-east5"
     model = ChatAnthropicVertex(
         project=project,
         location=location,
@@ -107,21 +104,21 @@ def test_anthropic_conversation_cache() -> None:
         ),
     ]
 
-    response = model.invoke(messages, model_name="claude-sonnet-4-5@20250929")
+    response = model.invoke(messages, model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
     assert "peter" in response.content.lower()  # Should remember the name
 
 
 @pytest.mark.extended
-@pytest.mark.skip(reason="claude-3-5-v2 not enabled")
 def test_anthropic_chat_template_cache() -> None:
     """Test chat template with structured content and cache control."""
     project = os.environ["PROJECT_ID"]
-    location = "us-central1"
+    location = "us-east5"
     model = ChatAnthropicVertex(
         project=project,
         location=location,
+        model_name="claude-sonnet-4-6",
     )
 
     content: list[dict[str, str | dict[str, str]] | str] = [
