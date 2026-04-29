@@ -547,7 +547,7 @@ test = [
 ]
 test-integration = [{ name = "pytest", specifier = ">=8.4.0,<10.0.0" }]
 typing = [
-    { name = "mypy", specifier = ">=1.18.1,<1.20.0" },
+    { name = "mypy", specifier = ">=1.18.1,<1.21.0" },
     { name = "numpy", specifier = ">=1.26.2" },
     { name = "types-google-cloud-ndb", specifier = ">=2.2.0.1,<3.0.0.0" },
     { name = "types-protobuf", specifier = ">=4.24.0.20240302,<7.0.0.0" },

@@ -64,6 +64,7 @@ from langchain_google_genai.chat_models import (
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
+    _validate_video_metadata,
 )
 
 MODEL_NAME = "gemini-2.5-flash"
@@ -2944,6 +2945,152 @@ def test_convert_to_parts_media_with_video_metadata() -> None:
     assert result[0].video_metadata is not None
     assert result[0].video_metadata.start_offset == "10s"
     assert result[0].video_metadata.end_offset == "20s"
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": "1s", "end_offset": "5s"},
+        {"start_offset": "0s", "end_offset": "0s"},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"startOffset": "1s", "endOffset": "5s"},
+        {},
+        {"end_offset": "5s"},
+        {"start_offset": "1s"},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": "-1s", "end_offset": "5s"},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "0s", "end_offset": "-1s"},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "10s", "end_offset": "5s"},
+            "must not exceed",
+        ),
+        (
+            {"startOffset": "5s", "endOffset": "1s"},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": {"seconds": 30}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_validate_video_metadata_accepts_pydantic_instance() -> None:
+    """`VideoMetadata` instances should validate via attribute access."""
+    from google.genai.types import VideoMetadata
+
+    valid = VideoMetadata(start_offset="1s", end_offset="5s")
+    _validate_video_metadata(valid)
+
+
+def test_validate_video_metadata_rejects_invalid_pydantic_instance() -> None:
+    """Pydantic instances with bad offsets must raise the same clear ValueError."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="30s", end_offset="5s")
+    with pytest.raises(ValueError, match="must not exceed"):
+        _validate_video_metadata(bad)
+
+
+def test_validate_video_metadata_rejects_negative_pydantic_instance() -> None:
+    """Negative offsets reach the same guard via the attribute-access path."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="-1s", end_offset="5s")
+    with pytest.raises(ValueError, match="start_offset must be non-negative"):
+        _validate_video_metadata(bad)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `True` would be silently treated as 1 second without the bool
+        # guard, since `isinstance(True, int) is True`.
+        {"start_offset": True, "end_offset": "5s"},
+        {"start_offset": "5s", "end_offset": False},
+    ],
+)
+def test_validate_video_metadata_ignores_bool_offsets(
+    video_metadata: dict,
+) -> None:
+    """Booleans must not be coerced into integer durations."""
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        "not a mapping",
+        12345,
+        ["seq", "of", "things"],
+        object(),
+    ],
+)
+def test_validate_video_metadata_rejects_non_mapping_input(
+    video_metadata: object,
+) -> None:
+    """Non-mapping, non-model input must surface a clear ValueError instead
+    of an opaque `AttributeError` from a missing `.get` method."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `float(None)` would TypeError without the guard.
+        {"start_offset": {"seconds": None, "nanos": None}},
+        # `float('abc')` would ValueError without the guard.
+        {"start_offset": {"seconds": "abc"}},
+        # Garbage string with the `s` suffix.
+        {"start_offset": "abcs"},
+    ],
+)
+def test_validate_video_metadata_tolerates_unparseable_values(
+    video_metadata: dict,
+) -> None:
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
+    only true validation failures (negative offsets, start > end) raise."""
+    # Should not raise -- unparseable values are treated as "not present"
+    # and `model_validate` will surface a clearer error if needed.
+    _validate_video_metadata(video_metadata)
+
+
+def test_convert_to_parts_video_metadata_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+            "video_metadata": {"start_offset": "30s", "end_offset": "5s"},
+        }
+    ]
+    with pytest.raises(ValueError, match="must not exceed"):
+        _convert_to_parts(content)
 
 
 def test_convert_to_parts_executable_code() -> None:

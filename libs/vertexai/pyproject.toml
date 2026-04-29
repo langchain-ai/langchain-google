@@ -9,7 +9,7 @@ license = {text = "MIT"}
 readme = "README.md"
 authors = []
 
-version = "3.2.2"
+version = "3.2.3"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
     "langchain-core>=1.3.2,<2.0.0",
@@ -22,7 +22,6 @@ dependencies = [
     "bottleneck>=1.4.0,<2.0.0",
     "numexpr>=2.8.6,<3.0.0",
     "pyarrow>=19.0.1,<24.0.0",
-    "langchain-tests>=1.1.4",
     "google-cloud-vectorsearch>=0.2.0",
 ]
 
@@ -38,24 +37,14 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35.0,<1.0.0"]
 mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
-testing = [
-  "pytest",
-  "pytest-mock",
-  "pytest-asyncio",
-  "pytest-retry",
-  "pytest-recording",
-]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
-]
-all = [
-  "langchain-google-vertexai[testing,vectorsearch_v2]",
 ]
 
 [dependency-groups]
 lint = ["ruff>=0.13.1,<0.16.0"]
 typing = [
-    "mypy>=1.18.1,<1.20.0",
+    "mypy>=1.18.1,<1.21.0",
     "types-requests>=2.31.0,<3.0.0",
     "types-google-cloud-ndb>=2.2.0.20240106,<3.0.0.0",
     "types-protobuf>=4.24.0.4,<7.0.0.0",
@@ -79,6 +68,7 @@ test = [
     "anthropic>=0.64.0,<1.0.0",
     "validators>=0.35.0,<1.0.0",
     "langchain-tests>=1.1.2,<2.0.0",
+    "pytest-recording>=0.13.4,<1.0.0",
 ]
 test_integration = [
     "numexpr>=2.8.8; python_version>='3.9'",
@@ -209,3 +199,16 @@ markers = [
     "extended: mark tests as extended integration tests",
 ]
 asyncio_mode = "auto"
+# Suppress warnings raised by the deprecated `langchain-google-vertexai` classes
+# themselves and by upstream SDKs we don't control. Tests still exercise these
+# classes intentionally; the deprecation chatter is just noise.
+filterwarnings = [
+    "ignore:Use \\[`GoogleGenerativeAI`.*:DeprecationWarning",
+    "ignore:Use \\[`ChatGoogleGenerativeAI`.*:DeprecationWarning",
+    "ignore:Use \\[`GoogleGenerativeAIEmbeddings`.*:DeprecationWarning",
+    "ignore:The class `VertexAI` was deprecated.*:langchain_core._api.deprecation.LangChainDeprecationWarning",
+    "ignore:The class `ChatVertexAI` was deprecated.*:langchain_core._api.deprecation.LangChainDeprecationWarning",
+    "ignore:The class `VertexAIEmbeddings` was deprecated.*:langchain_core._api.deprecation.LangChainDeprecationWarning",
+    "ignore:The function `create_structured_runnable` was deprecated.*:langchain_core._api.deprecation.LangChainDeprecationWarning",
+    "ignore:This feature is deprecated as of June 24, 2025.*:UserWarning",
+]
