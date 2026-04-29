@@ -3,8 +3,8 @@
 
 This example demonstrates:
 - LangGraph agent with realistic tool calls
-- NODE_STARTING/NODE_COMPLETED event tracking
-- GRAPH_START/GRAPH_END via context manager
+- AGENT_STARTING/AGENT_COMPLETED event tracking (one per LangGraph node)
+- INVOCATION_STARTING/INVOCATION_COMPLETED via the graph_context() manager
 - Tool name tracking across callbacks
 - Execution order tracking
 - Full latency measurements with component breakdown
@@ -219,7 +219,7 @@ def calculate(expression: str) -> str:
         # Only allow safe characters
         allowed_chars = set("0123456789+-*/().  sqrtcosintanlogexpabsroundpie")
         if not all(c in allowed_chars for c in expr.lower()):
-            return f"Error: Expression contains invalid characters"
+            return "Error: Expression contains invalid characters"
 
         result = eval(expr, {"__builtins__": {}}, allowed_names)
         if isinstance(result, float):

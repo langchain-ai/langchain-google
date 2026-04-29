@@ -1294,7 +1294,7 @@ def test_context_manager_emits_events(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Test that the context manager emits GRAPH_START and GRAPH_END events."""
+    """Context manager emits INVOCATION_STARTING and INVOCATION_COMPLETED."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
     sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
@@ -1302,7 +1302,7 @@ def test_context_manager_emits_events(
     with sync_handler.graph_context("test_graph"):
         pass  # Graph execution would happen here
 
-    # Should have two calls: GRAPH_START and GRAPH_END
+    # Should have two calls: INVOCATION_STARTING and INVOCATION_COMPLETED
     assert sync_handler.batch_processor.append.call_count == 2
 
     calls = sync_handler.batch_processor.append.call_args_list
@@ -1314,7 +1314,7 @@ def test_context_manager_handles_errors(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Test that the context manager emits GRAPH_ERROR on exception."""
+    """Test that the context manager emits INVOCATION_ERROR on exception."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
     sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
@@ -1325,7 +1325,7 @@ def test_context_manager_handles_errors(
     except ValueError:
         pass
 
-    # Should have two calls: GRAPH_START and GRAPH_ERROR
+    # Should have two calls: INVOCATION_STARTING and INVOCATION_ERROR
     assert sync_handler.batch_processor.append.call_count == 2
 
     calls = sync_handler.batch_processor.append.call_args_list
@@ -1339,7 +1339,7 @@ async def test_async_context_manager_emits_events(
     handler: AsyncBigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Test that the async context manager emits GRAPH_START and GRAPH_END events."""
+    """Async context manager emits INVOCATION_STARTING and INVOCATION_COMPLETED."""
     if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
     handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
@@ -1347,7 +1347,7 @@ async def test_async_context_manager_emits_events(
     async with handler.graph_context("test_graph"):
         pass  # Graph execution would happen here
 
-    # Should have two calls: GRAPH_START and GRAPH_END
+    # Should have two calls: INVOCATION_STARTING and INVOCATION_COMPLETED
     assert handler.async_batch_processor.append.call_count == 2
 
     calls = handler.async_batch_processor.append.call_args_list
@@ -1360,7 +1360,7 @@ async def test_async_context_manager_handles_errors(
     handler: AsyncBigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Test that the async context manager emits GRAPH_ERROR on exception."""
+    """Test that the async context manager emits INVOCATION_ERROR on exception."""
     if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
     handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
@@ -1371,7 +1371,7 @@ async def test_async_context_manager_handles_errors(
     except RuntimeError:
         pass
 
-    # Should have two calls: GRAPH_START and GRAPH_ERROR
+    # Should have two calls: INVOCATION_STARTING and INVOCATION_ERROR
     assert handler.async_batch_processor.append.call_count == 2
 
     calls = handler.async_batch_processor.append.call_args_list
