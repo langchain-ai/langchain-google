@@ -1463,7 +1463,7 @@ def test_chain_end_preserves_metadata_sync(
 ) -> None:
     """CHAIN_END must carry agent / user_id / session_id from the start call.
 
-    langchain-core does not forward ``metadata`` to ``on_chain_end``; without
+    langchain-core does not forward `metadata` to `on_chain_end`; without
     the start-time registry we'd lose it. See issue #1690.
     """
     if not sync_handler.batch_processor:
@@ -1624,7 +1624,7 @@ def test_token_usage_extracted_from_legacy_llm_output(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Legacy ``llm_output['token_usage']`` is still picked up (issue #1720)."""
+    """Legacy `llm_output['token_usage']` is still picked up (issue #1720)."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
     sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
@@ -1646,8 +1646,8 @@ def test_token_usage_extracted_from_chat_message_metadata(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Modern Chat models attach ``usage_metadata`` to the AIMessage; the
-    handler must surface it when ``llm_output`` is empty (issue #1720)."""
+    """Modern Chat models attach `usage_metadata` to the AIMessage; the
+    handler must surface it when `llm_output` is empty (issue #1720)."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
     sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
@@ -1678,8 +1678,8 @@ def test_sub_agent_attribution_from_langgraph_node_sync(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """When ``agent`` isn't set explicitly, the active LangGraph node fills the
-    ``agent`` column so multi-agent telemetry can be filtered per sub-agent
+    """When `agent` isn't set explicitly, the active LangGraph node fills the
+    `agent` column so multi-agent telemetry can be filtered per sub-agent
     (issue #1720)."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
@@ -1710,7 +1710,7 @@ def test_explicit_agent_metadata_overrides_langgraph_node(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Explicit ``agent`` always wins over the LangGraph-node fallback."""
+    """Explicit `agent` always wins over the LangGraph-node fallback."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
     sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
@@ -1728,7 +1728,7 @@ def test_explicit_agent_metadata_overrides_langgraph_node(
 def test_skip_internal_chain_events_drops_framework_chains(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``skip_internal_chain_events=True`` removes noisy framework chain events
+    """`skip_internal_chain_events=True` removes noisy framework chain events
     (ChannelWrite, RunnableLambda, ...) from telemetry (issue #1720)."""
     handler = BigQueryCallbackHandler(
         project_id="test-project",
@@ -1812,7 +1812,7 @@ def test_extract_token_usage_returns_none_for_empty_response() -> None:
 
 
 def test_extract_token_usage_prefers_legacy_when_present() -> None:
-    """If ``llm_output['token_usage']`` is set, use it verbatim."""
+    """If `llm_output['token_usage']` is set, use it verbatim."""
     msg = AIMessage(
         content="x",
         usage_metadata={"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
@@ -1827,13 +1827,13 @@ def test_extract_token_usage_prefers_legacy_when_present() -> None:
 
 
 def test_extract_token_usage_preserves_empty_legacy_dict() -> None:
-    """``llm_output={'token_usage': {}}`` must round-trip as ``{}``.
+    """`llm_output={'token_usage': {}}` must round-trip as `{}`.
 
     Some providers explicitly emit an empty dict to signal "I checked and
     there is no usage info" — meaningfully different from "the field isn't
     here at all". The integration test
-    ``tests/integration_tests/callbacks/test_bigquery_callback.py`` asserts
-    ``attributes['usage'] == {}`` on this path, so the extractor must use a
+    `tests/integration_tests/callbacks/test_bigquery_callback.py` asserts
+    `attributes['usage'] == {}` on this path, so the extractor must use a
     presence check (not a truthiness check) on the legacy slot.
     """
     response = LLMResult(
@@ -1846,11 +1846,11 @@ def test_extract_token_usage_preserves_empty_legacy_dict() -> None:
 def test_skipped_internal_chain_preserves_trace_continuity_for_children(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Trace continuity must survive ``skip_internal_chain_events=True``.
+    """Trace continuity must survive `skip_internal_chain_events=True`.
 
     When an internal chain (ChannelWrite, RunnableLambda, …) is skipped, any
-    LLM/tool child whose ``parent_run_id`` points at that skipped chain must
-    still resolve to the real graph root in the BigQuery ``trace_id`` column.
+    LLM/tool child whose `parent_run_id` points at that skipped chain must
+    still resolve to the real graph root in the BigQuery `trace_id` column.
     Otherwise the child becomes its own root and we lose the ability to join
     rows for the same end-to-end invocation.
     """
@@ -1970,10 +1970,10 @@ async def test_skipped_internal_chain_preserves_trace_continuity_async(
 def test_attributes_enriched_with_root_agent_name(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``attributes.root_agent_name`` mirrors the handler's ``graph_name``.
+    """`attributes.root_agent_name` mirrors the handler's `graph_name`.
 
-    Matches ADK's ``_enrich_attributes`` so dashboards can group by top-level
-    agent without users having to set ``metadata['agent']`` themselves.
+    Matches ADK's `_enrich_attributes` so dashboards can group by top-level
+    agent without users having to set `metadata['agent']` themselves.
     """
     handler = BigQueryCallbackHandler(
         project_id="test-project",
@@ -1994,7 +1994,7 @@ def test_attributes_enriched_with_root_agent_name(
 def test_attributes_enriched_with_custom_tags(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """Static ``custom_tags`` from config land on every event row."""
+    """Static `custom_tags` from config land on every event row."""
     handler = BigQueryCallbackHandler(
         project_id="test-project",
         dataset_id="test_dataset",
@@ -2019,7 +2019,7 @@ def test_attributes_enriched_with_custom_tags(
 def test_attributes_session_metadata_can_be_disabled(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``log_session_metadata=False`` suppresses the passthrough dump."""
+    """`log_session_metadata=False` suppresses the passthrough dump."""
     handler = BigQueryCallbackHandler(
         project_id="test-project",
         dataset_id="test_dataset",
@@ -2044,9 +2044,9 @@ def test_attributes_session_metadata_can_be_disabled(
 def test_attributes_session_metadata_excludes_promoted_keys(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``session_metadata`` only carries keys we don't already promote.
+    """`session_metadata` only carries keys we don't already promote.
 
-    ``session_id`` / ``user_id`` / ``langgraph_node`` are surfaced as
+    `session_id` / `user_id` / `langgraph_node` are surfaced as
     first-class columns (or in the langgraph attribute block), so the
     session_metadata dump must not duplicate them.
     """
@@ -2112,7 +2112,7 @@ def test_llm_response_attributes_capture_model_version_and_usage(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """ADK parity: ``model_version`` + raw ``usage_metadata`` (incl. cached
+    """ADK parity: `model_version` + raw `usage_metadata` (incl. cached
     tokens for context_cache_hit_rate) land on LLM_RESPONSE attributes."""
     if not sync_handler.batch_processor:
         raise ValueError("Batch processor not initialized")
@@ -2145,7 +2145,7 @@ def test_llm_response_attributes_capture_model_version_and_usage(
 def test_content_formatter_hook_runs_before_parsing(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``config.content_formatter`` lets users redact / coerce content
+    """`config.content_formatter` lets users redact / coerce content
     before the parser sees it. Mirrors ADK's content_formatter hook."""
     seen: list[tuple[Any, str]] = []
 
@@ -2177,7 +2177,7 @@ def test_flush_method_exists_on_both_handlers(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``flush()`` lets callers ensure durability between requests without
+    """`flush()` lets callers ensure durability between requests without
     tearing the handler down."""
     assert callable(getattr(sync_handler, "flush", None))
     sync_handler.flush(timeout=0.1)  # No queued rows; should be a quick no-op.
@@ -2255,7 +2255,7 @@ def test_auto_schema_upgrade_skipped_when_label_matches(
 def test_auto_schema_upgrade_disabled_skips_alter(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``auto_schema_upgrade=False`` opts out entirely."""
+    """`auto_schema_upgrade=False` opts out entirely."""
     mock_bq_client = mock_bigquery_clients["mock_bq_client"]
     existing = MagicMock()
     existing.labels = {}
@@ -2281,8 +2281,8 @@ def test_auto_schema_upgrade_disabled_skips_alter(
 def test_auto_create_views_emits_one_query_per_event_type(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``create_views=True`` issues one CREATE OR REPLACE VIEW per event
-    type, prefixed with ``view_prefix``."""
+    """`create_views=True` issues one CREATE OR REPLACE VIEW per event
+    type, prefixed with `view_prefix`."""
     from langchain_google_community.callbacks.bigquery_callback import (
         _EVENT_VIEW_DEFS,
     )
@@ -2310,7 +2310,7 @@ def test_auto_create_views_emits_one_query_per_event_type(
 def test_create_views_disabled_skips_query_calls(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``create_views=False`` opts out cleanly — no SQL is issued."""
+    """`create_views=False` opts out cleanly — no SQL is issued."""
     mock_bq_client = mock_bigquery_clients["mock_bq_client"]
     mock_bq_client.get_table.side_effect = mock_bigquery_clients[
         "mock_cloud_exceptions"
@@ -2330,7 +2330,7 @@ def test_create_views_disabled_skips_query_calls(
 def test_create_view_failure_does_not_raise(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """If ``CREATE OR REPLACE VIEW`` fails (permissions, syntax, …) the
+    """If `CREATE OR REPLACE VIEW` fails (permissions, syntax, …) the
     handler logs and continues — analytics must never break the agent."""
     mock_bq_client = mock_bigquery_clients["mock_bq_client"]
     mock_bq_client.get_table.side_effect = mock_bigquery_clients[
@@ -2363,10 +2363,10 @@ def test_sync_flush_waits_for_in_flight_write_to_complete(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``flush()`` must not return while a batch is still being written.
+    """`flush()` must not return while a batch is still being written.
 
-    Regression for the bug where ``task_done()`` fired immediately after
-    ``get()`` (before ``_write_rows_with_retry``), so ``_queue.join()``
+    Regression for the bug where `task_done()` fired immediately after
+    `get()` (before `_write_rows_with_retry`), so `_queue.join()`
     returned while the in-flight batch was still in the middle of its write.
     """
     import threading
@@ -2400,9 +2400,9 @@ def test_sync_flush_honors_timeout(
     sync_handler: BigQueryCallbackHandler,
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
-    """``flush(timeout)`` must return after at most ``timeout`` seconds even
+    """`flush(timeout)` must return after at most `timeout` seconds even
     if the write never completes. Previously the timeout argument was
-    accepted but ignored (``Queue.join()`` blocks unconditionally)."""
+    accepted but ignored (`Queue.join()` blocks unconditionally)."""
     import threading
     import time as _time
 
@@ -2432,7 +2432,7 @@ async def test_async_flush_waits_for_in_flight_write_to_complete(
     mock_bigquery_clients: Dict[str, Any],
 ) -> None:
     """Async equivalent of the durability guard — flush() must wait for the
-    real ``_write_rows_with_retry`` coroutine to finish, not just for the
+    real `_write_rows_with_retry` coroutine to finish, not just for the
     queue to be drained."""
     if not handler.async_batch_processor:
         raise ValueError("Batch processor not initialized")
@@ -2460,13 +2460,13 @@ async def test_async_cancellation_during_write_does_not_double_ack(
     """Cancellation mid-write must not corrupt queue accounting.
 
     Regression for the bug where the inner finally acked the in-flight
-    batch and then the outer ``except CancelledError`` re-acked the same
-    rows. The duplicate ack only raised ``ValueError`` if
-    ``unfinished_tasks`` was already 0 — otherwise it silently decremented
-    a different queued row's accounting, leaving ``unfinished_tasks`` and
-    ``qsize()`` out of sync.
+    batch and then the outer `except CancelledError` re-acked the same
+    rows. The duplicate ack only raised `ValueError` if
+    `unfinished_tasks` was already 0 — otherwise it silently decremented
+    a different queued row's accounting, leaving `unfinished_tasks` and
+    `qsize()` out of sync.
 
-    Setup: 2 rows enqueued (default ``batch_size=1``). The worker dequeues
+    Setup: 2 rows enqueued (default `batch_size=1`). The worker dequeues
     row 1 and starts a slow write while row 2 sits in the queue. We cancel
     the worker mid-write and assert the queue accounting is consistent
     afterwards.
@@ -2490,8 +2490,8 @@ async def test_async_cancellation_during_write_does_not_double_ack(
     await asyncio.wait_for(write_started.wait(), timeout=2.0)
 
     # Pre-cancellation snapshot: row 2 is still queued, both rows
-    # accounted for as unfinished. ``_unfinished_tasks`` is the CPython
-    # internal counter ``asyncio.Queue.join`` itself reads — de facto
+    # accounted for as unfinished. `_unfinished_tasks` is the CPython
+    # internal counter `asyncio.Queue.join` itself reads — de facto
     # stable but not in the type stubs.
     unfinished = lambda q: q._unfinished_tasks  # type: ignore[attr-defined]  # noqa: E731
     assert bp._queue.qsize() == 1

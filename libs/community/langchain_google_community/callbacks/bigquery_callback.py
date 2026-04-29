@@ -53,10 +53,10 @@ _GRPC_INTERNAL = 13
 _GRPC_UNAVAILABLE = 14
 _DEFAULT_TRACE_ID = "langchain-bq-agent-analytics"
 
-# Bumped whenever ``_get_bigquery_events_schema`` adds a new field. Stored as
-# a label on the events table so ``auto_schema_upgrade`` can short-circuit
+# Bumped whenever `_get_bigquery_events_schema` adds a new field. Stored as
+# a label on the events table so `auto_schema_upgrade` can short-circuit
 # once a given table has already been migrated to the current schema.
-# Constraint: BigQuery label values are restricted to ``[a-z0-9_-]{0,63}``,
+# Constraint: BigQuery label values are restricted to `[a-z0-9_-]{0,63}`,
 # so use only lowercase, digits, underscores, and hyphens.
 _SCHEMA_VERSION = "2026-04-27_v1"
 _SCHEMA_VERSION_LABEL_KEY = "langchain_bq_schema_version"
@@ -447,8 +447,8 @@ _INTERNAL_CHAIN_NAME_PATTERNS: tuple[str, ...] = (
 # a CREATE OR REPLACE VIEW that unnests JSON columns into typed top-level
 # columns. Mirrors ADK's _EVENT_VIEW_DEFS, adapted for our event vocabulary.
 # Event-type keys here use the ADK-aligned names (INVOCATION_*, AGENT_*); see
-# ``BigQueryCallbackHandler._EVENT_TYPE_TO_VIEW_SUFFIX`` for the
-# table-name slug used in the view (e.g. ``v_llm_request``).
+# `BigQueryCallbackHandler._EVENT_TYPE_TO_VIEW_SUFFIX` for the
+# table-name slug used in the view (e.g. `v_llm_request`).
 _EVENT_VIEW_DEFS: dict[str, list[str]] = {
     "USER_MESSAGE_RECEIVED": [],
     "INVOCATION_STARTING": [],
@@ -566,7 +566,7 @@ WHERE
 
 
 def _event_type_to_view_suffix(event_type: str) -> str:
-    """``LLM_REQUEST`` -> ``llm_request`` (lower-snake for view names)."""
+    """`LLM_REQUEST` -> `llm_request` (lower-snake for view names)."""
     return event_type.lower()
 
 
@@ -575,8 +575,8 @@ def _maybe_upgrade_schema(
 ) -> None:
     """Additively ALTER TABLE ADD COLUMN any new fields in target_schema.
 
-    Skipped when the table's ``langchain_bq_schema_version`` label already
-    equals ``_SCHEMA_VERSION``. Never drops, renames, or retypes columns —
+    Skipped when the table's `langchain_bq_schema_version` label already
+    equals `_SCHEMA_VERSION`. Never drops, renames, or retypes columns —
     only ADD COLUMN. Failures log and continue (analytics never breaks the
     agent).
     """
@@ -633,7 +633,7 @@ def _create_analytics_views(client: Any, view_prefix: str, full_table_id: str) -
 
     Mirrors ADK's auto-views: each view UNNESTs the JSON columns into typed
     top-level columns so analytics queries don't have to spell
-    ``JSON_VALUE(...)`` every time.
+    `JSON_VALUE(...)` every time.
     """
     if client is None:
         return
@@ -693,36 +693,36 @@ class BigQueryLoggerConfig:
 
     # --- ADK parity: enrichment, schema evolution, analytics views ---
     custom_tags: dict[str, Any] = field(default_factory=dict)
-    """Static key-value pairs attached to every event under ``attributes.custom_tags``.
-    Useful for tagging deployments / cohorts (e.g. ``{"env": "staging",
-    "agent_role": "sales"}``)."""
+    """Static key-value pairs attached to every event under `attributes.custom_tags`.
+    Useful for tagging deployments / cohorts (e.g. `{"env": "staging",
+    "agent_role": "sales"}`)."""
 
     log_session_metadata: bool = True
     """When True, dump the user-supplied RunnableConfig metadata (minus keys
-    already projected onto first-class columns) into ``attributes.session_metadata``.
+    already projected onto first-class columns) into `attributes.session_metadata`.
     Mirrors ADK's session_metadata enrichment so dashboards can correlate by
     deployment-specific keys (gchat thread-id, customer_id, ...)."""
 
     content_formatter: Optional[Callable[[Any, str], Any]] = None
-    """Optional hook ``(raw_content, event_type) -> formatted`` invoked before
+    """Optional hook `(raw_content, event_type) -> formatted` invoked before
     content parsing. Use to redact PII or coerce custom payloads to dict/str
     before they hit the parser."""
 
     auto_schema_upgrade: bool = True
     """When True, additively ALTER TABLE ADD COLUMN any new fields that future
     versions of this handler add to the schema. Gated by a
-    ``langchain_bq_schema_version`` table label so the diff runs at most once
+    `langchain_bq_schema_version` table label so the diff runs at most once
     per schema version. Never drops or renames columns."""
 
     create_views: bool = True
     """When True, automatically CREATE OR REPLACE per-event-type analytics
     views beside the events table. Each view unnests the JSON columns into
-    typed top-level columns (``v_llm_response.usage_total_tokens`` instead of
-    ``JSON_VALUE(attributes, '$.usage.total_tokens')``)."""
+    typed top-level columns (`v_llm_response.usage_total_tokens` instead of
+    `JSON_VALUE(attributes, '$.usage.total_tokens')`)."""
 
     view_prefix: str = "v"
-    """Prefix for auto-created view names. ``"v"`` produces views like
-    ``v_llm_request``, ``v_tool_completed``. Set per-table when several handler
+    """Prefix for auto-created view names. `"v"` produces views like
+    `v_llm_request`, `v_tool_completed`. Set per-table when several handler
     instances share one dataset to avoid collisions."""
 
 
@@ -739,7 +739,9 @@ class LatencyTracker:
 
         Args:
             stale_threshold_ms: Time in ms after which unfinished entries are
-              considered stale and cleaned up. Defaults to 5 minutes.
+                considered stale and cleaned up.
+
+                Defaults to 5 minutes.
         """
         self._start_times: Dict[uuid.UUID, float] = {}
         self._component_times: Dict[uuid.UUID, Dict[str, float]] = {}
@@ -1269,17 +1271,17 @@ class _AsyncBatchProcessor:
                     except asyncio.QueueEmpty:
                         break
 
-                # ``task_done`` is intentionally called only AFTER the write
-                # attempt completes (success or give-up). ``flush()`` waits on
-                # ``_queue.join()`` and would otherwise return while a batch
+                # `task_done` is intentionally called only AFTER the write
+                # attempt completes (success or give-up). `flush()` waits on
+                # `_queue.join()` and would otherwise return while a batch
                 # is still in flight.
                 #
-                # The inner finally clears ``batch`` after acking so that an
+                # The inner finally clears `batch` after acking so that an
                 # asyncio.CancelledError propagating out doesn't cause the
                 # outer except below to ack the same rows twice. Without the
                 # clear, a cancellation mid-write would silently decrement the
-                # accounting for some *other* queued row (``task_done`` only
-                # raises ValueError when ``unfinished_tasks`` is already 0,
+                # accounting for some *other* queued row (`task_done` only
+                # raises ValueError when `unfinished_tasks` is already 0,
                 # not when there's an unrelated row still in the queue).
                 try:
                     if batch:
@@ -1292,7 +1294,7 @@ class _AsyncBatchProcessor:
                 # Nothing was dequeued — no items to ack.
                 continue
             except asyncio.CancelledError:
-                # ``batch`` here only contains rows that were dequeued but
+                # `batch` here only contains rows that were dequeued but
                 # never reached the inner try — the inner finally clears the
                 # list once it acks. So this loop is safe from double-ack.
                 for _ in batch:
@@ -2225,16 +2227,16 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         base: Optional[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Augment per-event ``attributes`` with the ADK-parity enrichments.
+        """Augment per-event `attributes` with the ADK-parity enrichments.
 
         Adds:
-          - ``root_agent_name`` (from handler's ``graph_name``)
-          - ``custom_tags`` (static, from config)
-          - ``session_metadata`` (passthrough of user-supplied metadata, minus
-            keys we already promote to first-class columns) — gated by
-            ``config.log_session_metadata``.
+            - `root_agent_name` (from handler's `graph_name`)
+            - `custom_tags` (static, from config)
+            - `session_metadata` (passthrough of user-supplied metadata, minus
+                keys we already promote to first-class columns) — gated by
+                `config.log_session_metadata`.
 
-        Preserves any keys already present in ``base`` (callback-supplied
+        Preserves any keys already present in `base` (callback-supplied
         attributes win over enrichment).
         """
         attrs: Dict[str, Any] = dict(base) if base else {}
@@ -2272,11 +2274,11 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         return any(pattern in name for pattern in _INTERNAL_CHAIN_NAME_PATTERNS)
 
     def _mark_run_skipped(self, run_id: uuid.UUID) -> None:
-        """Record that ``on_*_start`` did not emit an event for this run."""
+        """Record that `on_*_start` did not emit an event for this run."""
         self._skipped_runs.add(run_id)
 
     def _take_run_skipped(self, run_id: uuid.UUID) -> bool:
-        """Return True (and forget) if ``on_*_start`` skipped this run."""
+        """Return True (and forget) if `on_*_start` skipped this run."""
         if run_id in self._skipped_runs:
             self._skipped_runs.discard(run_id)
             return True
@@ -2288,13 +2290,13 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
 
         LangChain providers report token usage in different shapes:
 
-        - Legacy LLMs populate ``llm_output["token_usage"]`` (OpenAI-style dict).
-        - Modern Chat models attach ``usage_metadata`` to the ``AIMessage``
-          (input_tokens / output_tokens / total_tokens).
-        - Some providers populate ``response_metadata["usage_metadata"]`` or
-          ``response_metadata["usage"]`` instead.
+        - Legacy LLMs populate `llm_output["token_usage"]` (OpenAI-style dict).
+        - Modern Chat models attach `usage_metadata` to the `AIMessage`
+            (input_tokens / output_tokens / total_tokens).
+        - Some providers populate `response_metadata["usage_metadata"]` or
+            `response_metadata["usage"]` instead.
 
-        The legacy ``llm_output["token_usage"]`` slot is returned as-is when
+        The legacy `llm_output["token_usage"]` slot is returned as-is when
         present (including empty dicts), preserving the historical contract for
         callers that distinguish "provider gave us nothing" from "provider
         omitted the field entirely". Other sources only fall through when
@@ -2335,7 +2337,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> Dict[str, Any]:
         """Pull `llm_config` and `tools` out of the serialized LLM payload.
 
-        Mirrors ADK's ``before_model_callback`` enrichment so dashboards can
+        Mirrors ADK's `before_model_callback` enrichment so dashboards can
         slice on temperature / top_p / response_schema / available tools.
         """
         attrs: Dict[str, Any] = {}
@@ -2383,8 +2385,8 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     def _extract_llm_response_metadata(
         response: LLMResult,
     ) -> Dict[str, Any]:
-        """Pull ``model_version``, raw ``usage_metadata``, and
-        ``cache_metadata`` out of a chat-model ``LLMResult``.
+        """Pull `model_version`, raw `usage_metadata`, and
+        `cache_metadata` out of a chat-model `LLMResult`.
 
         Returns an empty dict when the response shape doesn't carry any of
         these (e.g. legacy completion LLMs).
@@ -2422,11 +2424,11 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
     ) -> Dict[str, Any]:
         """Merge kwargs metadata with metadata captured at start time.
 
-        ``langchain-core`` only forwards ``metadata`` to ``*_start`` callbacks;
-        ``*_end`` and ``*_error`` callbacks receive bare ``run_id`` / ``tags``
-        (see ``langchain_core/callbacks/manager.py``). Without this helper,
-        end/error events would drop user-supplied keys like ``session_id``,
-        ``user_id``, and ``agent`` -- matching the bug report in issue #1690.
+        `langchain-core` only forwards `metadata` to `*_start` callbacks;
+        `*_end` and `*_error` callbacks receive bare `run_id` / `tags`
+        (see `langchain_core/callbacks/manager.py`). Without this helper,
+        end/error events would drop user-supplied keys like `session_id`,
+        `user_id`, and `agent` -- matching the bug report in issue #1690.
         """
         context = await self._run_context_registry.get(run_id)
         merged: Dict[str, Any] = (
@@ -2445,7 +2447,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         name: str,
         metadata: Optional[Dict[str, Any]],
     ) -> None:
-        """Register a run so its metadata survives until ``*_end``/``*_error``."""
+        """Register a run so its metadata survives until `*_end`/`*_error`."""
         existing = await self._run_context_registry.get(run_id)
         if existing is None:
             await self._run_context_registry.register(
@@ -2885,7 +2887,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             self._mark_run_skipped(run_id)
             # Emit at DEBUG so operators can audit what the heuristic dropped
             # (the patterns are best-effort; users can enable
-            # ``logging.getLogger(__name__).setLevel(logging.DEBUG)`` to see
+            # `logging.getLogger(__name__).setLevel(logging.DEBUG)` to see
             # exactly which chains are being suppressed).
             logger.debug(
                 "BigQueryCallbackHandler: skipped internal chain '%s' "
@@ -3496,16 +3498,16 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         base: Optional[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Augment per-event ``attributes`` with the ADK-parity enrichments.
+        """Augment per-event `attributes` with the ADK-parity enrichments.
 
         Adds:
-          - ``root_agent_name`` (from handler's ``graph_name``)
-          - ``custom_tags`` (static, from config)
-          - ``session_metadata`` (passthrough of user-supplied metadata, minus
-            keys we already promote to first-class columns) — gated by
-            ``config.log_session_metadata``.
+            - `root_agent_name` (from handler's `graph_name`)
+            - `custom_tags` (static, from config)
+            - `session_metadata` (passthrough of user-supplied metadata, minus
+                keys we already promote to first-class columns) — gated by
+                `config.log_session_metadata`.
 
-        Preserves any keys already present in ``base`` (callback-supplied
+        Preserves any keys already present in `base` (callback-supplied
         attributes win over enrichment).
         """
         attrs: Dict[str, Any] = dict(base) if base else {}
@@ -3548,7 +3550,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     def _extract_token_usage(response: LLMResult) -> Optional[Dict[str, Any]]:
         """Extract token usage from an LLMResult across provider conventions.
 
-        See ``AsyncBigQueryCallbackHandler._extract_token_usage`` for details.
+        See `AsyncBigQueryCallbackHandler._extract_token_usage` for details.
         """
         if response.llm_output is not None and "token_usage" in response.llm_output:
             return response.llm_output["token_usage"]  # type: ignore[no-any-return]
@@ -3595,10 +3597,10 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
     ) -> Dict[str, Any]:
         """Merge kwargs metadata with metadata captured at start time.
 
-        ``langchain-core`` only forwards ``metadata`` to ``*_start`` callbacks;
-        ``*_end`` and ``*_error`` callbacks receive bare ``run_id`` / ``tags``.
+        `langchain-core` only forwards `metadata` to `*_start` callbacks;
+        `*_end` and `*_error` callbacks receive bare `run_id` / `tags`.
         Without this helper, end/error events drop user-supplied keys like
-        ``session_id``, ``user_id``, and ``agent`` (issue #1690).
+        `session_id`, `user_id`, and `agent` (issue #1690).
         """
         context = self._run_context_registry.get(run_id)
         merged: Dict[str, Any] = (
@@ -3617,7 +3619,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         name: str,
         metadata: Optional[Dict[str, Any]],
     ) -> None:
-        """Register a run so its metadata survives until ``*_end``/``*_error``."""
+        """Register a run so its metadata survives until `*_end`/`*_error`."""
         existing = self._run_context_registry.get(run_id)
         if existing is None:
             self._run_context_registry.register(run_id, name, parent_run_id, metadata)
@@ -3625,12 +3627,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             self._run_context_registry.update_metadata(run_id, metadata)
 
     def _mark_run_skipped(self, run_id: uuid.UUID) -> None:
-        """Record that ``on_*_start`` did not emit an event for this run."""
+        """Record that `on_*_start` did not emit an event for this run."""
         with self._skipped_runs_lock:
             self._skipped_runs.add(run_id)
 
     def _take_run_skipped(self, run_id: uuid.UUID) -> bool:
-        """Return True (and forget) if ``on_*_start`` skipped this run."""
+        """Return True (and forget) if `on_*_start` skipped this run."""
         with self._skipped_runs_lock:
             if run_id in self._skipped_runs:
                 self._skipped_runs.discard(run_id)
@@ -3886,12 +3888,12 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         Useful between request boundaries when callers want each invocation's
         events to be durable before returning. Does NOT shut the handler
         down; subsequent events keep working. Logs a warning and returns
-        without raising if ``timeout`` elapses with rows still in flight.
+        without raising if `timeout` elapses with rows still in flight.
 
-        ``queue.Queue.join()`` does not accept a timeout, so we replicate its
+        `queue.Queue.join()` does not accept a timeout, so we replicate its
         condition-variable wait pattern explicitly using the queue's
-        ``all_tasks_done`` Condition (de facto stable across CPython
-        versions; the same attribute ``Queue.join`` itself uses).
+        `all_tasks_done` Condition (de facto stable across CPython
+        versions; the same attribute `Queue.join` itself uses).
         """
         if self.batch_processor is None:
             return
