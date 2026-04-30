@@ -4803,6 +4803,64 @@ def test_default_max_retries_value() -> None:
     )
 
 
+def test_client_level_retry_options_set_from_max_retries() -> None:
+    """Test that the SDK client is initialized with retry_options from max_retries.
+
+    This ensures streaming requests (which use the client-level retry config
+    rather than per-request http_options) respect max_retries.
+    See: https://github.com/langchain-ai/langchain-google/issues/1652
+    """
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_retries=5,
+    )
+
+    assert chat.client is not None
+    api_client = chat.client._api_client
+    assert api_client._http_options.retry_options is not None, (
+        "Client-level retry_options should be set from max_retries"
+    )
+    assert api_client._http_options.retry_options.attempts == 5
+
+
+def test_client_level_retry_options_default() -> None:
+    """Test that the SDK client has retry_options set with the default max_retries."""
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        # default max_retries=6
+    )
+
+    assert chat.client is not None
+    api_client = chat.client._api_client
+    assert api_client._http_options.retry_options is not None, (
+        "Client-level retry_options should be set with default max_retries"
+    )
+    assert api_client._http_options.retry_options.attempts == 6
+
+
+def test_client_level_async_retry_respects_max_retries() -> None:
+    """Test that the SDK client's async retry has correct stop config.
+
+    The SDK's async_request_streamed (used by _astream) falls back to
+    self._async_retry, so this must reflect max_retries.
+    See: https://github.com/langchain-ai/langchain-google/issues/1652
+    """
+    chat = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_retries=3,
+    )
+
+    assert chat.client is not None
+    api_client = chat.client._api_client
+    # The tenacity AsyncRetrying stop strategy should match max_retries
+    assert api_client._async_retry.stop.max_attempt_number == 3, (  # type: ignore[union-attr]
+        "Client async_retry should use max_retries as stop_after_attempt"
+    )
+
+
 def test_client_error_with_500_raises_descriptive_error() -> None:
     """Test that 500 INTERNAL errors are properly reported when retries are exhausted.
 
