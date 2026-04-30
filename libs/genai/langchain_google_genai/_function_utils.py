@@ -579,6 +579,10 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                 # additionalProperties
                 properties_item["type"] = types.Type.STRING
 
+            # Preserve additionalProperties for nested re-processing
+            if v.get("additionalProperties"):
+                properties_item["additionalProperties"] = v["additionalProperties"]
+
         if k == "title" and "description" not in properties_item:
             properties_item["description"] = k + " is " + str(v)
 
