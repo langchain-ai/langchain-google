@@ -2588,6 +2588,119 @@ def test_thought_signature_extraction_from_response() -> None:
     assert result_invalid.content == "Text with None signature"
 
 
+def test_multi_part_text_sig_then_no_sig_all_dict_blocks() -> None:
+    """Regression: two text Parts where Part 1 has thought_signature and Part 2
+    does not should produce a uniform list of dict blocks, not a mixed list."""
+    binary_signature = b"test_signature_data"
+    part1 = Part(text="First part of answer", thought_signature=binary_signature)
+    part2 = Part(text=" and second part")
+    candidate = Candidate(content=Content(parts=[part1, part2]))
+
+    result = _parse_response_candidate(
+        candidate, streaming=False, model_name="gemini-2.5-flash"
+    )
+
+    assert isinstance(result.content, list), (
+        f"Expected list content, got {type(result.content)}: {result.content!r}"
+    )
+    assert len(result.content) == 2
+    for i, item in enumerate(result.content):
+        assert isinstance(item, dict), (
+            f"content[{i}] should be dict, got {type(item).__name__}: {item!r}"
+        )
+        assert item.get("type") == "text"
+    block0 = result.content[0]
+    block1 = result.content[1]
+    assert isinstance(block0, dict)
+    assert isinstance(block1, dict)
+    assert block0["text"] == "First part of answer"
+    assert block0["extras"]["signature"] == base64.b64encode(binary_signature).decode(
+        "ascii"
+    )
+    assert block1["text"] == " and second part"
+    assert "extras" not in block1
+
+
+def test_multi_part_text_full_text_concatenation() -> None:
+    """message.text must return the full concatenated text from all parts."""
+    binary_signature = b"sig"
+    part1 = Part(text="Hello", thought_signature=binary_signature)
+    part2 = Part(text=" world")
+    candidate = Candidate(content=Content(parts=[part1, part2]))
+
+    result = _parse_response_candidate(
+        candidate, streaming=False, model_name="gemini-2.5-flash"
+    )
+
+    assert result.text == "Hello world", (
+        f"Expected 'Hello world', got {result.text!r}. Content: {result.content!r}"
+    )
+
+
+def test_multi_part_text_streaming_sig_then_no_sig_all_dict_blocks() -> None:
+    """The streaming=True path should also produce uniform dict blocks."""
+    binary_signature = b"streaming_sig"
+    part1 = Part(text="Streamed first", thought_signature=binary_signature)
+    part2 = Part(text=" streamed second")
+    candidate = Candidate(content=Content(parts=[part1, part2]))
+
+    result = _parse_response_candidate(
+        candidate, streaming=True, model_name="gemini-2.5-flash"
+    )
+
+    assert isinstance(result.content, list)
+    assert len(result.content) == 2
+    for i, item in enumerate(result.content):
+        assert isinstance(item, dict), f"streaming content[{i}] should be dict"
+        assert item.get("type") == "text"
+
+
+def test_multi_part_text_three_parts_mixed_signatures_all_dict_blocks() -> None:
+    """Three text Parts with mixed signatures should all be dict blocks."""
+    sig = b"binary_signature"
+    parts = [
+        Part(text="First part", thought_signature=sig),
+        Part(text="Second part", thought_signature=sig),
+        Part(text="Third part"),  # no sig
+    ]
+    candidate = Candidate(content=Content(parts=parts))
+
+    result = _parse_response_candidate(
+        candidate, streaming=False, model_name="gemini-2.5-flash"
+    )
+
+    assert isinstance(result.content, list)
+    assert len(result.content) == 3
+    for i, item in enumerate(result.content):
+        assert isinstance(item, dict), f"content[{i}] should be dict"
+        assert item.get("type") == "text"
+    block0 = result.content[0]
+    block1 = result.content[1]
+    block2 = result.content[2]
+    assert isinstance(block0, dict)
+    assert isinstance(block1, dict)
+    assert isinstance(block2, dict)
+    assert "signature" in block0["extras"]
+    assert "signature" in block1["extras"]
+    assert "extras" not in block2
+
+
+def test_single_text_part_no_signature_remains_string() -> None:
+    """Regression: a single no-sig text Part must still produce plain string content."""
+    part = Part(text="Regular text without signature")
+    candidate = Candidate(content=Content(parts=[part]))
+
+    result = _parse_response_candidate(
+        candidate, streaming=False, model_name="gemini-2.5-flash"
+    )
+
+    assert isinstance(result.content, str), (
+        f"Single no-sig part should be str, "
+        f"got {type(result.content).__name__}: {result.content!r}"
+    )
+    assert result.content == "Regular text without signature"
+
+
 def test_signature_round_trip_conversion() -> None:
     """Test complete round-trip signature handling in conversation context."""
 
