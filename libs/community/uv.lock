@@ -3325,11 +3325,11 @@ wheels = [
 
 [[package]]
 name = "types-google-cloud-ndb"
-version = "2.4.0.20260402"
+version = "2.4.0.20260408"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/91/34/64e85be060be03c3d5cc2b39235d67fb2a236faefbe802f50a754176b174/types_google_cloud_ndb-2.4.0.20260402.tar.gz", hash = "sha256:6742a1b7d515a55439555ce74781a274abdc4feee3c4cc6913722a527b266d10", size = 19955, upload-time = "2026-04-02T04:17:45.131Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/e2/1be47b138a7fa6ef13947a6747b9196edcc011e5958ed5acdf1a3f10ea33/types_google_cloud_ndb-2.4.0.20260408.tar.gz", hash = "sha256:9b0446b7b5881a88a01bd108f7609d48190b60a0a0fc4751c3b3a6723edb4ee8", size = 20002, upload-time = "2026-04-08T04:31:05.251Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/a9/40ba624a4310ab3d8a96926d4e938cc35e37757f4e258108644b0f2dbb49/types_google_cloud_ndb-2.4.0.20260402-py3-none-any.whl", hash = "sha256:6157f50f9c1bb2de06df130d83d3e4cb21244940ce4543fd6c78c8a98cd61176", size = 22963, upload-time = "2026-04-02T04:17:44.229Z" },
+    { url = "https://files.pythonhosted.org/packages/87/40/b77a834d58f304af36e188d48f97abfdabbe37bf56c0a0854ef2fe9a4627/types_google_cloud_ndb-2.4.0.20260408-py3-none-any.whl", hash = "sha256:a6ad001bc3bbbc08e363a06570c51b7019c7ae5a2152cfdd32dcda532602da39", size = 22966, upload-time = "2026-04-08T04:31:04.141Z" },
 ]
 
 [[package]]
