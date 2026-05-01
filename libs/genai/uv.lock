@@ -550,7 +550,7 @@ typing = [
     { name = "mypy", specifier = ">=1.18.1,<1.21.0" },
     { name = "numpy", specifier = ">=1.26.2" },
     { name = "types-google-cloud-ndb", specifier = ">=2.2.0.1,<3.0.0.0" },
-    { name = "types-protobuf", specifier = ">=4.24.0.20240302,<7.0.0.0" },
+    { name = "types-protobuf", specifier = ">=4.24.0.20240302,<8.0.0.0" },
     { name = "types-requests", specifier = ">=2.31.0,<3.0.0" },
 ]
 
@@ -1625,11 +1625,11 @@ wheels = [
 
 [[package]]
 name = "types-protobuf"
-version = "6.32.1.20260221"
+version = "7.34.1.20260408"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5f/e2/9aa4a3b2469508bd7b4e2ae11cbedaf419222a09a1b94daffcd5efca4023/types_protobuf-6.32.1.20260221.tar.gz", hash = "sha256:6d5fb060a616bfb076cbb61b4b3c3969f5fc8bec5810f9a2f7e648ee5cbcbf6e", size = 64408, upload-time = "2026-02-21T03:55:13.916Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/b1/4521e68c2cc17703d80eb42796751345376dd4c706f84007ef5e7c707774/types_protobuf-7.34.1.20260408.tar.gz", hash = "sha256:e2c0a0430e08c75b52671a6f0035abfdcc791aad12af16274282de1b721758ab", size = 68835, upload-time = "2026-04-08T04:26:43.613Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/e8/1fd38926f9cf031188fbc5a96694203ea6f24b0e34bd64a225ec6f6291ba/types_protobuf-6.32.1.20260221-py3-none-any.whl", hash = "sha256:da7cdd947975964a93c30bfbcc2c6841ee646b318d3816b033adc2c4eb6448e4", size = 77956, upload-time = "2026-02-21T03:55:12.894Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/b5/0bc9874d89c58fb0ce851e150055ce732d254dbb10b06becbc7635d0d635/types_protobuf-7.34.1.20260408-py3-none-any.whl", hash = "sha256:ebbcd4e27b145aef6a59bc0cb6c013b3528151c1ba5e7f7337aeee355d276a5e", size = 86012, upload-time = "2026-04-08T04:26:42.566Z" },
 ]
 
 [[package]]
