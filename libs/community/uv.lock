@@ -1614,7 +1614,7 @@ typing = [
     { name = "types-beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
     { name = "types-google-cloud-ndb", specifier = ">=2.2.0.1,<3.0.0.0" },
     { name = "types-pillow", specifier = ">=10.1.0.2,<11.0.0.0" },
-    { name = "types-protobuf", specifier = ">=4.24.0.20240302,<7.0.0.0" },
+    { name = "types-protobuf", specifier = ">=4.24.0.20240302,<8.0.0.0" },
     { name = "types-requests", specifier = ">=2.28.11.5,<3.0.0" },
 ]
 
@@ -3352,11 +3352,11 @@ wheels = [
 
 [[package]]
 name = "types-protobuf"
-version = "4.25.0.20240417"
+version = "7.34.1.20260408"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/76/21/757620113af23233496c04b8a66e0201e78695495b1db8e676672608588b/types-protobuf-4.25.0.20240417.tar.gz", hash = "sha256:c34eff17b9b3a0adb6830622f0f302484e4c089f533a46e3f147568313544352", size = 53340, upload-time = "2024-04-17T02:17:05.755Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/b1/4521e68c2cc17703d80eb42796751345376dd4c706f84007ef5e7c707774/types_protobuf-7.34.1.20260408.tar.gz", hash = "sha256:e2c0a0430e08c75b52671a6f0035abfdcc791aad12af16274282de1b721758ab", size = 68835, upload-time = "2026-04-08T04:26:43.613Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/78/6f0351f80a682c4005775c7e1fd2b17235b88d87c85ef59214bd1f60ff60/types_protobuf-4.25.0.20240417-py3-none-any.whl", hash = "sha256:e9b613227c2127e3d4881d75d93c93b4d6fd97b5f6a099a0b654a05351c8685d", size = 67896, upload-time = "2024-04-17T02:17:04.205Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/b5/0bc9874d89c58fb0ce851e150055ce732d254dbb10b06becbc7635d0d635/types_protobuf-7.34.1.20260408-py3-none-any.whl", hash = "sha256:ebbcd4e27b145aef6a59bc0cb6c013b3528151c1ba5e7f7337aeee355d276a5e", size = 86012, upload-time = "2026-04-08T04:26:42.566Z" },
 ]
 
 [[package]]
