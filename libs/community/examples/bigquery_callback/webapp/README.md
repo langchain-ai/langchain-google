@@ -66,7 +66,7 @@ Set environment variables to customize the BigQuery connection:
 ```bash
 export GCP_PROJECT_ID="your-project-id"
 export BQ_DATASET_ID="agent_analytics"
-export BQ_TABLE_ID="agent_events_v2"
+export BQ_TABLE_ID="agent_events"
 ```
 
 Or modify the defaults in `main.py`:
@@ -74,7 +74,7 @@ Or modify the defaults in `main.py`:
 ```python
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "your-project-id")
 DATASET_ID = os.environ.get("BQ_DATASET_ID", "agent_analytics")
-TABLE_ID = os.environ.get("BQ_TABLE_ID", "agent_events_v2")
+TABLE_ID = os.environ.get("BQ_TABLE_ID", "agent_events")
 ```
 
 ## Running the Dashboard
@@ -178,7 +178,7 @@ Then open your browser to: **http://localhost:8000**
 ┌─────────────────────────────────────────────────────────────────┐
 │                         BigQuery                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │              agent_analytics.agent_events_v2             │   │
+│  │              agent_analytics.agent_events             │   │
 │  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────┐   │   │
 │  │  │timestamp│ │event_type│ │ agent  │ │   content   │   │   │
 │  │  │session_id│ │ user_id │ │latency │ │ attributes  │   │   │
@@ -269,7 +269,7 @@ gcloud run deploy langgraph-analytics \
 ```bash
 GCP_PROJECT_ID=production-project
 BQ_DATASET_ID=agent_analytics
-BQ_TABLE_ID=agent_events_v2
+BQ_TABLE_ID=agent_events
 ```
 
 ## Troubleshooting

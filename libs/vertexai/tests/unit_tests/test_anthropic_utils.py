@@ -25,6 +25,7 @@ from langchain_google_vertexai._anthropic_utils import (
     _format_message_anthropic,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
+    _merge_messages,
     _thinking_in_params,
 )
 
@@ -1107,6 +1108,88 @@ def test_ai_message_empty_content_without_tool_calls() -> None:
     assert result_empty_list is None
 
 
+def test_tool_message_empty_content_produces_tool_result() -> None:
+    """Test that ToolMessage with content=[] still produces a tool_result block.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1722
+
+    Python's all() on an empty iterable returns True, which caused
+    ToolMessage(content=[]) to be misclassified as pre-formatted tool_result
+    blocks. The resulting empty HumanMessage was merged into the next
+    HumanMessage, silently dropping the tool_result and producing a payload
+    that the Anthropic API rejects.
+    """
+    messages = [
+        HumanMessage(content="Search for controls"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "Let me search."},
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "field_search",
+                    "input": {"query": "controls"},
+                },
+            ],
+        ),
+        ToolMessage(content=[], tool_call_id="call_1"),
+        HumanMessage(content="What did you find?"),
+    ]
+
+    merged = _merge_messages(messages)
+
+    tool_results = [
+        block
+        for m in merged
+        if isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+    assert len(tool_results) == 1, (
+        f"Expected 1 tool_result block, got {len(tool_results)}. "
+        "ToolMessage with empty content should still produce a tool_result."
+    )
+    assert tool_results[0]["tool_use_id"] == "call_1"
+
+
+def test_tool_message_empty_content_with_error_status() -> None:
+    """ToolMessage(content=[], status='error') propagates is_error correctly.
+
+    Locks in that the empty-content path still routes through the wrapping
+    branch, which sets `is_error: True` from `status='error'`. Guards against
+    a future refactor that reorders the empty-list guard above the status
+    check.
+    """
+    messages = [
+        AIMessage(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "search",
+                    "input": {"q": "x"},
+                },
+            ],
+        ),
+        ToolMessage(content=[], tool_call_id="call_1", status="error"),
+    ]
+
+    merged = _merge_messages(messages)
+
+    tool_results = [
+        block
+        for m in merged
+        if isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+    assert len(tool_results) == 1
+    assert tool_results[0]["tool_use_id"] == "call_1"
+    assert tool_results[0].get("is_error") is True
+
+
 def test_format_messages_tool_message_with_streaming_metadata() -> None:
     """Test that streaming metadata is removed from ToolMessage content.
 
@@ -1552,3 +1635,64 @@ def test_format_messages_anthropic_multiple_non_consecutive_system_raises() -> N
     ]
     with pytest.raises(ValueError, match="multiple non-consecutive system messages"):
         _format_messages_anthropic(messages, project="test-project")
+
+
+def test_format_messages_anthropic_strips_trailing_assistant_string_whitespace() -> (
+    None
+):
+    """Trailing assistant ``str`` content must be ``rstrip`` (#1514)."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(content="Pong  \n\t"),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["role"] == "assistant"
+    assert formatted[-1]["content"] == [{"type": "text", "text": "Pong"}]
+
+
+def test_format_messages_anthropic_strips_trailing_assistant_last_text_block() -> None:
+    """Only the final text block of the trailing assistant message is stripped."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "first  "},
+                {"type": "text", "text": "last \t"},
+            ]
+        ),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["content"] == [
+        {"type": "text", "text": "first  "},
+        {"type": "text", "text": "last"},
+    ]
+
+
+def test_format_messages_anthropic_does_not_strip_non_trailing_assistant() -> None:
+    """Whitespace in non-trailing assistant messages is preserved."""
+    messages = [
+        HumanMessage(content="Hi"),
+        AIMessage(content="Hello "),
+        HumanMessage(content="Continue"),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[1]["role"] == "assistant"
+    assert formatted[1]["content"] == [{"type": "text", "text": "Hello "}]
+
+
+def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
+    """A trailing ``thinking`` block is left untouched (signature-sensitive)."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(
+            content=[
+                {
+                    "type": "thinking",
+                    "thinking": "considering...  ",
+                    "signature": "abc",
+                }
+            ]
+        ),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["content"][0]["thinking"] == "considering...  "

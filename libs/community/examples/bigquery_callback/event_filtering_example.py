@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Event filtering example for BigQuery callback handler.
 
-This example demonstrates:
-- Using event_allowlist to only log specific events
-- Using event_denylist to exclude noisy events
-- Comparing logged events with different configurations
+This example demonstrates three independent filtering mechanisms:
+- ``event_allowlist`` — only log specific event types
+- ``event_denylist`` — exclude specific event types
+- ``skip_internal_chain_events`` — drop noisy framework chains
+  (``ChannelWrite``, ``RunnableLambda``, ``Branch``, …) without losing
+  trace continuity for child events
+- ``custom_tags`` — attach static tags (env, cohort, …) to every row
 
 Prerequisites:
     1. gcloud auth application-default login
@@ -97,7 +100,7 @@ def main() -> None:
     handler1 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config1,
     )
 
@@ -119,7 +122,7 @@ def main() -> None:
     handler2 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config2,
     )
 
@@ -141,7 +144,7 @@ def main() -> None:
     handler3 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config3,
     )
 
@@ -162,40 +165,92 @@ def main() -> None:
             "LLM_ERROR",
             "TOOL_COMPLETED",
             "TOOL_ERROR",
-            "GRAPH_END",
-            "GRAPH_ERROR",
+            "INVOCATION_COMPLETED",
+            "INVOCATION_ERROR",
         ],
     )
 
     handler4 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config4,
     )
 
     print("\nExpected events: LLM_RESPONSE only (no errors in this run)")
     run_with_handler(handler4, "Running chain with production config...")
 
-    # Test 5: Disabled logging
+    # Test 5: skip_internal_chain_events — drop framework noise, keep traces
     print("\n" + "=" * 60)
-    print("Test 5: Disabled Logging")
+    print("Test 5: skip_internal_chain_events — Drop Framework Noise")
     print("=" * 60)
-    print("Config: enabled=False")
+    print("Config: skip_internal_chain_events=True")
+    print(
+        "Drops CHAIN_* events from framework-internal Runnables "
+        "(ChannelWrite, RunnableLambda, Branch, …) without breaking "
+        "trace continuity for child LLM/tool events."
+    )
 
     config5 = BigQueryLoggerConfig(
-        enabled=False,  # Completely disable logging
+        batch_size=1,
+        batch_flush_interval=0.5,
+        skip_internal_chain_events=True,
     )
 
     handler5 = BigQueryCallbackHandler(
         project_id=PROJECT_ID,
         dataset_id=DATASET_ID,
-        table_id="agent_events_v2",
+        table_id="agent_events",
         config=config5,
     )
 
+    run_with_handler(handler5, "Running chain with internal chains skipped...")
+
+    # Test 6: custom_tags — static deployment / cohort tags on every event
+    print("\n" + "=" * 60)
+    print("Test 6: custom_tags — Static Tags on Every Event")
+    print("=" * 60)
+    print('Config: custom_tags={"env": "staging", "cohort": "filter_demo"}')
+    print(
+        "Every emitted row carries these under "
+        "attributes.custom_tags — convenient for slicing dashboards by "
+        "deployment / experiment."
+    )
+
+    config6 = BigQueryLoggerConfig(
+        batch_size=1,
+        batch_flush_interval=0.5,
+        custom_tags={"env": "staging", "cohort": "filter_demo"},
+    )
+
+    handler6 = BigQueryCallbackHandler(
+        project_id=PROJECT_ID,
+        dataset_id=DATASET_ID,
+        table_id="agent_events",
+        config=config6,
+    )
+
+    run_with_handler(handler6, "Running chain with custom_tags...")
+
+    # Test 7: Disabled logging
+    print("\n" + "=" * 60)
+    print("Test 7: Disabled Logging")
+    print("=" * 60)
+    print("Config: enabled=False")
+
+    config7 = BigQueryLoggerConfig(
+        enabled=False,  # Completely disable logging
+    )
+
+    handler7 = BigQueryCallbackHandler(
+        project_id=PROJECT_ID,
+        dataset_id=DATASET_ID,
+        table_id="agent_events",
+        config=config7,
+    )
+
     print("\nExpected events: None (logging disabled)")
-    run_with_handler(handler5, "Running chain with logging disabled...")
+    run_with_handler(handler7, "Running chain with logging disabled...")
 
     # Print query to compare results
     print("\n" + "=" * 60)
@@ -208,7 +263,7 @@ SELECT
     session_id,
     event_type,
     COUNT(*) as event_count
-FROM `{PROJECT_ID}.{DATASET_ID}.agent_events_v2`
+FROM `{PROJECT_ID}.{DATASET_ID}.agent_events`
 WHERE DATE(timestamp) = CURRENT_DATE()
   AND agent = 'filtering_example'
 GROUP BY session_id, event_type

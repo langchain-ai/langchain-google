@@ -31,7 +31,6 @@ def embeddings() -> VertexAIEmbeddings:
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.extended
 def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
     """Initializes a VectorSearchVectorStore for V2 batch updates."""
     project_id = os.environ["PROJECT_ID"]
@@ -86,7 +85,6 @@ def vector_store_v2(embeddings: VertexAIEmbeddings) -> VectorSearchVectorStore:
 
 
 @pytest.fixture
-@pytest.mark.extended
 def datastore_vector_store_v2(
     embeddings: VertexAIEmbeddings,
 ) -> VectorSearchVectorStoreDatastore:
@@ -104,7 +102,6 @@ def datastore_vector_store_v2(
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.extended
 def semantic_search_collection():
     """Creates a collection with semantic search support and cleans up after tests."""
     project_id = os.environ["PROJECT_ID"]
