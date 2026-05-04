@@ -705,6 +705,22 @@ def test__tool_choice_to_tool_config(choice: Any) -> None:
     assert expected == actual
 
 
+def test__tool_choice_to_tool_config_streams_args_flag() -> None:
+    """``stream_function_call_arguments=True`` sets the SDK field."""
+    actual = _tool_choice_to_tool_config(
+        "foo", ["foo"], stream_function_call_arguments=True
+    )
+    assert actual.function_calling_config is not None
+    assert actual.function_calling_config.stream_function_call_arguments is True
+
+
+def test__tool_choice_to_tool_config_default_omits_flag() -> None:
+    """When unset, the SDK field stays ``None`` so we don't overpost."""
+    actual = _tool_choice_to_tool_config("foo", ["foo"])
+    assert actual.function_calling_config is not None
+    assert actual.function_calling_config.stream_function_call_arguments is None
+
+
 def test_tool_to_dict_glm_tool() -> None:
     tool = Tool(
         function_declarations=[

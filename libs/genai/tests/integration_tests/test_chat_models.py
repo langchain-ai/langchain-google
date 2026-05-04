@@ -2966,3 +2966,50 @@ def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> Non
     assert isinstance(second_response, AIMessage)
     # The response should contain either text or an image (or both)
     assert second_response.content is not None
+
+
+@pytest.mark.extended
+def test_streaming_partial_args_real_call(backend_config: dict) -> None:
+    """Live: Gemini 3+ emits ``partial_args`` deltas when the flag is on.
+
+    Asserts the structured ``gemini_partial_args`` side channel actually
+    flows when ``stream_function_call_arguments=True`` is configured against
+    a real Gemini 3.x preview model. Confirms (a) the flag was accepted by
+    Vertex (no 4xx) and (b) ``PartialArg`` events were produced rather than
+    only a single atomic ``fc.args`` Part. Bound a tool with several string
+    fields to maximize the chance of partial-args emission.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.1-pro-preview",
+        stream_function_call_arguments=True,
+        **backend_config,
+    )
+
+    def book_flight(
+        origin: str, destination: str, date: str, passenger_name: str
+    ) -> str:
+        """Book a flight with the given details."""
+        return f"booked {origin}->{destination} on {date} for {passenger_name}"
+
+    bound = llm.bind_tools([book_flight], tool_choice="any")
+
+    chunks: list[AIMessageChunk] = []
+    for chunk in bound.stream(
+        "Book a flight from SFO to JFK on 2026-06-01 for Alice Smith."
+    ):
+        assert isinstance(chunk, AIMessageChunk)
+        chunks.append(chunk)
+
+    partial_events: list[dict] = []
+    for c in chunks:
+        partial_events.extend(c.additional_kwargs.get("gemini_partial_args", []))
+    assert len(partial_events) >= 2, (
+        "Expected ≥2 gemini_partial_args events surfaced via additional_kwargs; "
+        f"got {len(partial_events)}. Flag may not be propagated, or model "
+        "did not stream PartialArg deltas."
+    )
+
+    paths = {e.get("json_path") for e in partial_events}
+    assert any(p and p.startswith("$.") for p in paths), (
+        f"Expected JSONPath-keyed partials (e.g. '$.field'); got {paths!r}"
+    )

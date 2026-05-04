@@ -31,6 +31,8 @@ from google.genai.types import (
     ExecutableCode,
     FileData,
     FunctionCall,
+    FunctionCallingConfig,
+    FunctionCallingConfigMode,
     FunctionDeclaration,
     FunctionResponse,
     GenerateContentConfig,
@@ -945,6 +947,23 @@ def _convert_integer_like_floats(obj: Any) -> Any:
     return obj
 
 
+def _partial_arg_value(pa: Any) -> Any:
+    """Extract the typed scalar from a Gemini ``PartialArg``.
+
+    ``PartialArg`` is a oneOf over ``string_value``/``number_value``/
+    ``bool_value``/``null_value``; only one is populated per delta.
+    """
+    if getattr(pa, "string_value", None) is not None:
+        return pa.string_value
+    if getattr(pa, "number_value", None) is not None:
+        return pa.number_value
+    if getattr(pa, "bool_value", None) is not None:
+        return pa.bool_value
+    if getattr(pa, "null_value", None) is not None:
+        return None
+    return None
+
+
 def _parse_response_candidate(
     response_candidate: Candidate,
     streaming: bool = False,
@@ -1109,26 +1128,52 @@ def _parse_response_candidate(
                 content = _append_to_content(content, image_message)
 
         if part.function_call:
-            function_call = {"name": part.function_call.name}
+            fc = part.function_call
+            function_call = {"name": fc.name}
             # dump to match other function calling llm for now
             # Convert function call args to dict first, then fix integer-like floats
-            args_dict = dict(part.function_call.args) if part.function_call.args else {}
+            args_dict = dict(fc.args) if fc.args else {}
             function_call_args_dict = _convert_integer_like_floats(args_dict)
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
             additional_kwargs["function_call"] = function_call
 
-            tool_call_id = function_call.get("id", str(uuid.uuid4()))
+            # Use the SDK-provided id when available so streaming chunks for the
+            # same logical tool call merge correctly via AIMessageChunk concat.
+            sdk_call_id = getattr(fc, "id", None)
+            tool_call_id = sdk_call_id or str(uuid.uuid4())
             if streaming:
-                tool_call_chunks.append(
-                    tool_call_chunk(
-                        name=function_call.get("name"),
-                        args=function_call.get("arguments"),
-                        id=tool_call_id,
-                        index=function_call.get("index"),  # type: ignore
+                partial_args = list(getattr(fc, "partial_args", None) or [])
+                if partial_args:
+                    # Surface structured PartialArg deltas via additional_kwargs
+                    # so advanced consumers see typed leaf updates keyed by
+                    # JSONPath. ``tool_call_chunks`` still carries the
+                    # SDK-assembled ``fc.args`` once available — this side
+                    # channel is additive, not a replacement.
+                    structured = [
+                        {
+                            "tool_call_id": tool_call_id,
+                            "sdk_call_id": sdk_call_id,
+                            "name": fc.name,
+                            "json_path": pa.json_path,
+                            "value": _partial_arg_value(pa),
+                            "will_continue": getattr(pa, "will_continue", None),
+                        }
+                        for pa in partial_args
+                    ]
+                    additional_kwargs.setdefault("gemini_partial_args", []).extend(
+                        structured
                     )
-                )
+                else:
+                    tool_call_chunks.append(
+                        tool_call_chunk(
+                            name=function_call.get("name"),
+                            args=function_call.get("arguments"),
+                            id=tool_call_id,
+                            index=function_call.get("index"),  # type: ignore
+                        )
+                    )
             else:
                 try:
                     tool_call_dict = parse_tool_calls(
@@ -2351,6 +2396,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         `cachedContents/{cachedContent}`.
     """
 
+    stream_function_call_arguments: bool = False
+    """Stream tool/function call arguments incrementally as ``partial_args``.
+
+    Requires Gemini 3 Pro or later. When enabled, ``PartialArg`` leaf updates
+    (typed scalars keyed by JSONPath) are surfaced via
+    ``additional_kwargs['gemini_partial_args']`` on each ``AIMessageChunk``,
+    letting advanced consumers preview values before the full JSON object
+    closes. Standard ``tool_call_chunks`` continue to carry the SDK-assembled
+    ``fc.args`` (currently emitted as a single seal chunk per call); a
+    follow-up may translate the structured deltas into incremental
+    ``tool_call_chunks`` once the wire format stabilizes (string values arrive
+    char-chunked, FunctionCall.id is not populated on the wire today).
+
+    Only effective on the streaming path (``_stream`` / ``_astream``); ignored
+    on non-streaming ``_generate`` / ``_agenerate`` because the Vertex
+    ``:generateContent`` endpoint rejects the flag (see vercel/ai#14314,
+    vercel/ai#14352). Defaults to ``False`` for backwards compatibility.
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         """Needed for arg validation."""
         # Get all valid field names, including aliases
@@ -2840,9 +2904,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: _ToolChoiceType | bool | None = None,
         generation_config: dict[str, Any] | None = None,
         cached_content: str | None = None,
+        streaming: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Prepare the request configuration for the API call."""
+        """Prepare the request configuration for the API call.
+
+        Args:
+            streaming: Whether the request will hit the streaming endpoint.
+                Controls whether ``stream_function_call_arguments`` is set on
+                ``FunctionCallingConfig`` — Vertex ``:generateContent``
+                rejects the flag, so it is only sent when ``streaming=True``.
+        """
         # Process tools and functions
         formatted_tools = self._format_tools(tools, functions)
 
@@ -2858,7 +2930,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         # Process tool configuration
         formatted_tool_config = self._process_tool_config(
-            tool_choice, tool_config, formatted_tools
+            tool_choice, tool_config, formatted_tools, streaming=streaming
         )
 
         # Process safety settings
@@ -2972,6 +3044,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         tool_choice: _ToolChoiceType | bool | None,
         tool_config: dict | ToolConfig | None,
         formatted_tools: list | None,
+        *,
+        streaming: bool = False,
     ) -> ToolConfig | None:
         """Process tool configuration and choice.
 
@@ -2979,7 +3053,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         `tool_choice` controls `function_calling_config` while `tool_config` can provide
         retrieval_config (for Maps/Search grounding) and other configurations.
+
+        When ``streaming`` is ``True`` and ``self.stream_function_call_arguments``
+        is ``True``, the resulting ``FunctionCallingConfig`` carries
+        ``stream_function_call_arguments=True`` so Gemini 3+ emits ``partial_args``
+        deltas. The flag is intentionally not propagated on unary calls because
+        the Vertex ``:generateContent`` endpoint rejects it.
         """
+        want_stream_args = bool(streaming and self.stream_function_call_arguments)
+
         # Normalize tool_config to ToolConfig object if dict
         normalized_config: ToolConfig | None = None
         if tool_config:
@@ -3017,10 +3099,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 # No callable functions, only built-in tools like Maps/Search
                 # Just pass through tool_config without function_calling_config
                 if normalized_config:
-                    return normalized_config
+                    return self._attach_stream_args(normalized_config, want_stream_args)
                 return None
 
-            choice_config = _tool_choice_to_tool_config(tool_choice, all_names)
+            choice_config = _tool_choice_to_tool_config(
+                tool_choice,
+                all_names,
+                stream_function_call_arguments=want_stream_args or None,
+            )
 
             # Merge with tool_config if it exists
             if normalized_config:
@@ -3034,9 +3120,45 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         # Only tool_config provided
         if normalized_config:
-            return normalized_config
+            return self._attach_stream_args(normalized_config, want_stream_args)
+
+        # Streaming flag requested but no tool_choice / tool_config — synthesize
+        # a minimal AUTO function_calling_config to carry the flag through.
+        if want_stream_args and formatted_tools:
+            return ToolConfig(
+                function_calling_config=FunctionCallingConfig(
+                    mode=FunctionCallingConfigMode.AUTO,
+                    stream_function_call_arguments=True,
+                )
+            )
 
         return None
+
+    @staticmethod
+    def _attach_stream_args(config: ToolConfig, want_stream_args: bool) -> ToolConfig:
+        """Return a ``ToolConfig`` with ``stream_function_call_arguments`` set.
+
+        Used when the caller supplied a ``tool_config`` and the streaming flag
+        is requested — we layer the flag onto its ``function_calling_config``
+        (creating one in ``AUTO`` mode if absent) without disturbing any
+        ``retrieval_config`` that was passed.
+        """
+        if not want_stream_args:
+            return config
+        existing = config.function_calling_config
+        if existing is not None:
+            new_fcc = existing.model_copy(
+                update={"stream_function_call_arguments": True}
+            )
+        else:
+            new_fcc = FunctionCallingConfig(
+                mode=FunctionCallingConfigMode.AUTO,
+                stream_function_call_arguments=True,
+            )
+        return ToolConfig(
+            function_calling_config=new_fcc,
+            retrieval_config=config.retrieval_config,
+        )
 
     def _extract_tool_names(self, formatted_tools: list) -> list[str]:
         """Extract tool names from formatted tools."""
@@ -3228,6 +3350,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            streaming=True,
             **kwargs,
         )
         try:
@@ -3299,6 +3422,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             generation_config=generation_config,
             cached_content=cached_content or self.cached_content,
             tool_choice=tool_choice,
+            streaming=True,
             **kwargs,
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage

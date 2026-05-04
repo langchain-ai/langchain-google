@@ -683,6 +683,8 @@ _ToolChoiceType = (
 def _tool_choice_to_tool_config(
     tool_choice: _ToolChoiceType,
     all_names: list[str],
+    *,
+    stream_function_call_arguments: bool | None = None,
 ) -> types.ToolConfig:
     """Convert `tool_choice` to Google's `ToolConfig` format.
 
@@ -703,6 +705,10 @@ def _tool_choice_to_tool_config(
     Args:
         tool_choice: The tool choice specification.
         all_names: List of all available function names.
+        stream_function_call_arguments: When ``True``, sets the SDK
+            ``FunctionCallingConfig.stream_function_call_arguments`` flag so
+            Gemini 3+ streams ``partial_args`` deltas. Only meaningful on the
+            streaming endpoint — Vertex ``:generateContent`` rejects it.
 
     Returns:
         `ToolConfig` object for the Google API.
@@ -743,11 +749,14 @@ def _tool_choice_to_tool_config(
     else:
         msg = f"Unrecognized tool choice format:\n\n{tool_choice=}"
         raise ValueError(msg)
+    fcc_kwargs: dict[str, Any] = {
+        "mode": types.FunctionCallingConfigMode(mode),
+        "allowed_function_names": allowed_function_names,
+    }
+    if stream_function_call_arguments:
+        fcc_kwargs["stream_function_call_arguments"] = True
     return types.ToolConfig(
-        function_calling_config=types.FunctionCallingConfig(
-            mode=types.FunctionCallingConfigMode(mode),
-            allowed_function_names=allowed_function_names,
-        )
+        function_calling_config=types.FunctionCallingConfig(**fcc_kwargs)
     )
 
 
