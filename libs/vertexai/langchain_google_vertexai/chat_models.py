@@ -20,7 +20,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
@@ -214,6 +214,89 @@ class _GeminiGenerateContentKwargs(TypedDict):
     tool_config: ToolConfig | None
 
 
+def _validate_video_metadata(video_metadata: object) -> None:
+    """Validate user-supplied video metadata before sending to Vertex AI.
+
+    The Vertex API surfaces an opaque `400 invalid argument` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
+    helper checks the obvious cases up front and raises a clearer error so
+    callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) or a `VideoMetadata` proto-like
+            instance with `start_offset`/`end_offset` attributes. Each
+            offset may be a number of seconds, a `{"seconds": int,
+            "nanos": int}` mapping, a `google.protobuf.duration_pb2.
+            Duration` instance, or a string like `"10s"`.
+
+    Raises:
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
+            proto-like object exposing offset fields.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
+            try:
+                return float(value[:-1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            try:
+                return (
+                    float(value.get("seconds", 0)) + float(value.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        if hasattr(value, "seconds"):
+            try:
+                return float(value.seconds) + float(getattr(value, "nanos", 0)) / 1e9
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    if isinstance(video_metadata, Mapping):
+        raw_start = video_metadata.get("start_offset")
+        raw_end = video_metadata.get("end_offset")
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Proto-like object (e.g. `VideoMetadata` instance). Read fields
+        # via attribute access instead of `.get` so we don't regress
+        # callers that already pass a constructed proto.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
+
+
 def _parse_chat_history_gemini(
     history: list[BaseMessage],
     imageBytesLoader: ImageBytesLoader,
@@ -348,6 +431,7 @@ def _parse_chat_history_gemini(
                 raise ValueError(msg)
 
             if "video_metadata" in part:
+                _validate_video_metadata(part["video_metadata"])
                 metadata = VideoMetadata(part["video_metadata"])
                 proto_part.video_metadata = metadata
             return proto_part
@@ -945,7 +1029,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Key init args — completion params:
         model: str
-            Name of ChatVertexAI model to use. e.g. `'gemini-2.0-flash-001'`,
+            Name of ChatVertexAI model to use. e.g. `'gemini-2.5-flash'`,
             `'gemini-2.5-pro'`, etc.
         temperature: Optional[float]
             Sampling temperature.
@@ -1269,7 +1353,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
 
             llm = ChatVertexAI(
-                model_name="gemini-2.5-flash",
+                model="gemini-2.5-flash",
                 cached_content=cache.name,
             )
             message = HumanMessage(
@@ -2391,7 +2475,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             from langchain_core.messages import HumanMessage
             from langchain_google_vertexai import ChatVertexAI
 
-            llm = ChatVertexAI(model="gemini-2.0-flash")
+            llm = ChatVertexAI(model="gemini-2.5-flash")
 
             # Text-only message
             messages = [HumanMessage(content="Hello, world!")]
@@ -2638,7 +2722,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(AnswerWithJustification)
 
             structured_llm.invoke(
@@ -2662,7 +2746,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(
                 AnswerWithJustification, include_raw=True
             )
@@ -2694,7 +2778,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 
             dict_schema = convert_to_openai_function(AnswerWithJustification)
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(dict_schema)
 
             structured_llm.invoke(
@@ -2721,7 +2805,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 examples: str = Field(description="Two examples related to the topic.")
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-2.5-flash", temperature=0)
             structured_llm = llm.with_structured_output(Explanation, method="json_mode")
 
             for chunk in structured_llm.stream("Tell me about transformer models"):
@@ -2853,7 +2937,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
-        usage = proto.Message.to_dict(response.usage_metadata)
+        usage = proto.Message.to_dict(
+            response.usage_metadata, use_integers_for_enums=False
+        )
         lc_usage = _get_usage_metadata_gemini(usage)
         logprobs = self.logprobs if isinstance(self.logprobs, (int, bool)) else False
         for candidate in response.candidates:
@@ -2890,7 +2976,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         prev_total_usage: UsageMetadata | None = None,
     ) -> tuple[ChatGenerationChunk, UsageMetadata | None]:
         # return an empty completion message if there's no candidates
-        usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
+        usage_metadata = proto.Message.to_dict(
+            response_chunk.usage_metadata, use_integers_for_enums=False
+        )
 
         # Gather langchain (standard) usage metadata
         # Note: some models (e.g., gemini-1.5-pro with image inputs) return

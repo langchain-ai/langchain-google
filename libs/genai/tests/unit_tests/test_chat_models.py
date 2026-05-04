@@ -28,6 +28,7 @@ from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
 from google.protobuf.struct_pb2 import Struct
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
@@ -54,6 +55,7 @@ from langchain_google_genai._compat import (
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
+    GoogleContextOverflowError,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
@@ -62,6 +64,7 @@ from langchain_google_genai.chat_models import (
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
+    _validate_video_metadata,
 )
 
 MODEL_NAME = "gemini-2.5-flash"
@@ -483,10 +486,10 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
     assert call_http_options.base_url == api_endpoint
 
-    # Verify user-agent header is set
-    assert "User-Agent" in call_http_options.headers
-    assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
-    assert "ChatGoogleGenerativeAI" in call_http_options.headers["User-Agent"]
+    # Verify user-agent header is set (lowercase to match google-genai SDK)
+    assert "user-agent" in call_http_options.headers
+    assert "langchain-google-genai" in call_http_options.headers["user-agent"]
+    assert "ChatGoogleGenerativeAI" in call_http_options.headers["user-agent"]
 
     # Verify user-provided headers are included
     if headers:
@@ -516,7 +519,7 @@ def test_base_url_passed_to_client() -> None:
         )
         call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == "http://localhost:8000"
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_async_client_property() -> None:
@@ -576,7 +579,7 @@ def test_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 async def test_async_api_endpoint_via_client_options() -> None:
@@ -620,7 +623,7 @@ async def test_async_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_default_metadata_field_alias() -> None:
@@ -1410,6 +1413,7 @@ def test_max_retries_parameter_handling(
                 "google_maps_widget_context_token": None,
                 "grounding_chunks": [
                     {
+                        "image": None,
                         "maps": None,
                         "retrieved_context": None,
                         "web": {
@@ -1431,6 +1435,7 @@ def test_max_retries_parameter_handling(
                         "confidence_scores": [0.95],
                     }
                 ],
+                "image_search_queries": [],
                 "retrieval_metadata": None,
                 "retrieval_queries": None,
                 "search_entry_point": None,
@@ -1457,6 +1462,82 @@ def test_max_retries_parameter_handling(
                 },
             },
             {},
+        ),
+        (
+            # Case 3: Response with image_search_queries in grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "grounding_metadata": {
+                            "grounding_chunks": [
+                                {
+                                    "web": {
+                                        "uri": "https://example.com",
+                                        "title": "Example Site",
+                                    }
+                                }
+                            ],
+                            "grounding_supports": [
+                                {
+                                    "segment": {
+                                        "start_index": 0,
+                                        "end_index": 13,
+                                        "text": "Test response",
+                                        "part_index": 0,
+                                    },
+                                    "grounding_chunk_indices": [0],
+                                    "confidence_scores": [0.95],
+                                }
+                            ],
+                            "web_search_queries": ["test query"],
+                            "image_search_queries": ["cat images"],
+                        },
+                    }
+                ],
+                "prompt_feedback": {
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {
+                "google_maps_widget_context_token": None,
+                "grounding_chunks": [
+                    {
+                        "image": None,
+                        "maps": None,
+                        "retrieved_context": None,
+                        "web": {
+                            "domain": None,
+                            "uri": "https://example.com",
+                            "title": "Example Site",
+                        },
+                    }
+                ],
+                "grounding_supports": [
+                    {
+                        "segment": {
+                            "start_index": 0,
+                            "end_index": 13,
+                            "text": "Test response",
+                            "part_index": 0,
+                        },
+                        "grounding_chunk_indices": [0],
+                        "confidence_scores": [0.95],
+                    }
+                ],
+                "image_search_queries": ["cat images"],
+                "retrieval_metadata": None,
+                "retrieval_queries": None,
+                "search_entry_point": None,
+                "source_flagging_uris": None,
+                "web_search_queries": ["test query"],
+            },
         ),
     ],
 )
@@ -2864,6 +2945,152 @@ def test_convert_to_parts_media_with_video_metadata() -> None:
     assert result[0].video_metadata is not None
     assert result[0].video_metadata.start_offset == "10s"
     assert result[0].video_metadata.end_offset == "20s"
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": "1s", "end_offset": "5s"},
+        {"start_offset": "0s", "end_offset": "0s"},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"startOffset": "1s", "endOffset": "5s"},
+        {},
+        {"end_offset": "5s"},
+        {"start_offset": "1s"},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": "-1s", "end_offset": "5s"},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "0s", "end_offset": "-1s"},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "10s", "end_offset": "5s"},
+            "must not exceed",
+        ),
+        (
+            {"startOffset": "5s", "endOffset": "1s"},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": {"seconds": 30}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_validate_video_metadata_accepts_pydantic_instance() -> None:
+    """`VideoMetadata` instances should validate via attribute access."""
+    from google.genai.types import VideoMetadata
+
+    valid = VideoMetadata(start_offset="1s", end_offset="5s")
+    _validate_video_metadata(valid)
+
+
+def test_validate_video_metadata_rejects_invalid_pydantic_instance() -> None:
+    """Pydantic instances with bad offsets must raise the same clear ValueError."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="30s", end_offset="5s")
+    with pytest.raises(ValueError, match="must not exceed"):
+        _validate_video_metadata(bad)
+
+
+def test_validate_video_metadata_rejects_negative_pydantic_instance() -> None:
+    """Negative offsets reach the same guard via the attribute-access path."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="-1s", end_offset="5s")
+    with pytest.raises(ValueError, match="start_offset must be non-negative"):
+        _validate_video_metadata(bad)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `True` would be silently treated as 1 second without the bool
+        # guard, since `isinstance(True, int) is True`.
+        {"start_offset": True, "end_offset": "5s"},
+        {"start_offset": "5s", "end_offset": False},
+    ],
+)
+def test_validate_video_metadata_ignores_bool_offsets(
+    video_metadata: dict,
+) -> None:
+    """Booleans must not be coerced into integer durations."""
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        "not a mapping",
+        12345,
+        ["seq", "of", "things"],
+        object(),
+    ],
+)
+def test_validate_video_metadata_rejects_non_mapping_input(
+    video_metadata: object,
+) -> None:
+    """Non-mapping, non-model input must surface a clear ValueError instead
+    of an opaque `AttributeError` from a missing `.get` method."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `float(None)` would TypeError without the guard.
+        {"start_offset": {"seconds": None, "nanos": None}},
+        # `float('abc')` would ValueError without the guard.
+        {"start_offset": {"seconds": "abc"}},
+        # Garbage string with the `s` suffix.
+        {"start_offset": "abcs"},
+    ],
+)
+def test_validate_video_metadata_tolerates_unparseable_values(
+    video_metadata: dict,
+) -> None:
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
+    only true validation failures (negative offsets, start > end) raise."""
+    # Should not raise -- unparseable values are treated as "not present"
+    # and `model_validate` will surface a clearer error if needed.
+    _validate_video_metadata(video_metadata)
+
+
+def test_convert_to_parts_video_metadata_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+            "video_metadata": {"start_offset": "30s", "end_offset": "5s"},
+        }
+    ]
+    with pytest.raises(ValueError, match="must not exceed"):
+        _convert_to_parts(content)
 
 
 def test_convert_to_parts_executable_code() -> None:
@@ -4969,3 +5196,159 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+def test_context_overflow_error_invoke_sync() -> None:
+    """Test `ClientError` with token overflow is converted to `ContextOverflowError`."""
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate an INVALID_ARGUMENT error from the API (token limit exceeded)
+    mock_generate_content.side_effect = ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            chat.invoke("test")
+
+
+async def test_context_overflow_error_invoke_async() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (async)."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_class:
+        mock_client_instance = Mock()
+        mock_client_class.return_value = mock_client_instance
+
+        context_overflow_error = ClientError(
+            code=400,
+            response_json={
+                "error": {
+                    "message": (
+                        "The input token count (1632254) exceeds the maximum "
+                        "number of tokens allowed (1048576)."
+                    ),
+                    "status": "INVALID_ARGUMENT",
+                }
+            },
+            response=None,
+        )
+
+        # Mock the aio.models.generate_content method for async calls
+        mock_aio = Mock()
+        mock_client_instance.aio = mock_aio
+        mock_aio_models = Mock()
+        mock_aio.models = mock_aio_models
+        mock_aio_models.generate_content = AsyncMock(side_effect=context_overflow_error)
+
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            await chat.ainvoke("test")
+
+
+def test_context_overflow_error_stream_sync() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (stream)."""
+    mock_client = Mock()
+    mock_models = Mock()
+
+    # Simulate an INVALID_ARGUMENT error from the API (token limit exceeded)
+    mock_models.generate_content_stream = Mock(
+        side_effect=ClientError(
+            code=400,
+            response_json={
+                "error": {
+                    "message": (
+                        "The input token count (1632254) exceeds the maximum "
+                        "number of tokens allowed (1048576)."
+                    ),
+                    "status": "INVALID_ARGUMENT",
+                }
+            },
+            response=None,
+        )
+    )
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            list(chat.stream("test"))
+
+
+def test_context_overflow_error_backwards_compatibility() -> None:
+    """Test that `GoogleContextOverflowError` can still be caught as `ClientError`.
+
+    This ensures backwards compatibility: code that catches `ClientError` will
+    continue to work, while new code can catch `ContextOverflowError`.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    mock_generate_content.side_effect = ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(ClientError) as exc_info:
+            chat.invoke("test")
+
+        # Verify it's both types (multiple inheritance)
+        assert isinstance(exc_info.value, ClientError)
+        assert isinstance(exc_info.value, ContextOverflowError)
+        assert isinstance(exc_info.value, GoogleContextOverflowError)

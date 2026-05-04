@@ -120,3 +120,29 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: |
           make lint_tests
+
+      - name: Check for examples directory
+        id: check_examples
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ -d examples ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get .mypy_cache_examples to speed up mypy
+        if: steps.check_examples.outputs.exists == 'true'
+        uses: actions/cache@v5
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
+        with:
+          path: |
+            ${{ env.WORKDIR }}/.mypy_cache_examples
+          key: mypy-examples-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
+
+      - name: Analysing the examples with our lint
+        if: steps.check_examples.outputs.exists == 'true'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          make lint_examples

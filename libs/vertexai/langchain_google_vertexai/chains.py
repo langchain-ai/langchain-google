@@ -132,7 +132,7 @@ def create_structured_runnable(
             fav_food: Optional[str] = Field(None, description="The dog's favorite food")
 
 
-        llm = ChatVertexAI(model_name="gemini-pro")
+        llm = ChatVertexAI(model="gemini-2.5-flash")
         prompt = ChatPromptTemplate.from_template(\"\"\"
         You are a world class algorithm for recording entities.
         Make calls to the relevant function to record the entities in the following input: {input}

@@ -114,6 +114,13 @@ class GoogleSearchAPIWrapper(BaseModel):
             }
             if "snippet" in result:
                 metadata_result["snippet"] = result["snippet"]
+            pagemap = result.get("pagemap", {})
+            cse_images = pagemap.get("cse_image", [])
+            if cse_images:
+                metadata_result["image"] = cse_images[0].get("src")
+            cse_thumbnails = pagemap.get("cse_thumbnail", [])
+            if cse_thumbnails:
+                metadata_result["thumbnail"] = cse_thumbnails[0].get("src")
             metadata_results.append(metadata_result)
 
         return metadata_results

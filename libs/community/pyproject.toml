@@ -9,11 +9,11 @@ license = {text = "MIT"}
 readme = "README.md"
 authors = []
 
-version = "3.0.5"
+version = "4.0.0"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
     "langgraph>=1.0.4,<2.0.0",
-    "langchain-core>=1.2.5,<2.0.0",
+    "langchain-core>=1.3.2,<2.0.0",
     "langchain>=1.1.3,<2.0.0",
     "langchain-community>=0.4.0,<2.0.0",
     "google-api-core>=2.25.0,<3.0.0",
@@ -34,7 +34,7 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
 bigquery = [
-    "google-cloud-bigquery-storage>=2.25.0,<3.0.0",
+    "google-cloud-bigquery-storage<3.0.0,>=2.6.0",
     "google-cloud-bigquery>=3.21.0,<4.0.0",
     "google-cloud-core>=2.4.3,<3.0.0",
     "google-auth>=2.36.0,<3.0.0",
@@ -112,6 +112,9 @@ select = [
     "F", # pyflakes
     "I", # isort
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["E501"]
 
 [tool.mypy]
 disallow_untyped_defs = "True"

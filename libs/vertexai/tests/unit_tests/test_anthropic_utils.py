@@ -25,6 +25,7 @@ from langchain_google_vertexai._anthropic_utils import (
     _format_message_anthropic,
     _format_messages_anthropic,
     _make_message_chunk_from_anthropic_event,
+    _merge_messages,
     _thinking_in_params,
 )
 
@@ -1107,6 +1108,88 @@ def test_ai_message_empty_content_without_tool_calls() -> None:
     assert result_empty_list is None
 
 
+def test_tool_message_empty_content_produces_tool_result() -> None:
+    """Test that ToolMessage with content=[] still produces a tool_result block.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1722
+
+    Python's all() on an empty iterable returns True, which caused
+    ToolMessage(content=[]) to be misclassified as pre-formatted tool_result
+    blocks. The resulting empty HumanMessage was merged into the next
+    HumanMessage, silently dropping the tool_result and producing a payload
+    that the Anthropic API rejects.
+    """
+    messages = [
+        HumanMessage(content="Search for controls"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "Let me search."},
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "field_search",
+                    "input": {"query": "controls"},
+                },
+            ],
+        ),
+        ToolMessage(content=[], tool_call_id="call_1"),
+        HumanMessage(content="What did you find?"),
+    ]
+
+    merged = _merge_messages(messages)
+
+    tool_results = [
+        block
+        for m in merged
+        if isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+    assert len(tool_results) == 1, (
+        f"Expected 1 tool_result block, got {len(tool_results)}. "
+        "ToolMessage with empty content should still produce a tool_result."
+    )
+    assert tool_results[0]["tool_use_id"] == "call_1"
+
+
+def test_tool_message_empty_content_with_error_status() -> None:
+    """ToolMessage(content=[], status='error') propagates is_error correctly.
+
+    Locks in that the empty-content path still routes through the wrapping
+    branch, which sets `is_error: True` from `status='error'`. Guards against
+    a future refactor that reorders the empty-list guard above the status
+    check.
+    """
+    messages = [
+        AIMessage(
+            content=[
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "search",
+                    "input": {"q": "x"},
+                },
+            ],
+        ),
+        ToolMessage(content=[], tool_call_id="call_1", status="error"),
+    ]
+
+    merged = _merge_messages(messages)
+
+    tool_results = [
+        block
+        for m in merged
+        if isinstance(m.content, list)
+        for block in m.content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+
+    assert len(tool_results) == 1
+    assert tool_results[0]["tool_use_id"] == "call_1"
+    assert tool_results[0].get("is_error") is True
+
+
 def test_format_messages_tool_message_with_streaming_metadata() -> None:
     """Test that streaming metadata is removed from ToolMessage content.
 
@@ -1353,6 +1436,121 @@ def test_tool_message_preserves_cache_control() -> None:
     }
 
 
+def test_format_messages_tool_message_with_image_blocks() -> None:
+    """Test image blocks in ToolMessage content are converted to Anthropic format.
+
+    LangChain image blocks use {"type": "image", "base64": ..., "mime_type": ...}
+    but Anthropic expects {"type": "image", "source": {"type": "base64", ...}}.
+    This conversion must happen even when images are nested inside tool_result content.
+    """
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "screenshot.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "base64": "iVBORw0KGgo=",
+                    "mime_type": "image/png",
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    tool_result = formatted[1]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == "call_1"
+
+    image_block = tool_result["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgo=",
+        },
+    }
+
+
+def test_format_messages_tool_message_with_url_image_block() -> None:
+    """Test URL image blocks in ToolMessage are converted."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "img.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "url": "https://example.com/image.png",
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    image_block = formatted[1]["content"][0]["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {"type": "url", "url": "https://example.com/image.png"},
+    }
+
+
+def test_format_messages_tool_message_with_already_formatted_image() -> None:
+    """Test that image blocks already in Anthropic format are passed through."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="read_file", args={"path": "img.png"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "iVBORw0KGgo=",
+                    },
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    image_block = formatted[1]["content"][0]["content"][0]
+    assert image_block == {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgo=",
+        },
+    }
+
+
 @pytest.mark.parametrize(
     ("image_url", "expected_media_type"),
     [
@@ -1382,3 +1580,119 @@ def test_format_image(image_url: str, expected_media_type: str) -> None:
         }
 
         mock_loader_instance.load_bytes.assert_called_once_with(image_url)
+
+
+def test_format_messages_anthropic_system_not_first() -> None:
+    """Test that system messages are accepted when not at position 0.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1022
+    """
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content="Hi there!"),
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="What is 2+2?"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
+
+    assert system_messages == [{"type": "text", "text": "You are a helpful assistant."}]
+    # System message should be extracted; remaining messages should be formatted
+    assert len(formatted_messages) == 3
+    assert formatted_messages[0]["role"] == "user"
+    assert formatted_messages[1]["role"] == "assistant"
+    assert formatted_messages[2]["role"] == "user"
+
+
+def test_format_messages_anthropic_consecutive_system_merged() -> None:
+    """Test that consecutive system messages are merged into one."""
+    messages = [
+        SystemMessage(content="Rule 1."),
+        SystemMessage(content="Rule 2."),
+        HumanMessage(content="Hello"),
+    ]
+    system_messages, formatted_messages = _format_messages_anthropic(
+        messages, project="test-project"
+    )
+
+    # Consecutive system messages should be merged
+    assert system_messages == [
+        {"type": "text", "text": "Rule 1."},
+        {"type": "text", "text": "Rule 2."},
+    ]
+    assert len(formatted_messages) == 1
+    assert formatted_messages[0]["role"] == "user"
+
+
+def test_format_messages_anthropic_multiple_non_consecutive_system_raises() -> None:
+    """Test that multiple non-consecutive system messages raise an error."""
+    messages = [
+        SystemMessage(content="First system."),
+        HumanMessage(content="Hello"),
+        SystemMessage(content="Second system."),
+        HumanMessage(content="World"),
+    ]
+    with pytest.raises(ValueError, match="multiple non-consecutive system messages"):
+        _format_messages_anthropic(messages, project="test-project")
+
+
+def test_format_messages_anthropic_strips_trailing_assistant_string_whitespace() -> (
+    None
+):
+    """Trailing assistant ``str`` content must be ``rstrip`` (#1514)."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(content="Pong  \n\t"),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["role"] == "assistant"
+    assert formatted[-1]["content"] == [{"type": "text", "text": "Pong"}]
+
+
+def test_format_messages_anthropic_strips_trailing_assistant_last_text_block() -> None:
+    """Only the final text block of the trailing assistant message is stripped."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "first  "},
+                {"type": "text", "text": "last \t"},
+            ]
+        ),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["content"] == [
+        {"type": "text", "text": "first  "},
+        {"type": "text", "text": "last"},
+    ]
+
+
+def test_format_messages_anthropic_does_not_strip_non_trailing_assistant() -> None:
+    """Whitespace in non-trailing assistant messages is preserved."""
+    messages = [
+        HumanMessage(content="Hi"),
+        AIMessage(content="Hello "),
+        HumanMessage(content="Continue"),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[1]["role"] == "assistant"
+    assert formatted[1]["content"] == [{"type": "text", "text": "Hello "}]
+
+
+def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
+    """A trailing ``thinking`` block is left untouched (signature-sensitive)."""
+    messages = [
+        HumanMessage(content="Ping?"),
+        AIMessage(
+            content=[
+                {
+                    "type": "thinking",
+                    "thinking": "considering...  ",
+                    "signature": "abc",
+                }
+            ]
+        ),
+    ]
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+    assert formatted[-1]["content"][0]["thinking"] == "considering...  "

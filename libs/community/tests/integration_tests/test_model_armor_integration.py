@@ -221,7 +221,7 @@ def test_pipeline_integration(
         template_id=all_filter_template,
         fail_open=True,
     )
-    llm = RunnableLambda(lambda x, **kwargs: f"Echo: {x}")
+    llm: RunnableLambda = RunnableLambda(lambda x, **kwargs: f"Echo: {x}")
     chain: RunnableSequence = RunnableSequence(
         prompt_sanitizer,
         llm,
