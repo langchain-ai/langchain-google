@@ -2978,7 +2978,16 @@ def test_streaming_partial_args_real_call(backend_config: dict) -> None:
     Vertex (no 4xx) and (b) ``PartialArg`` events were produced rather than
     only a single atomic ``fc.args`` Part. Bound a tool with several string
     fields to maximize the chance of partial-args emission.
+
+    Vertex-only: the Gemini API (``mldev``) backend rejects the flag at the
+    SDK serializer (``google.genai`` raises ``ValueError`` before any wire
+    call), so this test is skipped under the ``google_ai`` backend.
     """
+    if not backend_config.get("vertexai"):
+        pytest.skip(
+            "stream_function_call_arguments is Vertex-only; rejected by "
+            "google.genai for the Gemini API (mldev) backend."
+        )
     llm = ChatGoogleGenerativeAI(
         model="gemini-3.1-pro-preview",
         stream_function_call_arguments=True,

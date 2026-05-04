@@ -2412,7 +2412,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     Only effective on the streaming path (``_stream`` / ``_astream``); ignored
     on non-streaming ``_generate`` / ``_agenerate`` because the Vertex
     ``:generateContent`` endpoint rejects the flag (see vercel/ai#14314,
-    vercel/ai#14352). Defaults to ``False`` for backwards compatibility.
+    vercel/ai#14352). **Vertex AI backend only** — the Gemini API
+    (``generativelanguage.googleapis.com``) backend rejects the flag at the
+    ``google.genai`` SDK serializer, so this option is only useful with
+    ``vertexai=True``. Defaults to ``False`` for backwards compatibility.
     """
 
     def __init__(self, **kwargs: Any) -> None:

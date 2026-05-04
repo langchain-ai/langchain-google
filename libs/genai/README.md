@@ -42,6 +42,7 @@ Each entry carries the resolved `tool_call_id`, the raw SDK `FunctionCall.id` (`
 
 #### Caveats
 
+- **Vertex AI backend only.** The Gemini API (`generativelanguage.googleapis.com`) backend rejects this flag at the SDK serializer (`google.genai` raises `ValueError` before any wire call), so it is only useful with `vertexai=True`.
 - The flag is only sent on the streaming endpoint. Non-streaming `invoke` / `ainvoke` calls ignore it because the Vertex `:generateContent` endpoint rejects the option (see [vercel/ai#14314](https://github.com/vercel/ai/issues/14314), [vercel/ai#14352](https://github.com/vercel/ai/pull/14352)).
 - Translating `PartialArg` deltas into incremental `tool_call_chunks` (the full Anthropic-/OpenAI-style streaming experience) is intentionally out of scope for this opt-in: the Vertex 3.x preview wire format omits `FunctionCall.id` and chunks string values mid-leaf, so a faithful translator needs additional design — tracked as a follow-up. The structured side channel above is sufficient for most preview/UI use cases.
 
