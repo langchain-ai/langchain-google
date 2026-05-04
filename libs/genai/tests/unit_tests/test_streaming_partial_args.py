@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Iterator
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -73,8 +74,8 @@ def test_streaming_partial_args_threads_flag_sync() -> None:
     ):
         list(bound.stream("hi"))
 
-    config = captured["config"]
-    fcc = config.tool_config.function_calling_config  # type: ignore[union-attr]
+    config = cast("Any", captured["config"])
+    fcc = config.tool_config.function_calling_config
     assert fcc is not None
     assert fcc.stream_function_call_arguments is True
 
@@ -308,7 +309,7 @@ async def test_astream_chunks_merge_to_full_args() -> None:
     assert len(chunks) >= 3
     merged = chunks[0]
     for c in chunks[1:]:
-        merged = merged + c  # type: ignore[assignment]
+        merged = merged + c
 
     # parse_partial_json on the merged AIMessageChunk yields the complete dict.
     assert merged.tool_calls, "Expected at least one fully-parsed tool_call"
