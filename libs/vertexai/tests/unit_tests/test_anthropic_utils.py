@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from anthropic.types import (
     RawContentBlockDeltaEvent,
+    RawMessageStartEvent,
     SignatureDelta,
     ThinkingDelta,
 )
@@ -942,6 +943,49 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
     )
     assert isinstance(thinking_chunk, AIMessageChunk)
     assert isinstance(signature_chunk, AIMessageChunk)
+
+
+def _make_message_start_event(model: str = "claude-test") -> RawMessageStartEvent:
+    from anthropic.types import Message, Usage
+
+    return RawMessageStartEvent(
+        type="message_start",
+        message=Message(
+            id="msg_1",
+            content=[],
+            model=model,
+            role="assistant",
+            stop_reason="end_turn",
+            stop_sequence=None,
+            type="message",
+            usage=Usage(input_tokens=10, output_tokens=5),
+        ),
+    )
+
+
+def test_message_start_chunk_has_model_provider_with_stream_usage() -> None:
+    """message_start event always sets model_provider='anthropic' in response_metadata."""
+    chunk = _make_message_chunk_from_anthropic_event(
+        event=_make_message_start_event("claude-3-5-sonnet"),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+    assert chunk is not None
+    assert chunk.response_metadata.get("model_provider") == "anthropic"
+    assert chunk.response_metadata.get("model_name") == "claude-3-5-sonnet"
+    assert chunk.usage_metadata is not None
+
+
+def test_message_start_chunk_has_model_provider_without_stream_usage() -> None:
+    """model_provider is set even when stream_usage=False (no usage data emitted)."""
+    chunk = _make_message_chunk_from_anthropic_event(
+        event=_make_message_start_event("claude-3-5-sonnet"),
+        stream_usage=False,
+        coerce_content_to_string=False,
+    )
+    assert chunk is not None
+    assert chunk.response_metadata.get("model_provider") == "anthropic"
+    assert chunk.usage_metadata is None
 
 
 def test_thinking_in_params_true() -> None:
