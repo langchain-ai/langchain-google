@@ -964,7 +964,8 @@ def _make_message_start_event(model: str = "claude-test") -> RawMessageStartEven
 
 
 def test_message_start_chunk_has_model_provider_with_stream_usage() -> None:
-    """message_start event always sets model_provider='anthropic' in response_metadata."""
+    """message_start event always sets model_provider='anthropic' in
+    response_metadata."""
     chunk = _make_message_chunk_from_anthropic_event(
         event=_make_message_start_event("claude-3-5-sonnet"),
         stream_usage=True,
