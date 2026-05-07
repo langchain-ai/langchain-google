@@ -2518,8 +2518,14 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "747" in response.content
+    content = response.content
+    if isinstance(content, list):
+        text = " ".join(
+            b["text"] for b in content if isinstance(b, dict) and b.get("text")
+        )
+    else:
+        text = content
+    assert "747" in text
 
     # Verify cache was used (should have cache_read tokens in usage metadata)
     if response.usage_metadata:
@@ -2535,8 +2541,14 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "747" in response.content
+    content = response.content
+    if isinstance(content, list):
+        text = " ".join(
+            b["text"] for b in content if isinstance(b, dict) and b.get("text")
+        )
+    else:
+        text = content
+    assert "747" in text
 
 
 @pytest.mark.extended
