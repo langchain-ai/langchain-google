@@ -32,44 +32,44 @@ class TasksToolkit(BaseToolkit):
     deleting, and retrieving tasks from Google Tasks.
 
     Setup:
-        Install ``langchain-google-community`` and set up Google authentication.
+        Install `langchain-google-community` and set up Google authentication.
 
-        .. code-block:: bash
-
-            pip install -U langchain-google-community
+        ```bash
+        pip install -U langchain-google-community
+        ```
 
         You'll need to enable the Google Tasks API and set up credentials.
 
     Instantiation:
-        .. code-block:: python
+        ```python
+        from langchain_google_community import TasksToolkit
 
-            from langchain_google_community import TasksToolkit
-
-            toolkit = TasksToolkit()
+        toolkit = TasksToolkit()
+        ```
 
     Tools:
-        .. code-block:: python
-
-            tools = toolkit.get_tools()
-            # Returns: [TasksCreateTask, TasksListTasks, TasksUpdateTask,
-            #           TasksDeleteTask, TasksGetTask]
+        ```python
+        tools = toolkit.get_tools()
+        # Returns: [TasksCreateTask, TasksListTasks, TasksUpdateTask,
+        #           TasksDeleteTask, TasksGetTask]
+        ```
 
     Use within an agent:
-        .. code-block:: python
+        ```python
+        from langchain_openai import ChatOpenAI
+        from langgraph.prebuilt import create_react_agent
 
-            from langchain_openai import ChatOpenAI
-            from langgraph.prebuilt import create_react_agent
+        llm = ChatOpenAI(model="gpt-4o-mini")
+        agent_executor = create_react_agent(llm, tools)
 
-            llm = ChatOpenAI(model="gpt-4o-mini")
-            agent_executor = create_react_agent(llm, tools)
-
-            example_query = "Create a task to review the quarterly report"
-            events = agent_executor.stream(
-                {"messages": [("user", example_query)]},
-                stream_mode="values",
-            )
-            for event in events:
-                event["messages"][-1].pretty_print()
+        example_query = "Create a task to review the quarterly report"
+        events = agent_executor.stream(
+            {"messages": [("user", example_query)]},
+            stream_mode="values",
+        )
+        for event in events:
+            event["messages"][-1].pretty_print()
+        ```
 
     !!! warning "Security"
         This toolkit contains tools that can read and modify the state of a

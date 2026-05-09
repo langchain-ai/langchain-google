@@ -203,6 +203,86 @@ def _is_gemini_25_model(model_name: str) -> bool:
     return "gemini-2.5" in model_name
 
 
+def _validate_video_metadata(video_metadata: object) -> None:
+    """Validate user-supplied video metadata before sending to the API.
+
+    The Gemini API surfaces an opaque `500 Internal error` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
+    helper checks the obvious cases up front and raises a clearer error
+    so callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) keyed by either `start_offset`/
+            `end_offset` or their camelCase aliases, or a `VideoMetadata`
+            Pydantic instance. Each offset may be a duration string like
+            `"10s"`, a number of seconds, or a `{"seconds": int, "nanos":
+            int}` mapping.
+
+    Raises:
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
+            object exposing offset fields.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
+            try:
+                return float(value[:-1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            mapping = cast("Mapping[str, Any]", value)
+            try:
+                return (
+                    float(mapping.get("seconds", 0))
+                    + float(mapping.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    if isinstance(video_metadata, Mapping):
+        mapping = cast("Mapping[str, Any]", video_metadata)
+        raw_start = mapping.get("start_offset", mapping.get("startOffset"))
+        raw_end = mapping.get("end_offset", mapping.get("endOffset"))
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Pydantic `VideoMetadata` instance — read fields via attribute
+        # access so callers passing a constructed model don't regress.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
+
+
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
     model: str | None = None,
@@ -359,6 +439,7 @@ def _convert_to_parts(
                         msg = f"Media part must have either data or file_uri: {part}"
                         raise ValueError(msg)
                     if "video_metadata" in part:
+                        _validate_video_metadata(part["video_metadata"])
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part_kwargs["video_metadata"] = metadata
 
