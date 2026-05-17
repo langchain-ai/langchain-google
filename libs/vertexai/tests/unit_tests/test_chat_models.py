@@ -5,7 +5,7 @@ import json
 import sys
 import warnings
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,6 +23,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
@@ -2372,6 +2373,87 @@ def test_gemini_response_to_chat_result_emits_string_modality() -> None:
     usage = generation_info["usage_metadata"]
     assert usage["prompt_tokens_details"][0]["modality"] == "TEXT"
     assert usage["candidates_tokens_details"][0]["modality"] == "TEXT"
+
+
+def test_gemini_response_to_chat_result_includes_provider_response_id() -> None:
+    """Test Vertex response ID is included in message metadata."""
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hi"}], "role": "model"},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "response_id": "provider-response-id",
+            "usage_metadata": {
+                "prompt_token_count": 4,
+                "candidates_token_count": 1,
+                "total_token_count": 5,
+            },
+        }
+    )
+
+    result = llm._gemini_response_to_chat_result(response)
+    message = result.generations[0].message
+
+    assert message.response_metadata["id"] == "provider-response-id"
+    assert "response_id" not in message.response_metadata
+
+
+def test_gemini_chunk_to_generation_chunk_adds_provider_response_id_once() -> None:
+    """Test streamed Vertex response ID is included once after concatenation."""
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    first_response = GenerationResponse.from_dict(
+        {
+            "candidates": [{"content": {"parts": [{"text": "hi"}], "role": "model"}}],
+            "response_id": "provider-response-id",
+            "usage_metadata": {
+                "prompt_token_count": 4,
+                "candidates_token_count": 1,
+                "total_token_count": 5,
+            },
+        }
+    )
+    final_response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "!"}], "role": "model"},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 4,
+                "candidates_token_count": 2,
+                "total_token_count": 6,
+            },
+        }
+    )
+
+    first_chunk, total_usage = llm._gemini_chunk_to_generation_chunk(
+        first_response,
+        provider_response_id="provider-response-id",
+    )
+    final_chunk, _ = llm._gemini_chunk_to_generation_chunk(
+        final_response,
+        prev_total_usage=total_usage,
+        provider_response_id="provider-response-id",
+    )
+
+    first_message = cast("AIMessageChunk", first_chunk.message)
+    final_message = cast("AIMessageChunk", final_chunk.message)
+    assert "id" not in first_message.response_metadata
+    assert final_message.response_metadata["id"] == "provider-response-id"
+
+    full = first_message + final_message
+    assert full.response_metadata["id"] == "provider-response-id"
+    assert full.response_metadata["id"].count("provider-response-id") == 1
 
 
 def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
