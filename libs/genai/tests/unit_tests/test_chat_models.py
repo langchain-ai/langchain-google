@@ -1434,6 +1434,7 @@ def test_max_retries_parameter_handling(
                         },
                         "grounding_chunk_indices": [0],
                         "confidence_scores": [0.95],
+                        "rendered_parts": None,
                     }
                 ],
                 "image_search_queries": [],
@@ -1489,6 +1490,7 @@ def test_max_retries_parameter_handling(
                                     },
                                     "grounding_chunk_indices": [0],
                                     "confidence_scores": [0.95],
+                                    "rendered_parts": None,
                                 }
                             ],
                             "web_search_queries": ["test query"],
@@ -1530,6 +1532,7 @@ def test_max_retries_parameter_handling(
                         },
                         "grounding_chunk_indices": [0],
                         "confidence_scores": [0.95],
+                        "rendered_parts": None,
                     }
                 ],
                 "image_search_queries": ["cat images"],
@@ -1618,6 +1621,7 @@ def test_grounding_metadata_to_citations_conversion() -> None:
                             },
                             "grounding_chunk_indices": [0],
                             "confidence_scores": [0.95],
+                            "rendered_parts": None,
                         },
                         {
                             "segment": {
