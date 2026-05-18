@@ -2089,7 +2089,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         params = self._get_invocation_params(stop=stop, **kwargs)
         ls_params = LangSmithParams(
             ls_provider="google_vertexai",
-            ls_model_name=params.get("model") or self.model_name,
+            ls_model_name=(
+                params.get("model") or params.get("model_name") or self.model_name
+            ),
             ls_model_type="chat",
             ls_temperature=params.get("temperature", self.temperature),
         )
