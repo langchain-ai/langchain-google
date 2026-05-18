@@ -2645,10 +2645,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
         models_prefix = "models/"
+        raw_model = params.get("model") or self.model
         ls_model_name = (
-            self.model[len(models_prefix) :]
-            if self.model and self.model.startswith(models_prefix)
-            else self.model
+            raw_model[len(models_prefix) :]
+            if raw_model and raw_model.startswith(models_prefix)
+            else raw_model
         )
         ls_params = LangSmithParams(
             ls_provider="google_genai",
