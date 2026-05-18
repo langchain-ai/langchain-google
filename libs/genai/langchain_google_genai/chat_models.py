@@ -450,6 +450,10 @@ def _convert_to_parts(
                         _validate_video_metadata(part["video_metadata"])
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part_kwargs["video_metadata"] = metadata
+                        if "extras" in part and isinstance(part["extras"], dict):
+                            sig = part["extras"].get("signature")
+                            if sig and isinstance(sig, str):
+                                media_part_kwargs["thought_signature"] = base64.b64decode(sig)
 
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
