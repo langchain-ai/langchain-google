@@ -3484,6 +3484,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             raise ValueError(msg)
 
         parser: OutputParserLike
+        llm: Runnable[LanguageModelInput, AIMessage]
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
