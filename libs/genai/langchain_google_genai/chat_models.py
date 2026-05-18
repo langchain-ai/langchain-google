@@ -2097,7 +2097,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         For an enumeration of the categories and thresholds available, see Google's
-        [safety setting types](https://ai.google.dev/api/python/google/generativeai/types/SafetySettingDict).
+        [safety settings](https://ai.google.dev/gemini-api/docs/safety-settings).
 
     ???+ example "Context caching"
 
