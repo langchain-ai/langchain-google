@@ -429,7 +429,11 @@ def _convert_to_parts(
                         # Embedded media
                         data = part["data"]
                         if isinstance(data, str):
-                            data = base64.b64decode(data)
+                            import binascii
+                            try:
+                                data = base64.b64decode(data)
+                            except (binascii.Error, ValueError):
+                                raise ValueError("Data should be valid base64")
                         media_part_kwargs["inline_data"] = Blob(
                             data=data, mime_type=mime_type
                         )
