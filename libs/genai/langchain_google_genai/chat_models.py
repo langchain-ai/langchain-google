@@ -433,7 +433,8 @@ def _convert_to_parts(
                             try:
                                 data = base64.b64decode(data, validate=True)
                             except (binascii.Error, ValueError):
-                                raise ValueError("Data should be valid base64")
+                                data_validation_msg = "Data should be valid base64"
+                                raise ValueError(data_validation_msg)
                         media_part_kwargs["inline_data"] = Blob(
                             data=data, mime_type=mime_type
                         )
