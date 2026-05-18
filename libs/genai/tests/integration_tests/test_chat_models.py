@@ -249,14 +249,15 @@ def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
             break
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, list)
-    if isinstance(result.content, list):
-        assert isinstance(result.content[0], dict)
-        assert "text" in result.content[0]
+    if isinstance(result.content[0], dict):
+        assert result.content[0].get("type") == "text"
+        assert not result.content[0].get("text", "").startswith(" ")
     else:
-        assert isinstance(result.content, str)
+        assert isinstance(result.content[0], str)
+        assert not result.content[0].startswith(" ")
+
     assert isinstance(result.content[1], dict)
     assert result.content[1].get("type") == "image_url"
-    assert not result.content[0].startswith(" ")
     _check_usage_metadata(result)
 
     # Test we can pass back in
@@ -656,7 +657,16 @@ def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> Non
     )
 
     assert isinstance(result, AIMessage)
-    assert isinstance(result.content, str)
+
+    if isinstance(result.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(result.content, str)
 
     _check_usage_metadata(result)
 
