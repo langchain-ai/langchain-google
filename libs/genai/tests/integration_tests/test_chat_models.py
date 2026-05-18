@@ -1785,7 +1785,10 @@ def test_structured_output_with_google_search(
 
 def test_search_with_googletool(backend_config: dict) -> None:
     """Test using `GoogleTool` with Google Search."""
-    llm = ChatGoogleGenerativeAI(model="models/gemini-3-flash-preview", **backend_config)
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-3-flash-preview",
+        **backend_config
+    )
     resp = llm.invoke(
         "When is the next total solar eclipse in US?",
         tools=[GoogleTool(google_search={})],
