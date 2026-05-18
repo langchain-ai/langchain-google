@@ -431,7 +431,7 @@ def _convert_to_parts(
                         if isinstance(data, str):
                             import binascii
                             try:
-                                data = base64.b64decode(data)
+                                data = base64.b64decode(data, validate=True)
                             except (binascii.Error, ValueError):
                                 raise ValueError("Data should be valid base64")
                         media_part_kwargs["inline_data"] = Blob(
