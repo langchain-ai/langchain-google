@@ -430,6 +430,7 @@ def _convert_to_parts(
                         data = part["data"]
                         if isinstance(data, str):
                             import binascii
+
                             try:
                                 data = base64.b64decode(data, validate=True)
                             except (binascii.Error, ValueError):
