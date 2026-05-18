@@ -249,7 +249,11 @@ def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
             break
     assert isinstance(result, AIMessage)
     assert isinstance(result.content, list)
-    assert isinstance(result.content[0], str)
+    if isinstance(result.content, list):
+        assert isinstance(result.content[0], dict)
+        assert "text" in result.content[0]
+    else:
+        assert isinstance(result.content, str)
     assert isinstance(result.content[1], dict)
     assert result.content[1].get("type") == "image_url"
     assert not result.content[0].startswith(" ")

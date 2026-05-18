@@ -427,8 +427,11 @@ def _convert_to_parts(
 
                     if "data" in part:
                         # Embedded media
+                        data = part["data"]
+                        if isinstance(data, str):
+                            data = base64.b64decode(data)
                         media_part_kwargs["inline_data"] = Blob(
-                            data=part["data"], mime_type=mime_type
+                            data=data, mime_type=mime_type
                         )
                     elif "file_uri" in part:
                         # Referenced files (e.g. stored in GCS)
