@@ -454,7 +454,9 @@ def _convert_to_parts(
                         if "extras" in part and isinstance(part["extras"], dict):
                             sig = part["extras"].get("signature")
                             if sig and isinstance(sig, str):
-                                media_part_kwargs["thought_signature"] = base64.b64decode(sig)
+                                media_part_kwargs["thought_signature"] = (
+                                    base64.b64decode(sig)
+                                )
 
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
