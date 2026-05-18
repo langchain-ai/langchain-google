@@ -48,7 +48,7 @@ from langchain_google_genai import (
 
 _MODEL = "gemini-3-flash-preview"
 _PRO_MODEL = "gemini-3.1-pro-preview"
-_VISION_MODEL = "gemini-2.5-flash"
+_VISION_MODEL = "gemini-3-flash-preview"
 _IMAGE_OUTPUT_MODEL = "gemini-3.1-flash-image-preview"
 _IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
 _AUDIO_OUTPUT_MODEL = "gemini-3.1-flash-tts-preview"
@@ -276,7 +276,7 @@ def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
     """Test generating audio."""
     # Skip on Vertex AI - having some issues possibly upstream
     # TODO: look later
-    # https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-2-5-pro-flash-tts-vertex-ai/108067
+    # https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-3.1-pro-preview-flash-tts-vertex-ai/108067
     if backend_config.get("vertexai"):
         pytest.skip("Gemini TTS on Vertex AI requires allowlist access")
 
@@ -644,7 +644,7 @@ def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> Non
     """Test invoking a thinking model with zero `thinking_budget`."""
     # Note certain models may not allow `thinking_budget=0`
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", thinking_budget=0, **backend_config
+        model="gemini-3-flash-preview", thinking_budget=0, **backend_config
     )
 
     result = llm.invoke(
@@ -1470,7 +1470,7 @@ def test_thinking_params_preserved_with_structured_output(backend_config: dict) 
     # Initialize with thinking disabled
     # Only certain models support disabling thinking
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3-flash-preview",
         thinking_budget=0,
         include_thoughts=False,
         **backend_config,
@@ -1785,7 +1785,7 @@ def test_structured_output_with_google_search(
 
 def test_search_with_googletool(backend_config: dict) -> None:
     """Test using `GoogleTool` with Google Search."""
-    llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", **backend_config)
+    llm = ChatGoogleGenerativeAI(model="models/gemini-3-flash-preview", **backend_config)
     resp = llm.invoke(
         "When is the next total solar eclipse in US?",
         tools=[GoogleTool(google_search={})],
@@ -1811,7 +1811,7 @@ def test_url_context_tool(backend_config: dict) -> None:
 
 def test_google_maps_grounding(backend_config: dict) -> None:
     """Test using Google Maps grounding for location-aware responses."""
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", **backend_config)
+    model = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
     model_with_maps = model.bind_tools([{"google_maps": {}}])
 
     response = model_with_maps.invoke(
@@ -1875,7 +1875,7 @@ def test_google_maps_grounding(backend_config: dict) -> None:
 
 def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
     """Test passing Maps grounding tool directly to invoke without binding."""
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", **backend_config)
+    model = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
 
     # Pass tools directly to invoke instead of binding
     response = model.invoke(
@@ -1993,8 +1993,8 @@ def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -
     Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
     parameters passed directly to invoke() method override model defaults.
     """
-    # Use gemini-2.5-flash because it supports thinking_budget=0
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", **backend_config)
+    # Use gemini-3-flash-preview because it supports thinking_budget=0
+    llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
 
     # Test with max_output_tokens constraint
     result_constrained = llm.invoke(
