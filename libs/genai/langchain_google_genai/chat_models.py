@@ -413,6 +413,7 @@ def _convert_to_parts(
                     # Check for thought_signature in extras
                     # (needed for multi-turn image editing/usage)
                     thought_sig = None
+                    image_part = image_loader.load_part(img_url)
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
                         if isinstance(sig, str):
@@ -481,7 +482,9 @@ def _convert_to_parts(
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
                         if isinstance(sig, str):
-                            media_part_kwargs["thought_signature"] = base64.b64decode(sig)
+                            media_part_kwargs["thought_signature"] = base64.b64decode(
+                                sig
+                            )
                         elif isinstance(sig, bytes):
                             media_part_kwargs["thought_signature"] = sig
 
