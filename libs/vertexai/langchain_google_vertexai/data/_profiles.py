@@ -12,6 +12,7 @@ To update these data, refer to the instructions here:
 
 https://docs.langchain.com/oss/python/langchain/models#updating-or-overwriting-profile-data
 """
+
 from typing import Any
 
 _PROFILES: dict[str, dict[str, Any]] = {
@@ -30,7 +31,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-flash-preview-09-2025": {
         "max_input_tokens": 1048576,
@@ -47,7 +48,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-3-pro-preview": {
         "max_input_tokens": 1048576,
@@ -64,7 +65,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "gemini-2.5-flash-lite-preview-06-17": {
         "max_input_tokens": 65536,
@@ -81,7 +82,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-flash": {
         "max_input_tokens": 1048576,
@@ -98,7 +99,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.0-flash": {
         "max_input_tokens": 1048576,
@@ -115,7 +116,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "deepseek-ai/deepseek-v3.1-maas": {
         "max_input_tokens": 163840,
@@ -132,7 +133,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "deepseek-ai/deepseek-v3.2-maas": {
         "max_input_tokens": 163840,
@@ -149,7 +150,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "moonshotai/kimi-k2-thinking-maas": {
         "max_input_tokens": 262144,
@@ -166,7 +167,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "pdf_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "openai/gpt-oss-20b-maas": {
         "max_input_tokens": 131072,
@@ -183,7 +184,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "openai/gpt-oss-120b-maas": {
         "max_input_tokens": 131072,
@@ -200,7 +201,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "zai-org/glm-5-maas": {
         "max_input_tokens": 202752,
@@ -217,7 +218,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "zai-org/glm-4.7-maas": {
         "max_input_tokens": 200000,
@@ -234,7 +235,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "qwen/qwen3-235b-a22b-instruct-2507-maas": {
         "max_input_tokens": 262144,
@@ -251,7 +252,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "pdf_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "meta/llama-3.3-70b-instruct-maas": {
         "max_input_tokens": 128000,
@@ -268,7 +269,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "pdf_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "meta/llama-4-maverick-17b-128e-instruct-maas": {
         "max_input_tokens": 524288,
@@ -285,7 +286,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "pdf_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "claude-opus-4@20250514": {
         "max_input_tokens": 200000,
@@ -302,7 +303,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-3.1-flash-lite": {
         "max_input_tokens": 1048576,
@@ -319,7 +320,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "claude-opus-4-6@default": {
         "max_input_tokens": 1000000,
@@ -336,7 +337,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-pro": {
         "max_input_tokens": 1048576,
@@ -353,7 +354,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-flash-preview-04-17": {
         "max_input_tokens": 1048576,
@@ -370,7 +371,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-sonnet-4-6@default": {
         "max_input_tokens": 200000,
@@ -387,7 +388,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-3-5-haiku@20241022": {
         "max_input_tokens": 200000,
@@ -404,7 +405,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-sonnet-4-5@20250929": {
         "max_input_tokens": 200000,
@@ -421,7 +422,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-flash-preview-05-20": {
         "max_input_tokens": 1048576,
@@ -438,7 +439,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-opus-4-5@20251101": {
         "max_input_tokens": 200000,
@@ -455,7 +456,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-pro-preview-06-05": {
         "max_input_tokens": 1048576,
@@ -472,7 +473,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-3-5-sonnet@20241022": {
         "max_input_tokens": 200000,
@@ -489,7 +490,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-opus-4-1@20250805": {
         "max_input_tokens": 200000,
@@ -506,7 +507,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-pro-preview-05-06": {
         "max_input_tokens": 1048576,
@@ -523,7 +524,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-flash-lite-preview-09-2025": {
         "max_input_tokens": 1048576,
@@ -540,7 +541,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.5-flash-lite": {
         "max_input_tokens": 1048576,
@@ -557,7 +558,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-flash-lite-latest": {
         "max_input_tokens": 1048576,
@@ -574,7 +575,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-2.0-flash-lite": {
         "max_input_tokens": 1048576,
@@ -591,7 +592,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-3.1-pro-preview-customtools": {
         "max_input_tokens": 1048576,
@@ -608,7 +609,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "gemini-3.1-flash-lite-preview": {
         "max_input_tokens": 1048576,
@@ -625,7 +626,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "gemini-3.1-pro-preview": {
         "max_input_tokens": 1048576,
@@ -642,7 +643,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "gemini-3-flash-preview": {
         "max_input_tokens": 1048576,
@@ -659,7 +660,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "structured_output": True,
         "image_url_inputs": True,
         "image_tool_message": True,
-        "tool_choice": True
+        "tool_choice": True,
     },
     "claude-haiku-4-5@20251001": {
         "max_input_tokens": 200000,
@@ -676,7 +677,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-3-7-sonnet@20250219": {
         "max_input_tokens": 200000,
@@ -693,7 +694,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-opus-4-7@default": {
         "max_input_tokens": 1000000,
@@ -710,7 +711,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "gemini-embedding-001": {
         "max_input_tokens": 2048,
@@ -727,7 +728,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
+        "structured_output": True,
     },
     "claude-sonnet-4@20250514": {
         "max_input_tokens": 200000,
@@ -744,6 +745,6 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "structured_output": True
-    }
+        "structured_output": True,
+    },
 }
