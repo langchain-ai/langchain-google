@@ -393,8 +393,13 @@ def _convert_to_parts(
                             }
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            part_kwargs["thought_signature"] = base64.b64decode(sig)
+                        if isinstance(sig, str):
+                            thought_signature = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            thought_signature = sig
+
+                        if thought_signature:
+                            pass
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
@@ -1005,7 +1010,7 @@ def _parse_response_candidate(
     effective_model_name = model_name_for_content or model_name
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
-    for part in parts:
+    for i, part in enumerate(parts):
         text: str | None = None
         try:
             if hasattr(part, "text") and part.text is not None:
@@ -1141,7 +1146,7 @@ def _parse_response_candidate(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=tool_call_id,
-                        index=function_call.get("index"),  # type: ignore
+                        index=i,  # type: ignore
                     )
                 )
             else:
