@@ -2534,7 +2534,12 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    if isinstance(response.content, list):
+        assert len(response.content) > 0
+        assert "747" in response.content[0].get("text", "")
+    else:
+        assert isinstance(response.content, str)
+        assert "747" in response.content
     assert "747" in response.content
 
     # Verify cache was used (should have cache_read tokens in usage metadata)

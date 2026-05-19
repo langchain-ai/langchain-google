@@ -415,8 +415,10 @@ def _convert_to_parts(
                     thought_sig = None
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            thought_sig = base64.b64decode(sig)
+                        if isinstance(sig, str):
+                            image_part.thought_signature = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            image_part.thought_signature = sig
                     image_part = image_loader.load_part(img_url)
                     if thought_sig:
                         image_part.thought_signature = thought_sig
@@ -478,10 +480,10 @@ def _convert_to_parts(
                             }
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            media_part_kwargs["thought_signature"] = base64.b64decode(
-                                sig
-                            )
+                        if isinstance(sig, str):
+                            media_part_kwargs["thought_signature"] = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            media_part_kwargs["thought_signature"] = sig
 
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
