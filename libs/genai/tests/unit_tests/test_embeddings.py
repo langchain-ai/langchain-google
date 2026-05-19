@@ -118,7 +118,10 @@ def test_embed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        assert call_kwargs["contents"] == [
+            {"parts": [{"text": "test text"}]},
+            {"parts": [{"text": "test text"}]}
+        ]
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
@@ -297,7 +300,10 @@ async def test_aembed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        assert call_kwargs["contents"] == [
+            {"parts": [{"text": "test text"}]},
+            {"parts": [{"text": "test text"}]}
+        ]
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
