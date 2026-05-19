@@ -359,21 +359,19 @@ def test_init_client_with_custom_model_kwargs() -> None:
 @pytest.mark.parametrize(
     ("model_name", "expected_max_tokens"),
     [
-        ("claude-sonnet-4-5", 64000),
-        ("claude-sonnet-4-5-20250929", 64000),
-        ("claude-opus-4-0", 32000),
-        ("claude-opus-4-5", 64000),
-        ("claude-opus-4-6", 128000),
-        ("claude-3-5-sonnet-20241022", 8192),
-        ("claude-3-7-sonnet-20250219", 64000),
-        ("claude-haiku-4-5", 64000),
-        ("claude-3-opus-20240229", 4096),
+        ("claude-sonnet-4-5@20250929", 64000),
+        ("claude-opus-4@20250514", 32000),
+        ("claude-opus-4-5@20251101", 64000),
+        ("claude-opus-4-6@default", 128000),
+        ("claude-3-5-sonnet@20241022", 8192),
+        ("claude-3-7-sonnet@20250219", 64000),
+        ("claude-haiku-4-5@20251001", 64000),
     ],
 )
 def test_anthropic_vertex_model_aware_max_tokens(
     model_name: str, expected_max_tokens: int
 ) -> None:
-    """Test that max_output_tokens defaults are model-aware."""
+    """Test that max_output_tokens defaults are model-aware with @ format."""
     llm = ChatAnthropicVertex(
         model_name=model_name,
         project="test-project",
@@ -383,10 +381,22 @@ def test_anthropic_vertex_model_aware_max_tokens(
     assert llm._default_params["max_tokens"] == expected_max_tokens
 
 
-def test_anthropic_vertex_unknown_model_fallback() -> None:
-    """Test that unknown model names fall back to 4096."""
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-sonnet-4-5-20250929",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-opus-20240229",
+        "claude-unknown-future-model",
+    ],
+)
+def test_anthropic_vertex_invalid_model_name_max_token_fallback(
+    model_name: str,
+) -> None:
+    """Test that max_output_tokens defaults are model-aware."""
     llm = ChatAnthropicVertex(
-        model_name="claude-unknown-future-model",
+        model_name=model_name,
         project="test-project",
         location="test-location",
     )
@@ -427,7 +437,7 @@ def test_anthropic_vertex_no_model_falls_back() -> None:
 def test_anthropic_vertex_model_alias_resolves_profile() -> None:
     """`model=` alias should resolve the same profile as `model_name=`."""
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
     )
@@ -436,9 +446,11 @@ def test_anthropic_vertex_model_alias_resolves_profile() -> None:
 
 def test_anthropic_profiles_smoke() -> None:
     """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
-    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+    from langchain_google_vertexai.data._profiles import _PROFILES
 
     assert _PROFILES
+    assert any("claude" in key and "@" in key for key in _PROFILES.keys())
+
     sample = next(iter(_PROFILES.values()))
     assert "max_output_tokens" in sample
 
@@ -450,7 +462,7 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
     from langchain_google_vertexai import model_garden
 
     monkeypatch.setitem(
-        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        model_garden._PROFILES,  # noqa: SLF001
         "claude-test-no-output-key",
         {"name": "Test"},
     )
