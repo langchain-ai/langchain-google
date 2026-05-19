@@ -120,7 +120,7 @@ def test_embed_documents() -> None:
         assert call_kwargs["model"] == MODEL_NAME
         assert call_kwargs["contents"] == [
             {"parts": [{"text": "test text"}]},
-            {"parts": [{"text": "test text"}]},
+            {"parts": [{"text": "test text2"}]},
         ]
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
@@ -302,7 +302,7 @@ async def test_aembed_documents() -> None:
         assert call_kwargs["model"] == MODEL_NAME
         assert call_kwargs["contents"] == [
             {"parts": [{"text": "test text"}]},
-            {"parts": [{"text": "test text"}]},
+            {"parts": [{"text": "test text2"}]},
         ]
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
