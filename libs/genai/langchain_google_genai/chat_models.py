@@ -434,21 +434,23 @@ def _convert_to_parts(
                     media_part_kwargs: dict[str, Any] = {}
 
                     if "data" in part:
-                        # Embedded media
                         data = part["data"]
                         if isinstance(data, str):
-                            import binascii
-
+                            clean_data = re.sub(r"\s+", "", data)
+                            data_validation_msg = "Data should be valid base64"
+                            if (
+                                not re.match(r"^[A-Za-z0-9+/]*={0,2}$", clean_data)
+                                or len(clean_data) % 4 != 0
+                            ):
+                                raise ValueError(data_validation_msg)
                             try:
-                                data = base64.b64decode(data, validate=True)
-                            except (binascii.Error, ValueError):
-                                data_validation_msg = "Data should be valid base64"
+                                data = base64.b64decode(clean_data)
+                            except Exception:
                                 raise ValueError(data_validation_msg)
                         media_part_kwargs["inline_data"] = Blob(
                             data=data, mime_type=mime_type
                         )
                     elif "file_uri" in part:
-                        # Referenced files (e.g. stored in GCS)
                         media_part_kwargs["file_data"] = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
@@ -1297,14 +1299,15 @@ def _response_to_result(
                 generation_info["finish_reason"] = candidate.finish_reason.name
             elif isinstance(candidate.finish_reason, int):
                 generation_info["finish_reason"] = f"UNKNOWN_{candidate.finish_reason}"
+            # Add model_name in last chunk
             generation_info["model_name"] = response.model_version or ""
+            # Set for final chunk
             model_name_for_metadata = response.model_version
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings
             else []
         )
-
         # Pass model_version for content format determination (Gemini 3+ needs
         # consistent list-based content across all chunks), but only include
         # model_name in response_metadata for the final chunk to avoid duplication
@@ -1321,23 +1324,47 @@ def _response_to_result(
 
         try:
             if candidate.grounding_metadata:
-                grounding_metadata = candidate.grounding_metadata.model_dump(
-                    exclude_none=True
-                )
-                if grounding_metadata.get("grounding_supports") is None:
+                grounding_metadata = candidate.grounding_metadata.model_dump()
+                # Ensure None fields that are expected to be lists become empty lists
+                # to prevent errors in downstream processing
+                if (
+                    "grounding_supports" in grounding_metadata
+                    and grounding_metadata["grounding_supports"] is None
+                ):
                     grounding_metadata["grounding_supports"] = []
-                if grounding_metadata.get("grounding_chunks") is None:
+                if (
+                    "grounding_chunks" in grounding_metadata
+                    and grounding_metadata["grounding_chunks"] is None
+                ):
                     grounding_metadata["grounding_chunks"] = []
-                if grounding_metadata.get("web_search_queries") is None:
+                if (
+                    "web_search_queries" in grounding_metadata
+                    and grounding_metadata["web_search_queries"] is None
+                ):
                     grounding_metadata["web_search_queries"] = []
-                if grounding_metadata.get("image_search_queries") is None:
+                if (
+                    "image_search_queries" in grounding_metadata
+                    and grounding_metadata["image_search_queries"] is None
+                ):
                     grounding_metadata["image_search_queries"] = []
-
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
         except AttributeError:
             pass
 
+        message.usage_metadata = lc_usage
+
+        if stream:
+            generations.append(
+                ChatGenerationChunk(
+                    message=cast("AIMessageChunk", message),
+                    generation_info=generation_info,
+                )
+            )
+        else:
+            generations.append(
+                ChatGeneration(message=message, generation_info=generation_info)
+            )
     if not response.candidates:
         # Likely a "prompt feedback" violation (e.g., toxic input)
         # Raising an error would be different than how OpenAI handles it,
