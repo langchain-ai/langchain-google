@@ -22,8 +22,7 @@ jobs:
       providers: >-
         [
           {"provider":"google",          "data_dir":"libs/genai/langchain_google_genai/data"},
-          {"provider":"google-vertex",   "data_dir":"libs/vertexai/langchain_google_vertexai/data"},
-          {"provider":"anthropic",       "data_dir":"libs/vertexai/langchain_google_vertexai/data/anthropic"}
+          {"provider":"google-vertex",   "data_dir":"libs/vertexai/langchain_google_vertexai/data"}
         ]
     secrets:
       MODEL_PROFILE_BOT_APP_ID: ${{ secrets.MODEL_PROFILE_BOT_APP_ID }}
