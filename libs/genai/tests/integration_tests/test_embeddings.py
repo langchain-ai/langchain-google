@@ -6,7 +6,7 @@ import pytest
 from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
-_MODEL = "gemini-embedding-2-preview"
+_MODEL = "gemini-embedding-001"  # temporarily switch from gemini-embedding-2-preview
 _OUTPUT_DIMENSIONALITY = 768
 
 
