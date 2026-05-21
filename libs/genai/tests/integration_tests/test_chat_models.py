@@ -281,7 +281,6 @@ def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
     """Test generating audio."""
     # Skip on Vertex AI - having some issues possibly upstream
     # TODO: look later
-    # https://discuss.ai.google.dev/t/request-allowlist-access-for-audio-output-in-gemini-3.1-pro-preview-flash-tts-vertex-ai/108067
     if backend_config.get("vertexai"):
         pytest.skip("Gemini TTS on Vertex AI requires allowlist access")
 
@@ -2009,7 +2008,6 @@ def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -
     Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
     parameters passed directly to invoke() method override model defaults.
     """
-    # Use gemini-3-flash-preview because it supports thinking_budget=0
     llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
 
     # Test with max_output_tokens constraint
