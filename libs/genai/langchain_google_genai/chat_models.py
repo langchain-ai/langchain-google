@@ -1150,7 +1150,7 @@ def _parse_response_candidate(
             additional_kwargs["function_call"] = function_call
 
             raw_id = getattr(part.function_call, "id", None)
-            tool_call_id = str(raw_id) if raw_id else f"call_{i}"
+            tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
