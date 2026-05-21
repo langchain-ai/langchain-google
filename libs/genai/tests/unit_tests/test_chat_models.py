@@ -522,6 +522,49 @@ def test_base_url_passed_to_client() -> None:
         assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
+def test_api_version_defaults_to_none() -> None:
+    """`api_version` is unset by default, deferring to the SDK's default."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version is None
+
+
+def test_api_version_forwarded_to_http_options_gemini() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the Gemini backend."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            api_version="v1",
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1"
+
+
+def test_api_version_forwarded_to_http_options_vertex() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the Vertex backend.
+
+    Covers the API gateway proxy scenario: a custom `base_url` plus a
+    non-default `api_version` (e.g. `'v1'`) are both passed through
+    `HttpOptions`, overriding the SDK's `v1beta1` default for Vertex.
+    """
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            vertexai=True,
+            base_url="https://gateway.example.com/api/gemini",
+            api_version="v1",
+            additional_headers={"Authorization": "Bearer fake-token"},
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1"
+        assert call_http_options.base_url == "https://gateway.example.com/api/gemini"
+
+
 def test_async_client_property() -> None:
     """Test that async_client property exposes `client.aio`."""
     chat = ChatGoogleGenerativeAI(

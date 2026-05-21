@@ -305,6 +305,27 @@ class _BaseGoogleGenerativeAI(BaseModel):
         ```
     """
 
+    api_version: str | None = Field(default=None)
+    """Override the API version path segment in request URLs.
+
+    By default, the underlying `google-genai` SDK currently uses `v1beta1` for
+    Vertex AI and `v1beta` for the Gemini Developer API. Set this when
+    targeting a proxy or gateway that expects a different API version segment
+    (e.g. `'v1'`).
+
+    !!! example "Custom API gateway"
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.5-flash",
+            vertexai=True,
+            base_url="https://my-gateway.example.com/api/gemini",
+            api_version="v1",
+            additional_headers={"Authorization": "Bearer <token>"},
+        )
+        ```
+    """
+
     # --- Model / invocation params ---
 
     model: str = Field(...)
