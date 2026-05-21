@@ -40,11 +40,14 @@ from google.genai.types import (
     HttpRetryOptions,
     ImageConfig,
     Part,
+    PrebuiltVoiceConfig,
     SafetySetting,
+    SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
+    VoiceConfig,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -2709,9 +2712,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else None
         )
 
-        # Auto-set audio output for TTS models if not explicitly configured
-        if config["response_modalities"] is None and self.model.endswith("-tts"):
-            config["response_modalities"] = ["AUDIO"]
+        # Auto-set audio output and speech_config for TTS models
+        # if not explicitly configured
+        if self.model.endswith("-tts") or "-tts-" in self.model:
+            if config["response_modalities"] is None:
+                config["response_modalities"] = ["AUDIO"]
+            if config.get("speech_config") is None:
+                voice_name = config.pop("voice_name", "Kore")
+                config["speech_config"] = SpeechConfig(
+                    voice_config=VoiceConfig(
+                        prebuilt_voice_config=PrebuiltVoiceConfig(voice_name=voice_name)
+                    )
+                )
 
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
