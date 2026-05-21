@@ -2536,8 +2536,9 @@ def test_context_caching(backend_config: dict) -> None:
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         assert len(response.content) > 0
-        if isinstance(response.content[0], dict):
-            assert "747" in response.content[0].get("text", "")
+        assert "747" in str(response.content), (
+            f"Expected '747' in response, got: {response.content}"
+        )
     else:
         assert isinstance(response.content, str)
         assert "747" in response.content
