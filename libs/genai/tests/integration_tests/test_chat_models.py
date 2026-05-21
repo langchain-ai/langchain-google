@@ -2567,7 +2567,16 @@ def test_context_caching(backend_config: dict) -> None:
     else:
         assert isinstance(response.content, str)
         assert "747" in response.content
-    assert "747" in response.content
+    if isinstance(response.content, list):
+        text_content = "".join(
+            b.get("text", "")
+            for b in response.content
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
+        assert "747" in text_content
+    else:
+        assert isinstance(response.content, str)
+        assert "747" in response.content
 
 
 @pytest.mark.extended

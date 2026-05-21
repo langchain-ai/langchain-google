@@ -394,6 +394,7 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    thought_signature = None
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
                         if isinstance(sig, str):
@@ -423,7 +424,6 @@ def _convert_to_parts(
                             image_part.thought_signature = base64.b64decode(sig)
                         elif isinstance(sig, bytes):
                             image_part.thought_signature = sig
-                    image_part = image_loader.load_part(img_url)
                     if thought_sig:
                         image_part.thought_signature = thought_sig
                     parts.append(image_part)
