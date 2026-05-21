@@ -150,6 +150,10 @@ omit = [
 # https://github.com/tophat/syrupy
 # --snapshot-warn-unused    Prints a warning on unused snapshots rather than fail the test suite.
 #addopts = "--snapshot-warn-unused --strict-markers --strict-config --durations=5"
+# `--benchmark-disable` silences pytest-benchmark's per-worker xdist warning.
+# The plugin stays loaded so `langchain-tests` benchmark-marked tests still
+# collect; pass `--benchmark-enable` to opt back in locally.
+addopts = "--benchmark-disable"
 # Registering custom markers.
 # https://docs.pytest.org/en/7.1.x/example/markers.html#registering-markers
 markers = [
@@ -158,7 +162,3 @@ markers = [
     "compile: mark placeholder test used to compile integration tests without running them",
 ]
 asyncio_mode = "auto"
-filterwarnings = [
-    # pytest-benchmark logs this once per xdist worker; tests don't use benchmarks.
-    "ignore::pytest_benchmark.logger.PytestBenchmarkWarning",
-]
