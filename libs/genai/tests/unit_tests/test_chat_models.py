@@ -258,7 +258,7 @@ def test_api_key_masked_when_passed_via_constructor(
 
 def test_profile() -> None:
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert model.profile
