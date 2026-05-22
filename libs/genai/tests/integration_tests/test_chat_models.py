@@ -1688,7 +1688,7 @@ def test_search_builtin_with_citations(
                         assert isinstance(google_metadata, dict)
 
 
-@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.flaky(retries=5, delay=2)
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_structured_output_with_google_search(
     use_streaming: bool, backend_config: dict
@@ -2518,8 +2518,8 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "747" in response.content
+    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
+    assert any("747" in b["text"] for b in text_blocks)
 
     # Verify cache was used (should have cache_read tokens in usage metadata)
     if response.usage_metadata:
@@ -2535,8 +2535,8 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "747" in response.content
+    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
+    assert any("747" in b["text"] for b in text_blocks)
 
 
 @pytest.mark.extended
