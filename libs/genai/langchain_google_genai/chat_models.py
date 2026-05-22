@@ -1158,7 +1158,7 @@ def _parse_response_candidate(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=chunk_id,
-                        index=i,
+                        index=None,
                     )
                 )
             else:
