@@ -1330,14 +1330,7 @@ def _response_to_result(
 
         try:
             if candidate.grounding_metadata:
-                grounding_metadata = candidate.grounding_metadata
-                if hasattr(grounding_metadata, "model_dump"):
-                    grounding_metadata = grounding_metadata.model_dump(
-                        exclude_none=True
-                    )
-                else:
-                    grounding_metadata = dict(grounding_metadata)
-
+                grounding_metadata = candidate.grounding_metadata.model_dump()
                 # Ensure None fields that are expected to be lists become empty lists
                 # to prevent errors in downstream processing
                 if (
