@@ -2466,6 +2466,52 @@ def test_compat() -> None:
     assert result == expected
 
 
+def test_compat_url_blocks() -> None:
+    """URL-based image/file blocks route to `file_data` for the google provider."""
+    image_block: types.ImageContentBlock = {
+        "type": "image",
+        "url": "https://example.com/cat.jpg",
+        "mime_type": "image/jpeg",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [image_block],
+        "google_genai",
+    )
+    assert result == [
+        {
+            "file_data": {
+                "mime_type": "image/jpeg",
+                "file_uri": "https://example.com/cat.jpg",
+            }
+        }
+    ]
+
+    file_block: types.FileContentBlock = {
+        "type": "file",
+        "url": "https://example.com/doc.pdf",
+        "mime_type": "application/pdf",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [file_block],
+        "google_genai",
+    )
+    assert result == [
+        {
+            "file_data": {
+                "mime_type": "application/pdf",
+                "file_uri": "https://example.com/doc.pdf",
+            }
+        }
+    ]
+
+    # Non-google provider: URL blocks are not routed through the file service.
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [image_block],
+        "other_provider",
+    )
+    assert result == []
+
+
 def test_thought_signature_conversion() -> None:
     """Test comprehensive thought signature conversion scenarios."""
 
