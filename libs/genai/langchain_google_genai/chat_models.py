@@ -1150,17 +1150,19 @@ def _parse_response_candidate(
             additional_kwargs["function_call"] = function_call
 
             raw_id = getattr(part.function_call, "id", None)
-            tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
+
             if streaming:
+                tc_id = str(raw_id) if raw_id else f"call_{i}"
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=tool_call_id,
-                        index=function_call.get("index"),
+                        id=tc_id,
+                        index=function_call.get("index"),  # type: ignore
                     )
                 )
             else:
+                tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
                 try:
                     tool_call_dict = parse_tool_calls(
                         [{"function": function_call}],
@@ -1328,7 +1330,14 @@ def _response_to_result(
 
         try:
             if candidate.grounding_metadata:
-                grounding_metadata = candidate.grounding_metadata.model_dump()
+                grounding_metadata = candidate.grounding_metadata
+                if hasattr(grounding_metadata, "model_dump"):
+                    grounding_metadata = grounding_metadata.model_dump(
+                        exclude_none=True
+                    )
+                else:
+                    grounding_metadata = dict(grounding_metadata)
+
                 # Ensure None fields that are expected to be lists become empty lists
                 # to prevent errors in downstream processing
                 if (
