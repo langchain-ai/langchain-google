@@ -40,11 +40,14 @@ from google.genai.types import (
     HttpRetryOptions,
     ImageConfig,
     Part,
+    PrebuiltVoiceConfig,
     SafetySetting,
+    SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
+    VoiceConfig,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -54,6 +57,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -130,16 +134,36 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class GoogleContextOverflowError(ClientError, ContextOverflowError):
+    """ClientError raised when input exceeds Google's context limit."""
+
+
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
-    """Convert `ClientError` to `ChatGoogleGenerativeAIError` with descriptive message.
+    """Convert `ClientError` to a more specific exception when possible.
+
+    Raises `GoogleContextOverflowError` (a `ContextOverflowError` subclass)
+    when the error indicates that the input exceeded the model's token limit,
+    so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
+    and fall back to context compaction.
 
     Args:
         e: The `ClientError` exception to handle.
         request: The request dict containing model info.
 
     Raises:
-        ChatGoogleGenerativeAIError: Always raised with formatted error message.
+        GoogleContextOverflowError: When the error indicates a context overflow.
+        ChatGoogleGenerativeAIError: For all other client errors.
     """
+    error_str = str(e)
+    if (
+        "exceeds the maximum number of tokens allowed" in error_str
+        or "token limit" in error_str.lower()
+    ):
+        raise GoogleContextOverflowError(
+            code=e.code,
+            response_json=e.details,
+            response=e.response,
+        ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
     raise ChatGoogleGenerativeAIError(msg) from e
@@ -180,6 +204,86 @@ def _is_gemini_25_model(model_name: str) -> bool:
         return False
     model_name = model_name.lower().replace("models/", "")
     return "gemini-2.5" in model_name
+
+
+def _validate_video_metadata(video_metadata: object) -> None:
+    """Validate user-supplied video metadata before sending to the API.
+
+    The Gemini API surfaces an opaque `500 Internal error` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
+    helper checks the obvious cases up front and raises a clearer error
+    so callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) keyed by either `start_offset`/
+            `end_offset` or their camelCase aliases, or a `VideoMetadata`
+            Pydantic instance. Each offset may be a duration string like
+            `"10s"`, a number of seconds, or a `{"seconds": int, "nanos":
+            int}` mapping.
+
+    Raises:
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
+            object exposing offset fields.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
+            try:
+                return float(value[:-1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            mapping = cast("Mapping[str, Any]", value)
+            try:
+                return (
+                    float(mapping.get("seconds", 0))
+                    + float(mapping.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    if isinstance(video_metadata, Mapping):
+        mapping = cast("Mapping[str, Any]", video_metadata)
+        raw_start = mapping.get("start_offset", mapping.get("startOffset"))
+        raw_end = mapping.get("end_offset", mapping.get("endOffset"))
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Pydantic `VideoMetadata` instance — read fields via attribute
+        # access so callers passing a constructed model don't regress.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
 
 
 def _convert_to_parts(
@@ -338,6 +442,7 @@ def _convert_to_parts(
                         msg = f"Media part must have either data or file_uri: {part}"
                         raise ValueError(msg)
                     if "video_metadata" in part:
+                        _validate_video_metadata(part["video_metadata"])
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part_kwargs["video_metadata"] = metadata
 
@@ -1995,7 +2100,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         For an enumeration of the categories and thresholds available, see Google's
-        [safety setting types](https://ai.google.dev/api/python/google/generativeai/types/SafetySettingDict).
+        [safety settings](https://ai.google.dev/gemini-api/docs/safety-settings).
 
     ???+ example "Context caching"
 
@@ -2372,6 +2477,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
+            api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
@@ -2543,10 +2649,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
         models_prefix = "models/"
+        raw_model = params.get("model") or self.model
         ls_model_name = (
-            self.model[len(models_prefix) :]
-            if self.model and self.model.startswith(models_prefix)
-            else self.model
+            raw_model[len(models_prefix) :]
+            if raw_model and raw_model.startswith(models_prefix)
+            else raw_model
         )
         ls_params = LangSmithParams(
             ls_provider="google_genai",
@@ -2606,9 +2713,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else None
         )
 
-        # Auto-set audio output for TTS models if not explicitly configured
-        if config["response_modalities"] is None and self.model.endswith("-tts"):
-            config["response_modalities"] = ["AUDIO"]
+        # Auto-set audio output and speech_config for TTS models
+        # if not explicitly configured
+        if self.model.endswith("-tts") or "-tts-" in self.model:
+            if config["response_modalities"] is None:
+                config["response_modalities"] = ["AUDIO"]
+            if config.get("speech_config") is None:
+                voice_name = config.pop("voice_name", "Kore")
+                config["speech_config"] = SpeechConfig(
+                    voice_config=VoiceConfig(
+                        prebuilt_voice_config=PrebuiltVoiceConfig(voice_name=voice_name)
+                    )
+                )
 
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
@@ -3381,6 +3497,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             raise ValueError(msg)
 
         parser: OutputParserLike
+        llm: Runnable[LanguageModelInput, AIMessage]
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
