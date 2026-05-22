@@ -195,6 +195,15 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     Applied to both sync and async clients.
     """
 
+    api_version: str | None = Field(default=None)
+    """Override the API version path segment in request URLs.
+
+    By default, the underlying `google-genai` SDK currently uses `v1beta1` for
+    Vertex AI and `v1beta` for the Gemini Developer API. Set this when
+    targeting a proxy or gateway that expects a different API version segment
+    (e.g. `'v1'`).
+    """
+
     request_options: dict | None = Field(
         default=None,
     )
@@ -255,6 +264,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
         http_options = HttpOptions(
             base_url=self.base_url,
+            api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,

@@ -40,11 +40,14 @@ from google.genai.types import (
     HttpRetryOptions,
     ImageConfig,
     Part,
+    PrebuiltVoiceConfig,
     SafetySetting,
+    SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
+    VoiceConfig,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -2474,6 +2477,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
+            api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
@@ -2645,10 +2649,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
         models_prefix = "models/"
+        raw_model = params.get("model") or self.model
         ls_model_name = (
-            self.model[len(models_prefix) :]
-            if self.model and self.model.startswith(models_prefix)
-            else self.model
+            raw_model[len(models_prefix) :]
+            if raw_model and raw_model.startswith(models_prefix)
+            else raw_model
         )
         ls_params = LangSmithParams(
             ls_provider="google_genai",
@@ -2708,9 +2713,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else None
         )
 
-        # Auto-set audio output for TTS models if not explicitly configured
-        if config["response_modalities"] is None and self.model.endswith("-tts"):
-            config["response_modalities"] = ["AUDIO"]
+        # Auto-set audio output and speech_config for TTS models
+        # if not explicitly configured
+        if self.model.endswith("-tts") or "-tts-" in self.model:
+            if config["response_modalities"] is None:
+                config["response_modalities"] = ["AUDIO"]
+            if config.get("speech_config") is None:
+                voice_name = config.pop("voice_name", "Kore")
+                config["speech_config"] = SpeechConfig(
+                    voice_config=VoiceConfig(
+                        prebuilt_voice_config=PrebuiltVoiceConfig(voice_name=voice_name)
+                    )
+                )
 
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
@@ -3483,6 +3497,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             raise ValueError(msg)
 
         parser: OutputParserLike
+        llm: Runnable[LanguageModelInput, AIMessage]
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
