@@ -1715,12 +1715,15 @@ def test_structured_output_with_google_search(
         response_schema=MatchResult.model_json_schema(),
     )
 
+    prompt = (
+        "Use the google_search tool to find all details for the latest Euro "
+        "championship final match. Always call google_search before responding."
+    )
+
     if use_streaming:
         # Test streaming
         chunks: list[BaseMessageChunk] = []
-        for chunk in llm_with_search.stream(
-            "Search for all details for the latest Euro championship final match."
-        ):
+        for chunk in llm_with_search.stream(prompt):
             assert isinstance(chunk, AIMessageChunk)
             chunks.append(chunk)
 
@@ -1735,9 +1738,7 @@ def test_structured_output_with_google_search(
         assert isinstance(response, AIMessageChunk)
     else:
         # Test invoke
-        response = llm_with_search.invoke(  # type: ignore[assignment]
-            "Search for all details for the latest Euro championship final match."
-        )
+        response = llm_with_search.invoke(prompt)  # type: ignore[assignment]
         assert isinstance(response, AIMessage)
 
     # Extract JSON from response content
