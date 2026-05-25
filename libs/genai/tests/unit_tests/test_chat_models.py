@@ -1003,6 +1003,39 @@ def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> N
                 assert res_kw == exp_kw
 
 
+def test_parse_response_candidate_preserves_non_ascii_in_function_call_arguments() -> (
+    None
+):
+    """Tool-call args with non-ASCII text (CJK, emoji, etc.) must land in
+    `additional_kwargs["function_call"]["arguments"]` as raw UTF-8, not as
+    escaped `\\uXXXX` sequences.
+
+    Existing tests round-trip through `json.loads` and so were blind to the
+    encoding difference. Regression test for #1789 -- matches the
+    `ensure_ascii=False` convention used by langchain-openai and langchain-core.
+    """
+    raw_candidate = {
+        "content": {
+            "parts": [
+                {
+                    "function_call": FunctionCall(
+                        name="echo",
+                        args={"text": "안녕하세요", "emoji": "🚀"},
+                    )
+                },
+            ]
+        }
+    }
+    response_candidate = Candidate.model_validate(raw_candidate)
+    result = _parse_response_candidate(response_candidate)
+    arguments = result.additional_kwargs["function_call"]["arguments"]
+
+    assert "안녕하세요" in arguments
+    assert "🚀" in arguments
+    assert "\\u" not in arguments
+    assert json.loads(arguments) == {"text": "안녕하세요", "emoji": "🚀"}
+
+
 def test_parse_response_candidate_includes_model_provider() -> None:
     """Test `_parse_response_candidate` has `model_provider` in `response_metadata`."""
     raw_candidate = {
