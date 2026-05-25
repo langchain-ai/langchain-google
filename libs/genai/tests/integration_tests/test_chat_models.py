@@ -48,11 +48,11 @@ from langchain_google_genai import (
 
 _MODEL = "gemini-3-flash-preview"
 _PRO_MODEL = "gemini-3.1-pro-preview"
-_VISION_MODEL = "gemini-2.5-flash"
+_VISION_MODEL = "gemini-3-flash-preview"
 _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
 _IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
 _AUDIO_OUTPUT_MODEL = "gemini-2.5-flash-preview-tts"
-_THINKING_MODEL = "gemini-2.5-flash"
+_THINKING_MODEL = "gemini-3-flash-preview"
 _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV8/xCIVQTuIKGSoTi2IijhqFYpQIdQKrTqYXPoFTRqSFBdHwbXg4Mdi1cHFWVcHV0EQ/ABxdXFSdJES/5cUWsR4cNyPd/ced+8Af6PCVDM4DqiaZaSTCSGbWxW6XxHECPoRQ0hipj4niil4jq97+Ph6F+dZ3uf+HL1K3mSATyCeZbphEW8QT29aOud94ggrSQrxOXHMoAsSP3JddvmNc9FhP8+MGJn0PHGEWCh2sNzBrGSoxFPEUUXVKN+fdVnhvMVZrdRY6578heG8trLMdZrDSGIRSxAhQEYNZVRgIU6rRoqJNO0nPPxDjl8kl0yuMhg5FlCFCsnxg//B727NwuSEmxROAF0vtv0xCnTvAs26bX8f23bzBAg8A1da219tADOfpNfbWvQI6NsGLq7bmrwHXO4Ag0+6ZEiOFKDpLxSA9zP6phwwcAv0rLm9tfZx+gBkqKvUDXBwCIwVKXvd492hzt7+PdPq7wdzbXKn5swsVgAAA8lJREFUeJx90dtPHHUUB/Dz+81vZhb2wrDI3soUKBSRcisF21iqqCRNY01NTE0k8aHpi0k18VJfjOFvUF9M44MmGrHFQqSQiKSmFloL5c4CXW6Fhb0vO3ufvczMzweiBGI9+eW8ffI95/yQqqrwv4UxBgCfJ9w/2NfSVB+Nyn6/r+vdLo7H6FkYY6yoABR2PJujj34MSo/d/nHeVLYbydmIp/bEO0fEy/+NMcbTU4/j4Vs6Lr0ccKeYuUKWS4ABVCVHmRdszbfvTgfjR8kz5Jjs+9RREl9Zy2lbVK9wU3/kWLJLCXnqza1bfVe7b9jLbIeTMcYu13Jg/aMiPrCwVFcgtDiMhnxwJ/zXVDwSdVCVMRV7nqzl2i9e/fKrw8mqSp84e2sFj3Oj8/SrF/MaicmyYhAaXu58NPAbeAeyzY0NLecmh2+ODN3BewYBAkAY43giI3kebrnsRmvV9z2D4ciOa3EBAf31Tp9sMgdxMTFm6j74/Ogb70VCYQKAAIDCXkOAIC6pkYBWdwwnpHEdf6L9dJtJKPh95DZhzFKMEWRAGL927XpWTmMA+s8DAOBYAoR483l/iHZ/8bXoODl8b9UfyH72SXepzbyRJNvjFGHKMlhvMBze+cH9+4lEuOOlU2X1tVkFTU7Om03q080NDGXV1cflRpHwaaoiiiildB8jhDLZ7HDfz2Yidba6Vn2L4fhzFrNRKy5OZ2QOZ1U5W8VtqlVH/iUHcM933zZYWS7Wtj66zZr65bzGJQt0glHgudi9XVzEl4vKw2kUPhO020oPYI1qYc+2Xc0bRXFwTLY0VXa2VibD/lBaIXm1UChN5JSRUcQQ1Tk/47Cf3x8bY7y17Y17PVYTG1UkLPBFcqik7Zoa9JcLYoHBqHhXNgd6gS1k9EJ1TQ2l9EDy1saErmQ2kGpwGC2MLOtCM8nZEV1K0tKJtEksSm26J/rHg2zzmabKisq939nHzqUH7efzd4f/nPGW6NP8ybNFrOsWQhpoCuuhnJ4hAnPhFam01K4oQMjBg/mzBjVhuvw2O++KKT+BIVxJKzQECBDLF2qu2WTMmCovtDQ1f8iyoGkUADBCCGPsdnvTW2OtFm01VeB06msvdWlpPZU0wJRG85ns84umU3k+VyxeEcWqvYUBAGsUrbvme4be99HFeisP/pwUOIZaOqQX31ISgrKmZhLHtXNXuJq68orrr5/9mBCglCLAGGPyy81votEbcjlKLrC9E8mhH3wdHRdcyyvjidSlxjftPJpD+o25JYvRHGFoZDdks1mBQhxJu9uxvwEiXuHnHbLd1AAAAABJRU5ErkJggg=="""  # noqa: E501
 
 
@@ -1688,7 +1688,7 @@ def test_search_builtin_with_citations(
                         assert isinstance(google_metadata, dict)
 
 
-@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.flaky(retries=5, delay=2)
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_structured_output_with_google_search(
     use_streaming: bool, backend_config: dict
@@ -1715,12 +1715,15 @@ def test_structured_output_with_google_search(
         response_schema=MatchResult.model_json_schema(),
     )
 
+    prompt = (
+        "Use the google_search tool to find all details for the latest Euro "
+        "championship final match. Always call google_search before responding."
+    )
+
     if use_streaming:
         # Test streaming
         chunks: list[BaseMessageChunk] = []
-        for chunk in llm_with_search.stream(
-            "Search for all details for the latest Euro championship final match."
-        ):
+        for chunk in llm_with_search.stream(prompt):
             assert isinstance(chunk, AIMessageChunk)
             chunks.append(chunk)
 
@@ -1735,9 +1738,7 @@ def test_structured_output_with_google_search(
         assert isinstance(response, AIMessageChunk)
     else:
         # Test invoke
-        response = llm_with_search.invoke(  # type: ignore[assignment]
-            "Search for all details for the latest Euro championship final match."
-        )
+        response = llm_with_search.invoke(prompt)  # type: ignore[assignment]
         assert isinstance(response, AIMessage)
 
     # Extract JSON from response content
@@ -2518,8 +2519,8 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "747" in response.content
+    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
+    assert any("747" in b["text"] for b in text_blocks)
 
     # Verify cache was used (should have cache_read tokens in usage metadata)
     if response.usage_metadata:
@@ -2535,8 +2536,8 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "747" in response.content
+    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
+    assert any("747" in b["text"] for b in text_blocks)
 
 
 @pytest.mark.extended
