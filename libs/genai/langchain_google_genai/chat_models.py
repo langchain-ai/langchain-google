@@ -1152,12 +1152,11 @@ def _parse_response_candidate(
             raw_id = getattr(part.function_call, "id", None)
             tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
             if streaming:
-                tc_id = str(raw_id) if raw_id else f"call_{i}"
                 tool_call_chunks.append(
                     tool_call_chunk(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
-                        id=tc_id,
+                        id=tool_call_id,
                         index=function_call.get("index"),  # type: ignore
                     )
                 )
