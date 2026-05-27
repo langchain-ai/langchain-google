@@ -1157,7 +1157,7 @@ def _parse_response_candidate(
                         name=function_call.get("name"),
                         args=function_call.get("arguments"),
                         id=tool_call_id,
-                        index=function_call.get("index"),  # type: ignore
+                        index=i,  
                     )
                 )
             else:
