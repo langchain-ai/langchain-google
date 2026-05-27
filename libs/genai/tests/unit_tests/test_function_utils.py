@@ -1462,3 +1462,116 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+def test_nested_dict_field_stays_object() -> None:
+    """Regression test for #1622.
+
+    A nested ``dict`` field (i.e. an object schema with no explicit
+    ``properties`` but ``additionalProperties: true``) must remain
+    ``Type.OBJECT`` after the conversion pipeline. Previously
+    ``_format_json_schema_to_gapic``/``_get_properties_from_schema``
+    stripped ``additionalProperties`` on the first pass; the second pass
+    then saw an "object with no properties and no additionalProperties"
+    and silently degraded the type to ``Type.STRING``, causing Gemini to
+    return JSON-encoded strings that failed downstream Pydantic
+    validation.
+    """
+
+    class Step(BaseModel):
+        name: str = Field(description="Step name")
+        config: dict = Field(default={}, description="Arbitrary config dict")
+
+    class Plan(BaseModel):
+        steps: list[Step] = Field(description="List of steps")
+
+    @tool
+    def create_plan(plan: Plan) -> str:
+        """Create a plan."""
+        return "ok"
+
+    fd = _format_base_tool_to_function_declaration(create_plan)
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    plan_prop = fd.parameters.properties["plan"]
+    assert plan_prop.properties is not None
+    steps_prop = plan_prop.properties["steps"]
+    assert steps_prop.items is not None
+    assert steps_prop.items.properties is not None
+    config_schema = steps_prop.items.properties["config"]
+    assert config_schema.type == Type.OBJECT
+
+
+def test_top_level_dict_field_stays_object() -> None:
+    """Regression test for #1622 (top-level variant).
+
+    A direct ``dict`` field (not nested in a list) must also remain
+    ``Type.OBJECT``.
+    """
+
+    class Direct(BaseModel):
+        config: dict = Field(default={}, description="X")
+
+    @tool
+    def use_direct(d: Direct) -> str:
+        """Use direct."""
+        return ""
+
+    fd = _format_base_tool_to_function_declaration(use_direct)
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    d_prop = fd.parameters.properties["d"]
+    assert d_prop.properties is not None
+    config = d_prop.properties["config"]
+    assert config.type == Type.OBJECT
+
+
+def test_dict_field_propagates_additional_properties() -> None:
+    """Regression test for #1622 (additionalProperties propagation).
+
+    The pipeline should propagate ``additionalProperties`` from the source
+    JSON Schema onto the resulting ``google.genai`` ``Schema``.
+    """
+
+    class Direct(BaseModel):
+        config: dict = Field(default={}, description="X")
+
+    @tool
+    def use_direct2(d: Direct) -> str:
+        """Use direct."""
+        return ""
+
+    fd = _format_base_tool_to_function_declaration(use_direct2)
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    d_prop = fd.parameters.properties["d"]
+    assert d_prop.properties is not None
+    config = d_prop.properties["config"]
+    assert config.additional_properties is True
+
+
+def test_object_without_properties_or_additional_props_still_string() -> None:
+    """Backward-compat guard for #1622 fix.
+
+    The existing fallback for objects with neither ``properties`` nor
+    ``additionalProperties`` (which Gemini historically rejects) must
+    remain in place — only schemas with explicit ``additionalProperties``
+    should escape the STRING coercion.
+    """
+    tool_schema = {
+        "name": "no_props",
+        "description": "x",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "blob": {"type": "object"},
+            },
+            "required": ["blob"],
+        },
+    }
+
+    fd = _format_to_genai_function_declaration(tool_schema)
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    blob = fd.parameters.properties["blob"]
+    assert blob.type == Type.STRING
