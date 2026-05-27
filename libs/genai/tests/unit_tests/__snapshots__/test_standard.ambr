@@ -16,10 +16,12 @@
         'lc': 1,
         'type': 'secret',
       }),
+      'location': None,
       'max_output_tokens': 100,
       'max_retries': 2,
       'model': 'gemini-2.5-flash',
       'n': 1,
+      'output_version': None,
       'stop': list([
       ]),
       'temperature': 0.0,

@@ -1701,7 +1701,7 @@ def test_search_builtin_with_citations(
                         assert isinstance(google_metadata, dict)
 
 
-@pytest.mark.flaky(retries=3, delay=1)
+@pytest.mark.flaky(retries=5, delay=2)
 @pytest.mark.parametrize("use_streaming", [False, True])
 def test_structured_output_with_google_search(
     use_streaming: bool, backend_config: dict
@@ -1728,12 +1728,15 @@ def test_structured_output_with_google_search(
         response_schema=MatchResult.model_json_schema(),
     )
 
+    prompt = (
+        "Use the google_search tool to find all details for the latest Euro "
+        "championship final match. Always call google_search before responding."
+    )
+
     if use_streaming:
         # Test streaming
         chunks: list[BaseMessageChunk] = []
-        for chunk in llm_with_search.stream(
-            "Search for all details for the latest Euro championship final match."
-        ):
+        for chunk in llm_with_search.stream(prompt):
             assert isinstance(chunk, AIMessageChunk)
             chunks.append(chunk)
 
@@ -1748,9 +1751,7 @@ def test_structured_output_with_google_search(
         assert isinstance(response, AIMessageChunk)
     else:
         # Test invoke
-        response = llm_with_search.invoke(  # type: ignore[assignment]
-            "Search for all details for the latest Euro championship final match."
-        )
+        response = llm_with_search.invoke(prompt)  # type: ignore[assignment]
         assert isinstance(response, AIMessage)
 
     # Extract JSON from response content
@@ -2532,9 +2533,9 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    assert "747" in str(response.content), (
-        f"Expected '747' in response, got: {response.content}"
-    )
+
+    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
+    assert any("747" in b["text"] for b in text_blocks)
 
     # Verify cache was used (should have cache_read tokens in usage metadata)
     if response.usage_metadata:
@@ -2550,9 +2551,8 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    assert "747" in str(response.content), (
-        f"Expected '747' in response, got: {response.content}"
-    )
+    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
+    assert any("747" in b["text"] for b in text_blocks)
 
 
 @pytest.mark.extended

@@ -2505,6 +2505,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
+            api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
