@@ -1462,3 +1462,116 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+def test_nested_object_honors_source_required() -> None:
+    """Regression test for #1725 (Bug A).
+
+    Nested object schemas must use the source schema's explicit ``required``
+    list and not synthesise it from "every property without a default".
+    """
+    tool = {
+        "name": "create_contact",
+        "description": "Create a contact.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "role": {"type": "string"},
+                        "email": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                        "phone": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    },
+                    "required": ["name", "role"],
+                },
+            },
+            "required": ["contact"],
+        },
+    }
+
+    fn = _format_to_genai_function_declaration(tool)
+    assert fn.parameters is not None
+    assert fn.parameters.properties is not None
+    contact = fn.parameters.properties["contact"]
+    assert contact.required == ["name", "role"]
+
+
+def test_nested_object_without_required_defaults_to_empty() -> None:
+    """Regression test for #1725 (Bug A, fallback).
+
+    A nested object schema with no ``required`` key must produce an empty
+    required list, not "every property".
+    """
+    tool = {
+        "name": "use_address",
+        "description": "Use an address.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "object",
+                    "properties": {
+                        "street": {"type": "string"},
+                        "city": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["address"],
+        },
+    }
+
+    fn = _format_to_genai_function_declaration(tool)
+    assert fn.parameters is not None
+    assert fn.parameters.properties is not None
+    address = fn.parameters.properties["address"]
+    assert address.required == []
+
+
+def test_is_nullable_schema_honors_explicit_flag() -> None:
+    """Regression test for #1725 (Bug B).
+
+    ``_is_nullable_schema`` must recognise an already-converted schema
+    carrying an explicit ``nullable: true`` flag so a second conversion
+    pass does not silently drop it.
+    """
+    from langchain_google_genai._function_utils import _is_nullable_schema
+
+    assert _is_nullable_schema({"type": "string", "nullable": True}) is True
+    assert _is_nullable_schema({"type": "string", "nullable": False}) is False
+    assert _is_nullable_schema({"type": "string"}) is False
+
+
+def test_nested_anyof_nullable_preserved_through_reconversion() -> None:
+    """Regression test for #1725 (Bug B, end-to-end).
+
+    A nested ``anyOf: [T, null]`` property must remain ``nullable=True``
+    after the converter has run, even when the inner object is re-entered
+    (e.g. via ``tool_to_dict`` round-tripping).
+    """
+    tool = {
+        "name": "create_contact",
+        "description": "Create a contact.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "type": "object",
+                    "properties": {
+                        "email": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    },
+                    "required": [],
+                },
+            },
+            "required": ["contact"],
+        },
+    }
+
+    fn = _format_to_genai_function_declaration(tool)
+    assert fn.parameters is not None
+    assert fn.parameters.properties is not None
+    contact = fn.parameters.properties["contact"]
+    assert contact.properties is not None
+    email = contact.properties["email"]
+    assert email.nullable is True
