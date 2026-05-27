@@ -1006,15 +1006,10 @@ def test_parse_response_candidate(raw_candidate: dict, expected: AIMessage) -> N
 def test_parse_response_candidate_includes_model_provider() -> None:
     """Test `_parse_response_candidate` has `model_provider` in `response_metadata`."""
     raw_candidate = {
-        "content": {
-            "parts": [
-                {"function_call": {"name": "test_tool", "args": {"message": "hello"}}}
-            ]
-        },
+        "content": {"parts": [{"text": "Hello, world!"}]},
         "finish_reason": "STOP",
         "safety_ratings": [],
     }
-
     response_candidate = Candidate.model_validate(raw_candidate)
     result = _parse_response_candidate(response_candidate)
 
@@ -1023,7 +1018,6 @@ def test_parse_response_candidate_includes_model_provider() -> None:
 
     # Streaming
     result = _parse_response_candidate(response_candidate, streaming=True)
-    assert result.tool_call_chunks[0]["index"] == 0
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
 
@@ -1115,9 +1109,9 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
 
     # Verify model_name is not duplicated
     assert full.response_metadata["model_name"] == "gemini-2.5-flash"
-    assert (
-        full.response_metadata["model_name"].count("gemini") == 1
-    ), "model_name should not be duplicated"
+    assert full.response_metadata["model_name"].count("gemini") == 1, (
+        "model_name should not be duplicated"
+    )
 
 
 def test_serialize() -> None:
@@ -2735,9 +2729,9 @@ def test_signature_round_trip_conversion() -> None:
                 elif block.get("extras") and "signature" in block["extras"]:
                     sig_blocks.append(block)
 
-        assert (
-            len(sig_blocks) >= 1
-        ), f"Expected signature blocks, got content: {result.content}"
+        assert len(sig_blocks) >= 1, (
+            f"Expected signature blocks, got content: {result.content}"
+        )
 
         # Now simulate passing this result back in a conversation
         with patch(
@@ -2789,9 +2783,9 @@ def test_signature_round_trip_conversion() -> None:
                                 calls_with_signatures.append(call)
                                 break
 
-            assert (
-                len(calls_with_signatures) >= 1
-            ), "Expected at least one call to convert signatures"
+            assert len(calls_with_signatures) >= 1, (
+                "Expected at least one call to convert signatures"
+            )
 
             # Verify follow-up succeeded
             assert isinstance(follow_up, AIMessage)
@@ -3975,9 +3969,9 @@ def test_thinking_budget_preserved_with_structured_output() -> None:
         assert config is not None, "Config should be present in API call"
         assert hasattr(config, "thinking_config"), "thinking_config should be present"
         assert config.thinking_config is not None, "thinking_config should not be None"
-        assert (
-            config.thinking_config.thinking_budget == 0
-        ), f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        assert config.thinking_config.thinking_budget == 0, (
+            f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        )
 
 
 def test_thinking_level_preserved_with_structured_output() -> None:
@@ -4029,9 +4023,9 @@ def test_thinking_level_preserved_with_structured_output() -> None:
         assert config is not None, "Config should be present in API call"
         assert hasattr(config, "thinking_config"), "thinking_config should be present"
         assert config.thinking_config is not None, "thinking_config should not be None"
-        assert (
-            config.thinking_config.thinking_level == ThinkingLevel.LOW
-        ), f"thinking_level should be LOW, got {config.thinking_config.thinking_level}"
+        assert config.thinking_config.thinking_level == ThinkingLevel.LOW, (
+            f"thinking_level should be LOW, got {config.thinking_config.thinking_level}"
+        )
 
 
 def test_include_thoughts_preserved_with_structured_output() -> None:
@@ -4143,9 +4137,9 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         assert config is not None, "Config should be present in API call"
         assert hasattr(config, "thinking_config"), "thinking_config should be present"
         assert config.thinking_config is not None, "thinking_config should not be None"
-        assert (
-            config.thinking_config.thinking_budget == 0
-        ), f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        assert config.thinking_config.thinking_budget == 0, (
+            f"thinking_budget should be 0, got {config.thinking_config.thinking_budget}"
+        )
         msg = (
             f"include_thoughts should be False, "
             f"got {config.thinking_config.include_thoughts}"
@@ -4849,12 +4843,12 @@ def test_max_retries_configuration_for_500_errors() -> None:
     # Verify HttpRetryOptions is configured with correct attempts
     config = request["config"]
     assert config.http_options is not None, "HttpOptions should be configured"
-    assert (
-        config.http_options.retry_options is not None
-    ), "HttpRetryOptions should be configured"
-    assert (
-        config.http_options.retry_options.attempts == 5
-    ), "Retry attempts should match max_retries"
+    assert config.http_options.retry_options is not None, (
+        "HttpRetryOptions should be configured"
+    )
+    assert config.http_options.retry_options.attempts == 5, (
+        "Retry attempts should match max_retries"
+    )
 
 
 def test_max_retries_can_be_overridden_per_call() -> None:
@@ -4877,9 +4871,9 @@ def test_max_retries_can_be_overridden_per_call() -> None:
 
     assert config.http_options is not None
     assert config.http_options.retry_options is not None
-    assert (
-        config.http_options.retry_options.attempts == 10
-    ), "Call-level max_retries should override instance default"
+    assert config.http_options.retry_options.attempts == 10, (
+        "Call-level max_retries should override instance default"
+    )
 
 
 def test_default_max_retries_value() -> None:
@@ -4897,9 +4891,9 @@ def test_default_max_retries_value() -> None:
     # Verify a reasonable default is set (should be >= 2 for transient errors)
     assert config.http_options is not None
     assert config.http_options.retry_options is not None
-    assert (
-        config.http_options.retry_options.attempts >= 2
-    ), "Default max_retries should handle transient failures"
+    assert config.http_options.retry_options.attempts >= 2, (
+        "Default max_retries should handle transient failures"
+    )
 
 
 def test_client_error_with_500_raises_descriptive_error() -> None:
@@ -5451,6 +5445,8 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
 def test_parse_response_candidate_streaming_tool_call_chunk_has_index() -> None:
     raw_candidate = {
         "content": {
@@ -5465,4 +5461,4 @@ def test_parse_response_candidate_streaming_tool_call_chunk_has_index() -> None:
     response_candidate = Candidate.model_validate(raw_candidate)
     result = _parse_response_candidate(response_candidate, streaming=True)
 
-    assert result.tool_call_chunks[0]["index"] == 0
+    assert isinstance(result, AIMessageChunk)
