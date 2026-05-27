@@ -448,7 +448,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             try:
                 result = self.client.models.embed_content(
                     model=self.model,
-                    contents=batch,
+                    contents=[{"parts": [{"text": text}]} for text in batch],
                     config=config,
                 )
             except ClientError as e:
@@ -566,7 +566,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             try:
                 result = await self.client.aio.models.embed_content(
                     model=self.model,
-                    contents=batch,
+                    contents=[{"parts": [{"text": text}]} for text in batch],
                     config=config,
                 )
             except ClientError as e:
