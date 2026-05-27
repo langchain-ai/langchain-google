@@ -58,6 +58,7 @@ _ALLOWED_SCHEMA_FIELDS = [
     "minItems",
     "maxItems",
     "title",
+    "additionalProperties",
 ]
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
@@ -178,6 +179,10 @@ def _dict_to_genai_schema(
             schema_dict["enum"] = formatted_schema["enum"]
         if "nullable" in formatted_schema:
             schema_dict["nullable"] = formatted_schema["nullable"]
+        if "additionalProperties" in formatted_schema:
+            schema_dict["additional_properties"] = formatted_schema[
+                "additionalProperties"
+            ]
         if "anyOf" in formatted_schema:
             # Convert anyOf list to list of Schema objects
             any_of_schemas = []
@@ -574,9 +579,14 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                     properties_item["required"] = [
                         k for k, v in v_properties.items() if "default" not in v
                     ]
-            elif not v.get("additionalProperties"):
-                # Only provide dummy type for object without properties AND without
-                # additionalProperties
+            elif v.get("additionalProperties") is not None:
+                # Preserve `additionalProperties` so subsequent conversion
+                # passes do not drop it (which would degrade the type to
+                # STRING below).
+                properties_item["additionalProperties"] = v["additionalProperties"]
+            else:
+                # Only provide dummy type for object without properties AND
+                # without additionalProperties
                 properties_item["type"] = types.Type.STRING
 
         if k == "title" and "description" not in properties_item:
