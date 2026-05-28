@@ -10,6 +10,8 @@ from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+pytestmark = pytest.mark.flaky(retries=3, delay=1)
+
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
 _FLASH_MODEL = "gemini-3-flash-preview"
