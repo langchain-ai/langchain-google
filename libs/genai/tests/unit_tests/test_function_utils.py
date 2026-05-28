@@ -1462,3 +1462,42 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+def test_tool_with_list_any_param_emits_items() -> None:
+    """Ensure `List[Any]` array parameters emit an `items` schema.
+
+    Regression test for #1768: Pydantic emits `"items": {}` for `List[Any]`
+    (a valid untyped-array JSON Schema). The converter previously used
+    `v.get("items")`, which is falsy for `{}`, so the `items` field was
+    dropped — and Gemini rejects array parameters without `items` with a
+    400 `GenerateContentRequest.tools[...].parameters.properties[...].items:
+    missing field` error.
+    """
+
+    @tool
+    def my_tool(data: list[Any]) -> str:
+        """Tool with a List[Any] parameter."""
+        return str(data)
+
+    genai_tools = convert_to_genai_function_declarations([my_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+    assert isinstance(genai_tool_dict, dict)
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list)
+
+    parameters = function_declarations[0].get("parameters")
+    assert isinstance(parameters, dict)
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict)
+
+    data_property = properties.get("data")
+    assert isinstance(data_property, dict)
+    assert_property_type(data_property, Type.ARRAY, "data")
+
+    items = data_property.get("items")
+    assert isinstance(items, dict), (
+        "List[Any] must emit an `items` schema; Gemini rejects arrays without it."
+    )
+    assert items, "`items` schema must not be empty."

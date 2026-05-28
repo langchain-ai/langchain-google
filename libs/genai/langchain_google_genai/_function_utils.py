@@ -555,7 +555,7 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         if description and isinstance(description, str):
             properties_item["description"] = description
 
-        if properties_item.get("type") == types.Type.ARRAY and v.get("items"):
+        if properties_item.get("type") == types.Type.ARRAY and "items" in v:
             properties_item["items"] = _get_items_from_schema_any(v.get("items"))
 
         if properties_item.get("type") == types.Type.OBJECT:
