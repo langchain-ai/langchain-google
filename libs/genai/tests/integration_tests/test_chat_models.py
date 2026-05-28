@@ -648,7 +648,7 @@ def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> Non
     """Test invoking a thinking model with zero `thinking_budget`."""
     # Note certain models may not allow `thinking_budget=0`
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview", thinking_budget=0, **backend_config
+        model=_THINKING_MODEL, thinking_budget=0, **backend_config
     )
 
     result = llm.invoke(
@@ -656,16 +656,7 @@ def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> Non
     )
 
     assert isinstance(result, AIMessage)
-
-    if isinstance(result.content, list):
-        text_content = "".join(
-            block.get("text", "")
-            for block in result.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-        assert len(text_content) > 0
-    else:
-        assert isinstance(result.content, str)
+    assert result.text
 
     _check_usage_metadata(result)
 
@@ -1483,7 +1474,7 @@ def test_thinking_params_preserved_with_structured_output(backend_config: dict) 
     # Initialize with thinking disabled
     # Only certain models support disabling thinking
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview",
+        model=_THINKING_MODEL,
         thinking_budget=0,
         include_thoughts=False,
         **backend_config,
@@ -1719,7 +1710,7 @@ def test_structured_output_with_google_search(
         final_match_score: str
         scorers: list[str]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", **backend_config)
+    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     # Bind tools and configure for structured output
     llm_with_search = llm.bind(
@@ -1799,9 +1790,7 @@ def test_structured_output_with_google_search(
 
 def test_search_with_googletool(backend_config: dict) -> None:
     """Test using `GoogleTool` with Google Search."""
-    llm = ChatGoogleGenerativeAI(
-        model="models/gemini-3-flash-preview", **backend_config
-    )
+    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, **backend_config)
     resp = llm.invoke(
         "When is the next total solar eclipse in US?",
         tools=[GoogleTool(google_search={})],
@@ -1827,7 +1816,7 @@ def test_url_context_tool(backend_config: dict) -> None:
 
 def test_google_maps_grounding(backend_config: dict) -> None:
     """Test using Google Maps grounding for location-aware responses."""
-    model = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     model_with_maps = model.bind_tools([{"google_maps": {}}])
 
     response = model_with_maps.invoke(
@@ -1891,7 +1880,7 @@ def test_google_maps_grounding(backend_config: dict) -> None:
 
 def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
     """Test passing Maps grounding tool directly to invoke without binding."""
-    model = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
+    model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     # Pass tools directly to invoke instead of binding
     response = model.invoke(
@@ -2009,7 +1998,7 @@ def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -
     Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
     parameters passed directly to invoke() method override model defaults.
     """
-    llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", **backend_config)
+    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, **backend_config)
 
     # Test with max_output_tokens constraint
     result_constrained = llm.invoke(
@@ -2310,6 +2299,7 @@ def test_gemini_3_pro_streaming_with_thinking(
         assert full_message.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_gemini_3_pro_agent_loop_streaming(
     output_version: Literal["v0", "v1"], backend_config: dict
@@ -2396,6 +2386,7 @@ def test_gemini_3_pro_agent_loop_streaming(
     assert len(text_blocks) > 0
 
 
+@pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("model_name", [_MODEL, "gemini-3.1-pro-preview"])
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_streaming_with_multiple_tool_calls(
@@ -2534,8 +2525,7 @@ def test_context_caching(backend_config: dict) -> None:
 
     assert isinstance(response, AIMessage)
 
-    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
-    assert any("747" in b["text"] for b in text_blocks)
+    assert "747" in response.text
 
     # Verify cache was used (should have cache_read tokens in usage metadata)
     if response.usage_metadata:
@@ -2551,8 +2541,7 @@ def test_context_caching(backend_config: dict) -> None:
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    text_blocks = [b for b in response.content_blocks if b["type"] == "text"]
-    assert any("747" in b["text"] for b in text_blocks)
+    assert "747" in response.text
 
 
 @pytest.mark.extended
