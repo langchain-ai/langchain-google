@@ -104,6 +104,7 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
+    _resolve_base_url,
     get_user_agent,
 )
 from langchain_google_genai._compat import (
@@ -2476,35 +2477,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else:
                 google_api_key = self.google_api_key
 
-        base_url = self.base_url
-        if isinstance(self.base_url, dict):
-            # Handle case where base_url is provided as a dict
-            # (Backwards compatibility for deprecated client_options field)
-            if keys := list(self.base_url.keys()):
-                if "api_endpoint" in keys and len(keys) == 1:
-                    base_url = self.base_url["api_endpoint"]
-                elif "api_endpoint" in keys and len(keys) > 1:
-                    msg = (
-                        "When providing base_url as a dict, it can only contain the "
-                        "api_endpoint key. Extra keys found: "
-                        f"{[k for k in keys if k != 'api_endpoint']}"
-                    )
-                    raise ValueError(msg)
-                else:
-                    msg = (
-                        "When providing base_url as a dict, it must only contain the "
-                        "api_endpoint key."
-                    )
-                    raise ValueError(msg)
-            else:
-                msg = (
-                    "base_url must be a string or a dict containing the "
-                    "api_endpoint key."
-                )
-                raise ValueError(msg)
+        base_url = _resolve_base_url(
+            self.base_url,
+            use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+            location=self.location,
+        )
 
         http_options = HttpOptions(
-            base_url=cast("str", base_url),
+            base_url=base_url,
             api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
