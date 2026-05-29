@@ -13,6 +13,7 @@ from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
+    _resolve_base_url,
     get_user_agent,
 )
 
@@ -259,8 +260,14 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         if self.additional_headers:
             headers.update(self.additional_headers)
 
+        base_url = _resolve_base_url(
+            self.base_url,
+            use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+            location=self.location,
+        )
+
         http_options = HttpOptions(
-            base_url=self.base_url,
+            base_url=base_url,
             api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
