@@ -21,6 +21,7 @@ from langchain_google_vertexai.model_garden import (
 
 _ANTHROPIC_LOCATION = "us-east5"
 _ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
+_ANTHROPIC_CLAUDE_BETA_HEADER = "interleaved-thinking-2025-05-14"
 
 
 @pytest.mark.extended
@@ -390,11 +391,10 @@ async def test_anthropic_async_invoke_with_betas() -> None:
     )
     message = HumanMessage(content="What is 2+2?")
 
-    # This should work but currently fails because _agenerate doesn't handle betas
     response = await model.ainvoke(
         [message],
         model_name=_ANTHROPIC_CLAUDE_MODEL_NAME,
-        betas=["context-1m-2025-08-07"],
+        betas=[_ANTHROPIC_CLAUDE_BETA_HEADER],
     )
     assert isinstance(response, AIMessage)
     assert isinstance(response.content, str)
@@ -411,12 +411,11 @@ async def test_anthropic_async_stream_with_betas() -> None:
     )
     message = HumanMessage(content="Say hello")
 
-    # This should work but currently fails because _astream doesn't handle betas
     chunks = []
     async for chunk in model.astream(
         [message],
         model=_ANTHROPIC_CLAUDE_MODEL_NAME,
-        betas=["context-1m-2025-08-07"],
+        betas=[_ANTHROPIC_CLAUDE_BETA_HEADER],
     ):
         chunks.append(chunk)
         assert isinstance(chunk, AIMessageChunk)
