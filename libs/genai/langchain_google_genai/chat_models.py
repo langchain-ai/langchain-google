@@ -394,10 +394,16 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    thought_signature = None
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            part_kwargs["thought_signature"] = base64.b64decode(sig)
+                        if isinstance(sig, str):
+                            thought_signature = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            thought_signature = sig
+
+                        if thought_signature:
+                            pass
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
@@ -411,11 +417,13 @@ def _convert_to_parts(
                     # Check for thought_signature in extras
                     # (needed for multi-turn image editing/usage)
                     thought_sig = None
+                    image_part = image_loader.load_part(img_url)
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            thought_sig = base64.b64decode(sig)
-                    image_part = image_loader.load_part(img_url)
+                        if isinstance(sig, str):
+                            image_part.thought_signature = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            image_part.thought_signature = sig
                     if thought_sig:
                         image_part.thought_signature = thought_sig
                     parts.append(image_part)
@@ -429,12 +437,23 @@ def _convert_to_parts(
                     media_part_kwargs: dict[str, Any] = {}
 
                     if "data" in part:
-                        # Embedded media
+                        data = part["data"]
+                        if isinstance(data, str):
+                            clean_data = re.sub(r"\s+", "", data)
+                            data_validation_msg = "Data should be valid base64"
+                            if (
+                                not re.match(r"^[A-Za-z0-9+/]*={0,2}$", clean_data)
+                                or len(clean_data) % 4 != 0
+                            ):
+                                raise ValueError(data_validation_msg)
+                            try:
+                                data = base64.b64decode(clean_data)
+                            except Exception:
+                                raise ValueError(data_validation_msg)
                         media_part_kwargs["inline_data"] = Blob(
-                            data=part["data"], mime_type=mime_type
+                            data=data, mime_type=mime_type
                         )
                     elif "file_uri" in part:
-                        # Referenced files (e.g. stored in GCS)
                         media_part_kwargs["file_data"] = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
@@ -445,6 +464,12 @@ def _convert_to_parts(
                         _validate_video_metadata(part["video_metadata"])
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part_kwargs["video_metadata"] = metadata
+                        if "extras" in part and isinstance(part["extras"], dict):
+                            sig = part["extras"].get("signature")
+                            if sig and isinstance(sig, str):
+                                media_part_kwargs["thought_signature"] = (
+                                    base64.b64decode(sig)
+                                )
 
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
@@ -461,10 +486,12 @@ def _convert_to_parts(
                             }
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
+                        if isinstance(sig, str):
                             media_part_kwargs["thought_signature"] = base64.b64decode(
                                 sig
                             )
+                        elif isinstance(sig, bytes):
+                            media_part_kwargs["thought_signature"] = sig
 
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
@@ -993,7 +1020,7 @@ def _parse_response_candidate(
     effective_model_name = model_name_for_content or model_name
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
-    for part in parts:
+    for i, part in enumerate(parts):
         text: str | None = None
         try:
             if hasattr(part, "text") and part.text is not None:
@@ -1122,7 +1149,8 @@ def _parse_response_candidate(
             )
             additional_kwargs["function_call"] = function_call
 
-            tool_call_id = function_call.get("id", str(uuid.uuid4()))
+            raw_id = getattr(part.function_call, "id", None)
+            tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
