@@ -401,8 +401,28 @@ def _format_to_genai_function_declaration(
             all(k in tool for k in ("name", "description")) and "parameters" not in tool
         ):
             function = cast("dict", tool)
-        elif "parameters" in tool and tool["parameters"].get("properties"):
+        elif (
+            "parameters" in tool
+            and tool["parameters"] is not None
+            and tool["parameters"].get("properties")
+        ):
             function = convert_to_openai_tool(cast("dict", tool))["function"]
+        elif (
+            "parameters" not in tool
+            and tool.get("type") == "object"
+            and tool.get("properties")
+        ):
+            # Bare JSON Schema object passed directly (e.g. via
+            # `with_structured_output(dict_schema, method="function_calling")`
+            # with a schema that has no top-level `title`). Treat it as the
+            # parameters block and synthesize a name from `title` if present,
+            # so the dict shape does not silently degrade to a
+            # `MISSING_NAME`/`parameters=None` declaration.
+            function = {
+                "name": tool.get("title") or "structured_output",
+                "description": tool.get("description", ""),
+                "parameters": cast("dict", tool),
+            }
         else:
             function = cast("dict", tool)
         function["parameters"] = function.get("parameters") or {}
