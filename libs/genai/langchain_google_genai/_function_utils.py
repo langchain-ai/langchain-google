@@ -571,9 +571,16 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                     v_properties
                 )
                 if isinstance(v_properties, dict):
-                    properties_item["required"] = [
-                        k for k, v in v_properties.items() if "default" not in v
-                    ]
+                    # Honor the source schema's explicit `required` list when
+                    # present. JSON Schema (and Pydantic's
+                    # `model_json_schema()`) emit `required` explicitly, so a
+                    # missing key means "no required fields" rather than
+                    # "everything without a default".
+                    source_required = v.get("required")
+                    if isinstance(source_required, list):
+                        properties_item["required"] = list(source_required)
+                    else:
+                        properties_item["required"] = []
             elif not v.get("additionalProperties"):
                 # Only provide dummy type for object without properties AND without
                 # additionalProperties
@@ -657,6 +664,11 @@ def _get_nullable_type_from_schema(schema: dict[str, Any]) -> types.Type | None:
 
 
 def _is_nullable_schema(schema: dict[str, Any]) -> bool:
+    # Already-converted schemas carry an explicit `nullable: true` flag.
+    # Recognize it so re-entrant conversion (e.g. round-tripping through
+    # `tool_to_dict`) does not silently drop the flag.
+    if schema.get("nullable") is True:
+        return True
     if "anyOf" in schema:
         schema_types = [
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
