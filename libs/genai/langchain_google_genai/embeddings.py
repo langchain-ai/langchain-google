@@ -576,7 +576,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         if is_gemini_embedding:
             import asyncio
 
-            async def _aembed_single(text: str, title: str | None = None) -> list[float]:
+            async def _aembed_single(
+                text: str, title: str | None = None
+            ) -> list[float]:
                 config = self._build_config(
                     task_type=effective_task_type,
                     title=title,
