@@ -334,7 +334,7 @@ async def test_aembed_documents() -> None:
 
 
 def test_embed_documents_gemini_embedding_2() -> None:
-    """Test sync embed_documents with gemini-embedding-2 which uses ThreadPoolExecutor."""
+    """Test sync embed_documents with gemini-embedding-2 (ThreadPoolExecutor)."""
     gemini_model = "gemini-embedding-2-preview"
     with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
         mock_client = MagicMock()
@@ -368,7 +368,7 @@ def test_embed_documents_gemini_embedding_2() -> None:
 
 @pytest.mark.asyncio
 async def test_aembed_documents_gemini_embedding_2() -> None:
-    """Test async embed_documents with gemini-embedding-2 which uses asyncio.gather."""
+    """Test async embed_documents with gemini-embedding-2 (asyncio.gather)."""
     gemini_model = "gemini-embedding-2-preview"
     with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
         mock_client = MagicMock()
