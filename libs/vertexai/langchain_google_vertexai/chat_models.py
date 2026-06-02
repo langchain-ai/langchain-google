@@ -816,7 +816,8 @@ def _parse_response_candidate(
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
             function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
+                {k: function_call_args_dict[k] for k in function_call_args_dict},
+                ensure_ascii=False,
             )
             additional_kwargs["function_call"] = function_call
 

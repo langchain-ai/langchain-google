@@ -1621,6 +1621,42 @@ def test_parse_response_candidate(raw_candidate, expected) -> None:
                 assert res_kw == exp_kw
 
 
+def test_parse_response_candidate_preserves_non_ascii_in_function_call_arguments() -> (
+    None
+):
+    """Tool-call args with non-ASCII text (CJK, emoji, etc.) must land in
+    `additional_kwargs["function_call"]["arguments"]` as raw UTF-8, not as
+    escaped `\\uXXXX` sequences.
+
+    Mirrors the langchain-google-genai regression that PR #1804 fixes:
+    the existing parametrized `test_parse_response_candidate` round-trips
+    arguments through `json.loads` for equality, so it is blind to the
+    encoding difference. The convention is already established in
+    `langchain-openai`'s chat model and `langchain-core`'s
+    `messages/utils.py:1810`.
+    """
+    candidate = Candidate(
+        content=Content(
+            role="model",
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="echo",
+                        args={"text": "你好", "emoji": "🚀"},
+                    )
+                ),
+            ],
+        )
+    )
+    result = _parse_response_candidate(candidate)
+    arguments = result.additional_kwargs["function_call"]["arguments"]
+
+    assert "你好" in arguments
+    assert "🚀" in arguments
+    assert "\\u" not in arguments
+    assert json.loads(arguments) == {"text": "你好", "emoji": "🚀"}
+
+
 def test_parser_multiple_tools() -> None:
     """Test parsing of multiple function calls into Pydantic models.
 
