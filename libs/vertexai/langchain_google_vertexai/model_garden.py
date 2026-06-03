@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from operator import itemgetter
 from typing import (
@@ -13,6 +14,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
@@ -565,7 +567,31 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         """Model wrapper that returns outputs formatted to match the given schema."""
         tool_name = convert_to_anthropic_tool(schema)["name"]
-        llm = self.bind_tools([schema], tool_choice=tool_name)
+        if _thinking_in_params(self.model_kwargs):
+            # The Anthropic API rejects requests that combine `thinking` with a
+            # forced `tool_choice` ("Thinking may not be enabled when
+            # tool_choice forces tool use."). Mirror the langchain-anthropic
+            # behavior: bind the tool without forcing tool_choice, warn the
+            # caller that the model is not guaranteed to call the tool, and
+            # raise an `OutputParserException` if it does not.
+            thinking_admonition = (
+                "You are attempting to use structured output via forced tool "
+                "calling, which is not guaranteed when `thinking` is enabled. "
+                "This method will raise an OutputParserException if tool "
+                "calls are not generated. Consider disabling `thinking` or "
+                "adjust your prompt to ensure the tool is called."
+            )
+            warnings.warn(thinking_admonition, stacklevel=2)
+            llm = self.bind_tools([schema])
+
+            def _raise_if_no_tool_calls(message: AIMessage) -> AIMessage:
+                if not message.tool_calls:
+                    raise OutputParserException(thinking_admonition)
+                return message
+
+            llm = llm | _raise_if_no_tool_calls
+        else:
+            llm = self.bind_tools([schema], tool_choice=tool_name)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             output_parser = ToolsOutputParser(
                 first_tool_only=True, pydantic_schemas=[schema]
