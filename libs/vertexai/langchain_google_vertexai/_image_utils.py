@@ -39,13 +39,20 @@ class ImageBytesLoader:
     def __init__(
         self,
         project: str | None = None,
+        *,
+        timeout: float | None = None,
     ) -> None:
         """Constructor.
 
         Args:
             project: Google Cloud project id.
+            timeout: Timeout in seconds for HTTP/HTTPS media fetches. When
+                ``None`` (the default) no timeout is enforced, preserving the
+                pre-existing behavior; callers that want to bound the fetch
+                should pass a positive number.
         """
         self._project = project
+        self.timeout = timeout
 
     @cached_property
     def _storage_client(self):
@@ -188,7 +195,10 @@ class ImageBytesLoader:
         Returns:
             Image bytes
         """
-        response = requests.get(url)
+        if self.timeout is None:
+            response = requests.get(url)
+        else:
+            response = requests.get(url, timeout=self.timeout)
 
         if not response.ok:
             response.raise_for_status()
