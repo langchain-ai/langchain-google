@@ -1010,7 +1010,6 @@ def test_parse_response_candidate_includes_model_provider() -> None:
         "finish_reason": "STOP",
         "safety_ratings": [],
     }
-
     response_candidate = Candidate.model_validate(raw_candidate)
     result = _parse_response_candidate(response_candidate)
 
@@ -1019,7 +1018,6 @@ def test_parse_response_candidate_includes_model_provider() -> None:
 
     # Streaming
     result = _parse_response_candidate(response_candidate, streaming=True)
-
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
 
@@ -5447,3 +5445,20 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def test_parse_response_candidate_streaming_tool_call_chunk_has_index() -> None:
+    raw_candidate = {
+        "content": {
+            "parts": [
+                {"function_call": {"name": "test_tool", "args": {"message": "hello"}}}
+            ]
+        },
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+
+    response_candidate = Candidate.model_validate(raw_candidate)
+    result = _parse_response_candidate(response_candidate, streaming=True)
+
+    assert isinstance(result, AIMessageChunk)
