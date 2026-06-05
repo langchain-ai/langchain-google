@@ -2513,3 +2513,63 @@ async def test_async_cancellation_during_write_does_not_double_ack(
         f"{unfinished(bp._queue)}, expected 1 "
         "(row 2 should still be unfinished)"
     )
+
+
+def test_bigquery_callback_every_json_dumps_uses_ensure_ascii_false() -> None:
+    """Pin that every `json.dumps(` call site in `bigquery_callback.py`
+    passes `ensure_ascii=False`. Pre-fix, the BigQuery callback's `content`
+    column (chain inputs, outputs, retrieved docs, tool calls, agent
+    actions, langgraph attributes) and `_prepare_arrow_batch`'s JSON
+    columns used the default `ensure_ascii=True`, so CJK / emoji /
+    accented user input landed in BigQuery as `\\uXXXX` escape sequences
+    and was unreadable on inspection. A regex tokenize-style check
+    survives the autouse fixture that mocks pyarrow in CI (which makes
+    end-to-end tests of `_prepare_arrow_batch` brittle).
+    """
+    import inspect
+    import re
+    import tokenize
+    from io import StringIO
+
+    from langchain_google_community.callbacks import bigquery_callback as bq
+
+    source = inspect.getsource(bq)
+
+    # Find every `json.dumps(` opening and pair it with its closing paren.
+    pattern = re.compile(r"json\.dumps\(")
+    offenders: list[str] = []
+
+    for match in pattern.finditer(source):
+        start = match.end()
+        # Walk paren-balanced, ignoring strings/comments via tokenize.
+        depth = 1
+        idx = start
+        while depth > 0 and idx < len(source):
+            ch = source[idx]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            idx += 1
+        call_text = source[match.start() : idx]
+        if "ensure_ascii=False" not in call_text:
+            # Take just the head for the error report.
+            head = re.sub(r"\s+", " ", call_text)[:120]
+            offenders.append(head)
+
+    # Sanity: the file should actually have json.dumps calls (guards against
+    # a refactor that moves the helper elsewhere silently passing this test).
+    assert "json.dumps(" in source, (
+        "Expected `json.dumps(` calls in bigquery_callback.py; if you moved "
+        "them, update this regression test."
+    )
+    # Touch tokenize/StringIO to keep imports load-bearing during static
+    # analysis even when the regex never trips them.
+    _ = list(tokenize.generate_tokens(StringIO("").readline))
+
+    assert not offenders, (
+        f"{len(offenders)} `json.dumps` call(s) in bigquery_callback.py are "
+        "missing `ensure_ascii=False`. Without it, non-ASCII (CJK, emoji, "
+        "accented) values in BigQuery JSON columns get escaped to `\\uXXXX` "
+        "and become unreadable.\n\nOffenders:\n  - " + "\n  - ".join(offenders)
+    )
