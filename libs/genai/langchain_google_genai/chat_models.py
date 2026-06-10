@@ -672,7 +672,7 @@ def _convert_tool_message_to_parts(
                 media_blocks.append(block)
             else:
                 other_blocks.append(block)
-                
+
         base_parts = _convert_to_parts(media_blocks, model=model)
         for i, p in enumerate(base_parts):
             original_block = media_blocks[i]
@@ -699,7 +699,7 @@ def _convert_tool_message_to_parts(
                 )
                 if display_name:
                     function_response_parts[-1].file_data.display_name = display_name
-                    
+
         response = other_blocks
 
     elif not isinstance(message.content, str):
@@ -709,10 +709,10 @@ def _convert_tool_message_to_parts(
             response = json.loads(message.content)
         except json.JSONDecodeError:
             response = message.content  # leave as str representation
-            
+    response_dict = {"output": response} if not isinstance(response, dict) else response
     function_response_kwargs: dict[str, Any] = {
         "name": name,
-        "response": {"output": response} if not isinstance(response, dict) else response,
+        "response": response_dict,
     }
     if function_response_parts:
         function_response_kwargs["parts"] = function_response_parts
