@@ -1,0 +1,31 @@
+libs/vertexai/langchain_google_vertexai/callbacks.py
+  s_b54d92dc8d821c::t_039b0274bf3b6e 46-48
+libs/vertexai/langchain_google_vertexai/chat_models.py
+  s_b54d92dc8d821c::t_1f47906e554d54 2828
+libs/genai/tests/integration_tests/test_callbacks.py
+  s_c56ea1eb559bab::t_97da30317b4300 19-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "d45c7aec5f855c0458d6073cd0af35198c472796",
+  "prompts": {},
+  "sessions": {
+    "s_b54d92dc8d821c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1449cea3-8ba1-496f-be2a-245c5cd1760e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    },
+    "s_c56ea1eb559bab": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ecb3d1a7-96a3-417c-b23f-f175b58c4bdd",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
