@@ -3653,7 +3653,10 @@ def test_convert_tool_message_to_parts_with_display_name() -> None:
     assert result[0].function_response.parts is not None
     assert len(result[0].function_response.parts) == 1
     assert result[0].function_response.parts[0].file_data is not None
-    assert result[0].function_response.parts[0].file_data.file_uri == "gs://bucket/file.pdf"
+    assert (
+        result[0].function_response.parts[0].file_data.file_uri
+        == "gs://bucket/file.pdf"
+    )
     assert result[0].function_response.parts[0].file_data.display_name == "My Document"
 
 
