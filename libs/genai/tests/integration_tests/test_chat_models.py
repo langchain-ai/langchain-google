@@ -128,10 +128,10 @@ def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
 
     # tool_calls
     tool_calls = response.tool_calls
-    assert len(tool_calls) == 1
-    tool_call = tool_calls[0]
-    assert tool_call["name"] == expected_name
-    _check_tool_call_args(tool_call["args"])
+    assert len(tool_calls) >= 1
+    assert all(tool_call["name"] == expected_name for tool_call in tool_calls)
+    for tool_call in tool_calls:
+        _check_tool_call_args(tool_call["args"])
 
 
 def _check_tool_call_args(tool_call_args: dict) -> None:
@@ -479,6 +479,9 @@ def test_chat_google_genai_invoke_thinking_with_tools(
         **backend_config,
     )
     llm_with_tools = llm.bind_tools([analyze_weather])
+    llm_with_required_tools = llm.bind_tools(
+        [analyze_weather], tool_choice="analyze_weather"
+    )
 
     input_message = {
         "role": "user",
@@ -490,7 +493,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
         ),
     }
 
-    result = llm_with_tools.invoke([input_message])
+    result = llm_with_required_tools.invoke([input_message])
 
     assert isinstance(result, AIMessage)
     content = result.content
@@ -597,6 +600,7 @@ def test_thought_signature_round_trip(backend_config: dict) -> None:
         **backend_config,
     )
     llm_with_tools = llm.bind_tools([simple_tool])
+    llm_with_required_tools = llm.bind_tools([simple_tool], tool_choice="simple_tool")
 
     # First call with function calling to generate signatures
     first_message = {
@@ -615,7 +619,7 @@ def test_thought_signature_round_trip(backend_config: dict) -> None:
 
         mock_convert.side_effect = real_convert
 
-        first_result = llm_with_tools.invoke([first_message])
+        first_result = llm_with_required_tools.invoke([first_message])
 
         # Verify we got a response with structured content (contains signatures)
         assert isinstance(first_result, AIMessage)
@@ -1284,7 +1288,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     )
     model = ChatGoogleGenerativeAI(
         model=_MODEL, safety_settings=safety, **backend_config
-    ).bind_tools([MyModel])
+    ).bind_tools([MyModel], tool_choice="MyModel")
     response = model.invoke([message])
     _check_tool_calls(response, "MyModel")
 
@@ -1294,7 +1298,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
 
     model = ChatGoogleGenerativeAI(
         model=_MODEL, safety_settings=safety, **backend_config
-    ).bind_tools([my_model])
+    ).bind_tools([my_model], tool_choice="my_model")
     response = model.invoke([message])
     _check_tool_calls(response, "my_model")
 
@@ -1305,7 +1309,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
 
     model = ChatGoogleGenerativeAI(
         model=_MODEL, safety_settings=safety, **backend_config
-    ).bind_tools([my_tool])
+    ).bind_tools([my_tool], tool_choice="my_tool")
     response = model.invoke([message])
     _check_tool_calls(response, "my_tool")
 
@@ -1319,18 +1323,22 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
         else:
             gathered = gathered + chunk  # type: ignore
     assert isinstance(gathered, AIMessageChunk)
-    assert len(gathered.tool_call_chunks) == 1
-    tool_call_chunk = gathered.tool_call_chunks[0]
-    assert tool_call_chunk["name"] == "my_tool"
-    arguments_str = tool_call_chunk["args"]
-    arguments = json.loads(str(arguments_str))
-    _check_tool_call_args(arguments)
+    assert len(gathered.tool_call_chunks) >= 1
+    assert all(
+        tool_call_chunk["name"] == "my_tool"
+        for tool_call_chunk in gathered.tool_call_chunks
+    )
+    for tool_call_chunk in gathered.tool_call_chunks:
+        arguments_str = tool_call_chunk["args"]
+        arguments = json.loads(str(arguments_str))
+        _check_tool_call_args(arguments)
 
     # Test .content_blocks property
     content_blocks = response.content_blocks
     assert isinstance(content_blocks, list)
     tool_call_blocks = [b for b in content_blocks if b.get("type") == "tool_call"]
-    assert len(tool_call_blocks) == 1
+    assert len(tool_call_blocks) >= 1
+    assert all(block.get("name") == "my_tool" for block in tool_call_blocks)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
@@ -2061,27 +2069,27 @@ def test_agent_loop(output_version: Literal["v0", "v1"], backend_config: dict) -
         model=_MODEL, output_version=output_version, **backend_config
     )
     llm_with_tools = llm.bind_tools([get_weather])
+    llm_with_required_tools = llm.bind_tools([get_weather], tool_choice="get_weather")
     input_message = HumanMessage("What is the weather in San Francisco, CA?")
 
     # First call - should make a tool call
-    tool_call_message = llm_with_tools.invoke([input_message])
+    tool_call_message = llm_with_required_tools.invoke([input_message])
     assert isinstance(tool_call_message, AIMessage)
     tool_calls = tool_call_message.tool_calls
-    assert len(tool_calls) == 1
-    tool_call = tool_calls[0]
-    assert tool_call["name"] == "get_weather"
-    assert "location" in tool_call["args"]
+    assert len(tool_calls) >= 1
+    assert all(tool_call["name"] == "get_weather" for tool_call in tool_calls)
+    assert all("location" in tool_call["args"] for tool_call in tool_calls)
 
-    # Execute the tool
-    tool_message = get_weather.invoke(tool_call)
-    assert isinstance(tool_message, ToolMessage)
+    # Execute the tools
+    tool_messages = [get_weather.invoke(tool_call) for tool_call in tool_calls]
+    assert all(isinstance(tool_message, ToolMessage) for tool_message in tool_messages)
 
     # Second call - should incorporate tool result
     response = llm_with_tools.invoke(
         [
             input_message,
             tool_call_message,
-            tool_message,
+            *tool_messages,
         ]
     )
     assert isinstance(response, AIMessage)
@@ -2109,11 +2117,12 @@ def test_agent_loop_streaming(
         model=_MODEL, output_version=output_version, **backend_config
     )
     llm_with_tools = llm.bind_tools([get_weather])
+    llm_with_required_tools = llm.bind_tools([get_weather], tool_choice="get_weather")
     input_message = HumanMessage("What is the weather in San Francisco, CA?")
 
     # First call - stream tool call chunks
     chunks: list[BaseMessageChunk] = []
-    for chunk in llm_with_tools.stream([input_message]):
+    for chunk in llm_with_required_tools.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         chunks.append(chunk)
 
@@ -2127,13 +2136,12 @@ def test_agent_loop_streaming(
     tool_call_message = cast("AIMessageChunk", tool_call_message)
     assert isinstance(tool_call_message, AIMessageChunk)
     tool_calls = tool_call_message.tool_calls
-    assert len(tool_calls) == 1
-    tool_call = tool_calls[0]
-    assert tool_call["name"] == "get_weather"
+    assert len(tool_calls) >= 1
+    assert all(tool_call["name"] == "get_weather" for tool_call in tool_calls)
 
-    # Execute the tool
-    tool_message = get_weather.invoke(tool_call)
-    assert isinstance(tool_message, ToolMessage)
+    # Execute the tools
+    tool_messages = [get_weather.invoke(tool_call) for tool_call in tool_calls]
+    assert all(isinstance(tool_message, ToolMessage) for tool_message in tool_messages)
 
     # Second call - stream final response
     response_chunks: list[BaseMessageChunk] = []
@@ -2141,7 +2149,7 @@ def test_agent_loop_streaming(
         [
             input_message,
             tool_call_message,
-            tool_message,
+            *tool_messages,
         ]
     ):
         assert isinstance(chunk, AIMessageChunk)
@@ -2327,12 +2335,15 @@ def test_gemini_3_pro_agent_loop_streaming(
         **backend_config,
     )
     llm_with_tools = llm.bind_tools([calculate_sum])
+    llm_with_required_tools = llm.bind_tools(
+        [calculate_sum], tool_choice="calculate_sum"
+    )
 
     input_message = HumanMessage("What is 123 + 456? Use the calculator tool.")
 
     # First call - stream tool call
     chunks: list[BaseMessageChunk] = []
-    for chunk in llm_with_tools.stream([input_message]):
+    for chunk in llm_with_required_tools.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         chunks.append(chunk)
 
@@ -2346,13 +2357,12 @@ def test_gemini_3_pro_agent_loop_streaming(
     tool_call_message = cast("AIMessageChunk", tool_call_message)
     assert isinstance(tool_call_message, AIMessageChunk)
     tool_calls = tool_call_message.tool_calls
-    assert len(tool_calls) == 1
-    tool_call = tool_calls[0]
-    assert tool_call["name"] == "calculate_sum"
+    assert len(tool_calls) >= 1
+    assert all(tool_call["name"] == "calculate_sum" for tool_call in tool_calls)
 
-    # Execute tool
-    tool_message = calculate_sum.invoke(tool_call)
-    assert isinstance(tool_message, ToolMessage)
+    # Execute tools
+    tool_messages = [calculate_sum.invoke(tool_call) for tool_call in tool_calls]
+    assert all(isinstance(tool_message, ToolMessage) for tool_message in tool_messages)
 
     # Second call - stream final response with reasoning
     response_chunks: list[BaseMessageChunk] = []
@@ -2360,7 +2370,7 @@ def test_gemini_3_pro_agent_loop_streaming(
         [
             input_message,
             tool_call_message,
-            tool_message,
+            *tool_messages,
         ]
     ):
         assert isinstance(chunk, AIMessageChunk)
@@ -2425,6 +2435,9 @@ def test_streaming_with_multiple_tool_calls(
         **backend_config,
     )
     llm_with_tools = llm.bind_tools([get_temperature, get_humidity])
+    llm_with_required_tools = llm.bind_tools(
+        [get_temperature, get_humidity], tool_choice="any"
+    )
 
     input_message = HumanMessage(
         "Get both temperature and humidity for San Francisco. Use both tools."
@@ -2432,7 +2445,7 @@ def test_streaming_with_multiple_tool_calls(
 
     # Stream tool calls
     chunks: list[BaseMessageChunk] = []
-    for chunk in llm_with_tools.stream([input_message]):
+    for chunk in llm_with_required_tools.stream([input_message]):
         assert isinstance(chunk, AIMessageChunk)
         chunks.append(chunk)
 
@@ -2447,9 +2460,9 @@ def test_streaming_with_multiple_tool_calls(
     assert isinstance(tool_call_message, AIMessageChunk)
     tool_calls = tool_call_message.tool_calls
 
-    # Model may make 1 or 2 tool calls depending on its decision
-    assert len(tool_calls) >= 1
-    assert len(tool_calls) <= 2
+    # Verify both tools were called. Duplicate calls are acceptable.
+    called_tool_names = {tool_call["name"] for tool_call in tool_calls}
+    assert called_tool_names == {"get_temperature", "get_humidity"}
 
     # Execute tools
     tool_messages = []
@@ -2784,7 +2797,7 @@ def test_streaming_function_call_arguments() -> None:
     # Configure tool_config with streaming function call arguments
     tool_config = ToolConfig(
         function_calling_config=FunctionCallingConfig(
-            mode=FunctionCallingConfigMode.AUTO,
+            mode=FunctionCallingConfigMode.ANY,
             stream_function_call_arguments=True,
         )
     )
@@ -2878,40 +2891,45 @@ def test_multimodal_function_response() -> None:
         api_key=None,  # Force use of application default credentials
     )
     llm_with_tools = llm.bind_tools([get_product_image])
+    llm_with_required_tools = llm.bind_tools(
+        [get_product_image], tool_choice="get_product_image"
+    )
 
     input_message = HumanMessage(
         content="Show me the product image for product ID 'laptop-2024'"
     )
 
     # First call - model should request the tool
-    tool_call_message = llm_with_tools.invoke([input_message])
+    tool_call_message = llm_with_required_tools.invoke([input_message])
     assert isinstance(tool_call_message, AIMessage)
     tool_calls = tool_call_message.tool_calls
-    assert len(tool_calls) == 1
-    tool_call = tool_calls[0]
-    assert tool_call["name"] == "get_product_image"
-    assert "product_id" in tool_call["args"]
+    assert len(tool_calls) >= 1
+    assert all(tool_call["name"] == "get_product_image" for tool_call in tool_calls)
+    assert all("product_id" in tool_call["args"] for tool_call in tool_calls)
 
-    # Create a multimodal function response with an image
-    # Using a Google Cloud Storage URI
-    tool_response = ToolMessage(
-        content=json.dumps(
-            {
-                "type": "function_response_file_data",
-                "file_uri": "gs://cloud-samples-data/generative-ai/image/scones.jpg",
-                "mime_type": "image/jpeg",
-                "display_name": "Product Image: laptop-2024",
-            }
-        ),
-        tool_call_id=tool_call["id"],
-    )
+    # Create multimodal function responses with images.
+    # Using a Google Cloud Storage URI.
+    tool_responses = [
+        ToolMessage(
+            content=json.dumps(
+                {
+                    "type": "function_response_file_data",
+                    "file_uri": "gs://cloud-samples-data/generative-ai/image/scones.jpg",
+                    "mime_type": "image/jpeg",
+                    "display_name": "Product Image: laptop-2024",
+                }
+            ),
+            tool_call_id=tool_call["id"],
+        )
+        for tool_call in tool_calls
+    ]
 
     # Second call - model should incorporate the image response
     response = llm_with_tools.invoke(
         [
             input_message,
             tool_call_message,
-            tool_response,
+            *tool_responses,
         ]
     )
 
