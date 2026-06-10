@@ -33,6 +33,9 @@ from google.genai.types import (
     FunctionCall,
     FunctionDeclaration,
     FunctionResponse,
+    FunctionResponseBlob,
+    FunctionResponseFileData,
+    FunctionResponsePart,
     GenerateContentConfig,
     GenerateContentResponse,
     GenerationConfig,
@@ -656,17 +659,47 @@ def _convert_tool_message_to_parts(
     name = message.name or name or message.additional_kwargs.get("name")
     response: Any
     parts: list[Part] = []
+    function_response_parts: list[FunctionResponsePart] = []
     if isinstance(message.content, list):
         media_blocks = []
         other_blocks = []
         for block in message.content:
             if isinstance(block, dict) and (
-                is_data_content_block(block) or is_openai_data_block(block)
+                is_data_content_block(block)
+                or is_openai_data_block(block)
+                or block.get("type") in ("media", "file", "image_url")
             ):
                 media_blocks.append(block)
             else:
                 other_blocks.append(block)
-        parts.extend(_convert_to_parts(media_blocks, model=model))
+                
+        base_parts = _convert_to_parts(media_blocks, model=model)
+        for i, p in enumerate(base_parts):
+            original_block = media_blocks[i]
+            display_name = original_block.get("display_name")
+            if p.inline_data:
+                function_response_parts.append(
+                    FunctionResponsePart(
+                        inline_data=FunctionResponseBlob(
+                            data=p.inline_data.data,
+                            mime_type=p.inline_data.mime_type,
+                        )
+                    )
+                )
+                if display_name:
+                    function_response_parts[-1].inline_data.display_name = display_name
+            elif p.file_data:
+                function_response_parts.append(
+                    FunctionResponsePart(
+                        file_data=FunctionResponseFileData(
+                            file_uri=p.file_data.file_uri,
+                            mime_type=p.file_data.mime_type,
+                        )
+                    )
+                )
+                if display_name:
+                    function_response_parts[-1].file_data.display_name = display_name
+                    
         response = other_blocks
 
     elif not isinstance(message.content, str):
@@ -676,14 +709,15 @@ def _convert_tool_message_to_parts(
             response = json.loads(message.content)
         except json.JSONDecodeError:
             response = message.content  # leave as str representation
-    part = Part(
-        function_response=FunctionResponse(
-            name=name,
-            response=(
-                {"output": response} if not isinstance(response, dict) else response
-            ),
-        )
-    )
+            
+    function_response_kwargs: dict[str, Any] = {
+        "name": name,
+        "response": {"output": response} if not isinstance(response, dict) else response,
+    }
+    if function_response_parts:
+        function_response_kwargs["parts"] = function_response_parts
+
+    part = Part(function_response=FunctionResponse(**function_response_kwargs))
     parts.append(part)
     return parts
 
