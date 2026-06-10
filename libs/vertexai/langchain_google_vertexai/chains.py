@@ -77,7 +77,7 @@ def _create_structured_runnable_extra_step(
     output_parser = get_output_parser(functions)
     if prompt:
         initial_chain = (
-            prompt | llm | StrOutputParser() | parsing_prompt | llm_with_functions
+            prompt | llm | StrOutputParser() | parsing_prompt | llm_with_functions  # type: ignore[operator]
         )
     else:
         initial_chain = parsing_prompt | llm_with_functions
