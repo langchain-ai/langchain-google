@@ -678,27 +678,21 @@ def _convert_tool_message_to_parts(
             original_block = media_blocks[i]
             display_name = original_block.get("display_name")
             if p.inline_data:
-                function_response_parts.append(
-                    FunctionResponsePart(
-                        inline_data=FunctionResponseBlob(
-                            data=p.inline_data.data,
-                            mime_type=p.inline_data.mime_type,
-                        )
-                    )
+                blob = FunctionResponseBlob(
+                    data=p.inline_data.data,
+                    mime_type=p.inline_data.mime_type,
                 )
                 if display_name:
-                    function_response_parts[-1].inline_data.display_name = display_name
+                    blob.display_name = display_name
+                function_response_parts.append(FunctionResponsePart(inline_data=blob))
             elif p.file_data:
-                function_response_parts.append(
-                    FunctionResponsePart(
-                        file_data=FunctionResponseFileData(
-                            file_uri=p.file_data.file_uri,
-                            mime_type=p.file_data.mime_type,
-                        )
-                    )
+                file_data = FunctionResponseFileData(
+                    file_uri=p.file_data.file_uri,
+                    mime_type=p.file_data.mime_type,
                 )
                 if display_name:
-                    function_response_parts[-1].file_data.display_name = display_name
+                    file_data.display_name = display_name
+                function_response_parts.append(FunctionResponsePart(file_data=file_data))
 
         response = other_blocks
 
