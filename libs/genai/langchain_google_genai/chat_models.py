@@ -692,7 +692,9 @@ def _convert_tool_message_to_parts(
                 )
                 if display_name:
                     file_data.display_name = display_name
-                function_response_parts.append(FunctionResponsePart(file_data=file_data))
+                function_response_parts.append(
+                    FunctionResponsePart(file_data=file_data)
+                )
 
         response = other_blocks
 
