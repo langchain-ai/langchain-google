@@ -1,0 +1,19 @@
+libs/genai/tests/integration_tests/test_chat_models.py
+  s_1e49b668492ca3::t_06d1475a8d5770 1341
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "965ccd6f20270c552d36b948790af6a1ee44e610",
+  "prompts": {},
+  "sessions": {
+    "s_1e49b668492ca3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adb407eb-856d-420b-9b16-3055aef48212",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
