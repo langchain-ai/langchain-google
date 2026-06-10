@@ -1,0 +1,19 @@
+libs/vertexai/langchain_google_vertexai/chains.py
+  s_b54d92dc8d821c::t_41184c47d89302 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "678dc97ce7a93caa01f0626622d9424b544b8c9a",
+  "prompts": {},
+  "sessions": {
+    "s_b54d92dc8d821c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1449cea3-8ba1-496f-be2a-245c5cd1760e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
