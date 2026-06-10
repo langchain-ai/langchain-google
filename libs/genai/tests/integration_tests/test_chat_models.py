@@ -1338,7 +1338,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     assert isinstance(content_blocks, list)
     tool_call_blocks = [b for b in content_blocks if b.get("type") == "tool_call"]
     assert len(tool_call_blocks) >= 1
-    assert all(block["name"] == "my_tool" for block in tool_call_blocks)
+    assert all(block.get("name") == "my_tool" for block in tool_call_blocks)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
