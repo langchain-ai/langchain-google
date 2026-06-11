@@ -3623,13 +3623,41 @@ def test_convert_tool_message_to_parts_list_content_with_media() -> None:
         tool_call_id="123",
     )
     result = _convert_tool_message_to_parts(message)
-    assert len(result) == 2
-    # First part should be the media (image)
-    assert result[0].inline_data is not None
-    # Second part should be the function response
-    assert result[1].function_response is not None
-    assert result[1].function_response.name == "test_tool"
-    assert result[1].function_response.response == {"output": ["Text response"]}
+    assert len(result) == 1
+    # Function response should contain parts with media
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {"output": ["Text response"]}
+    assert result[0].function_response.parts is not None
+    assert len(result[0].function_response.parts) == 1
+    assert result[0].function_response.parts[0].inline_data is not None
+
+
+def test_convert_tool_message_to_parts_with_display_name() -> None:
+    """Test `_convert_tool_message_to_parts` preserves `display_name`."""
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            {
+                "type": "media",
+                "mime_type": "application/pdf",
+                "file_uri": "gs://bucket/file.pdf",
+                "display_name": "My Document",
+            },
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.parts is not None
+    assert len(result[0].function_response.parts) == 1
+    assert result[0].function_response.parts[0].file_data is not None
+    assert (
+        result[0].function_response.parts[0].file_data.file_uri
+        == "gs://bucket/file.pdf"
+    )
+    assert result[0].function_response.parts[0].file_data.display_name == "My Document"
 
 
 def test_convert_tool_message_to_parts_with_name_parameter() -> None:
