@@ -176,6 +176,46 @@ def test_base_url_support() -> None:
     assert "api_key" in call_kwargs
 
 
+@pytest.mark.parametrize(
+    ("location", "expected_base_url"),
+    [
+        ("us", "https://aiplatform.us.rep.googleapis.com"),
+        ("eu", "https://aiplatform.eu.rep.googleapis.com"),
+    ],
+)
+def test_vertexai_multiregion_location_uses_rep_endpoint(
+    location: str, expected_base_url: str
+) -> None:
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            vertexai=True,
+            project="test-project",
+            location=location,
+        )
+
+    mock_client.assert_called_once()
+    call_kwargs = mock_client.call_args.kwargs
+    assert call_kwargs["location"] == location
+    assert call_kwargs["http_options"].base_url == expected_base_url
+
+
+def test_vertexai_multiregion_location_preserves_custom_base_url() -> None:
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            vertexai=True,
+            project="test-project",
+            location="eu",
+            base_url="https://gateway.example.com/api/gemini",
+        )
+
+    call_kwargs = mock_client.call_args.kwargs
+    assert (
+        call_kwargs["http_options"].base_url == "https://gateway.example.com/api/gemini"
+    )
+
+
 def test_api_version_forwarded_to_http_options() -> None:
     """`api_version` is forwarded into `HttpOptions` for the embeddings client."""
     with patch("langchain_google_genai.embeddings.Client") as mock_client:

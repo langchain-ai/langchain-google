@@ -1,6 +1,6 @@
 import os
 from importlib import metadata
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, Field, SecretStr, model_validator
@@ -15,6 +15,10 @@ from langchain_google_genai._enums import (
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
+_VERTEXAI_MULTI_REGION_BASE_URLS = {
+    "us": "https://aiplatform.us.rep.googleapis.com",
+    "eu": "https://aiplatform.eu.rep.googleapis.com",
+}
 
 # Cache package version at module import time to avoid blocking I/O in async contexts
 try:
@@ -28,6 +32,53 @@ class GoogleGenerativeAIError(Exception):
 
 
 SafetySettingDict = dict[HarmCategory, HarmBlockThreshold]
+
+
+def _resolve_base_url(
+    base_url: str | dict | None,
+    *,
+    use_vertexai: bool,
+    location: str | None,
+) -> str | None:
+    """Resolve a custom base URL or Vertex AI multiregion endpoint.
+
+    Args:
+        base_url: The user-provided base URL or legacy `client_options` dict.
+        use_vertexai: Whether the client is using the Vertex AI backend.
+        location: Vertex AI location.
+
+    Returns:
+        Resolved base URL, if one should be passed to `HttpOptions`.
+
+    Raises:
+        ValueError: If legacy `client_options` does not contain only
+            `api_endpoint`.
+    """
+    if isinstance(base_url, dict):
+        if keys := list(base_url.keys()):
+            if "api_endpoint" in keys and len(keys) == 1:
+                base_url = cast("str", base_url["api_endpoint"])
+            elif "api_endpoint" in keys and len(keys) > 1:
+                msg = (
+                    "When providing base_url as a dict, it can only contain the "
+                    "api_endpoint key. Extra keys found: "
+                    f"{[k for k in keys if k != 'api_endpoint']}"
+                )
+                raise ValueError(msg)
+            else:
+                msg = (
+                    "When providing base_url as a dict, it must only contain the "
+                    "api_endpoint key."
+                )
+                raise ValueError(msg)
+        else:
+            msg = "base_url must be a string or a dict containing the api_endpoint key."
+            raise ValueError(msg)
+
+    if base_url is None and use_vertexai and location:
+        return _VERTEXAI_MULTI_REGION_BASE_URLS.get(location.lower())
+
+    return base_url
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -261,7 +312,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
         ): `https://generativelanguage.googleapis.com/`
     - **Vertex AI** (
         [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]):
-        `https://{location}-aiplatform.googleapis.com/`
+        `https://{location}-aiplatform.googleapis.com/` for regional locations,
+        or `https://aiplatform.{location}.rep.googleapis.com/` for the `us` and
+        `eu` multiregions.
 
     !!! note "Backwards compatibility"
 

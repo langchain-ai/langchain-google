@@ -710,6 +710,42 @@ def test_base_url_passed_to_client() -> None:
         assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
+@pytest.mark.parametrize(
+    ("location", "expected_base_url"),
+    [
+        ("us", "https://aiplatform.us.rep.googleapis.com"),
+        ("eu", "https://aiplatform.eu.rep.googleapis.com"),
+    ],
+)
+def test_vertexai_multiregion_location_uses_rep_endpoint(
+    location: str, expected_base_url: str
+) -> None:
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model="gemini-3.1-flash-lite",
+            vertexai=True,
+            project="test-project",
+            location=location,
+        )
+        call_kwargs = mock_client.call_args_list[0].kwargs
+        call_http_options = call_kwargs["http_options"]
+        assert call_kwargs["location"] == location
+        assert call_http_options.base_url == expected_base_url
+
+
+def test_vertexai_multiregion_location_preserves_custom_base_url() -> None:
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model="gemini-3.1-flash-lite",
+            vertexai=True,
+            project="test-project",
+            location="us",
+            base_url="https://gateway.example.com/api/gemini",
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.base_url == "https://gateway.example.com/api/gemini"
+
+
 def test_api_version_defaults_to_none() -> None:
     """`api_version` is unset by default, deferring to the SDK's default."""
     with patch("langchain_google_genai.chat_models.Client") as mock_client:
