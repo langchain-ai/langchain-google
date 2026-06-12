@@ -1440,8 +1440,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **For Gemini Developer API** (simplest):
 
         1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
-        2. Pass your API key using the [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
-            parameter
+        2. Pass your API key using the `api_key` parameter
 
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -1508,8 +1507,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         For SOCKS5 proxies or advanced proxy configuration, use the
-        [`client_args`][langchain_google_genai.ChatGoogleGenerativeAI.client_args]
-        parameter:
+        `client_args` parameter:
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -2012,14 +2010,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-        Gemini 2.5 models use [`thinking_budget`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_budget]
+        Gemini 2.5 models use `thinking_budget`
         (an integer token count) to control reasoning. Set to `0` to disable thinking
         (where supported), or `-1` for dynamic thinking.
 
         See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
         more details on thinking models.
 
-        To see a thinking model's thoughts, set [`include_thoughts=True`][langchain_google_genai.ChatGoogleGenerativeAI.include_thoughts]
+        To see a thinking model's thoughts, set `include_thoughts=True`
         to have the model's reasoning summaries included in the response.
 
         ```python
