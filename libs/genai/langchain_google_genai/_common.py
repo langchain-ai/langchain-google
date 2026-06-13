@@ -201,10 +201,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
     If `None` (default), backend is automatically determined as follows:
 
     1. If the `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses Vertex AI
-    2. If the [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]
-        parameter is provided, uses Vertex AI
-    3. If the [`project`][langchain_google_genai.ChatGoogleGenerativeAI.project]
-        parameter is provided, uses Vertex AI
+    2. If the `credentials` parameter is provided, uses Vertex AI
+    3. If the `project` parameter is provided, uses Vertex AI
     4. Otherwise, uses Gemini Developer API
 
     Set explicitly to `True` or `False` to override auto-detection.
@@ -255,12 +253,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     If not provided, defaults depend on the API being used:
 
-    - **Gemini Developer API** (
-        [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]/
-        [`google_api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
-        ): `https://generativelanguage.googleapis.com/`
-    - **Vertex AI** (
-        [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]):
+    - **Gemini Developer API** (`api_key`/`google_api_key`):
+        `https://generativelanguage.googleapis.com/`
+    - **Vertex AI** (`credentials`):
         `https://{location}-aiplatform.googleapis.com/`
 
     !!! note "Backwards compatibility"
