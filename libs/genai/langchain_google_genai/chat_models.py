@@ -432,7 +432,7 @@ def _convert_to_parts(
                             thought_signature = sig
 
                         if thought_signature:
-                            pass
+                            part_kwargs["thought_signature"] = thought_signature
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
