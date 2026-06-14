@@ -124,7 +124,7 @@ class TestVertexFSVectorStore_fs_vectorstore:
     ) -> None:
         ids = TestVertexFSVectorStore_fs_vectorstore.ids[0:2]
 
-        retrieved_docs = await store_fs_vectorstore.aget_documents(ids=ids)
+        retrieved_docs = store_fs_vectorstore.get_documents(ids=ids)
         assert len(retrieved_docs) == 2
 
     @pytest.mark.extended

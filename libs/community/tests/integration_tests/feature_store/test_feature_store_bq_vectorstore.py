@@ -135,7 +135,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
-        docs = await store_bq_vectorstore.aget_documents(filter='kind="fruit"')
+        docs = store_bq_vectorstore.get_documents(filter='kind="fruit"')
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
@@ -146,7 +146,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
-        docs = await store_bq_vectorstore.aget_documents(
+        docs = store_bq_vectorstore.get_documents(
             filter='kind="fruit" OR kind="treat"'
         )
         kinds = [d.metadata["kind"] for d in docs]
@@ -172,7 +172,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
-        docs = await existing_store_bq_vectorstore.aget_documents(filter='kind="fruit"')
+        docs = existing_store_bq_vectorstore.get_documents(filter='kind="fruit"')
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
@@ -205,7 +205,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with metadata filter."""
-        docs = await store_bq_vectorstore.aget_documents(filter={"kind": "fruit"})
+        docs = store_bq_vectorstore.get_documents(filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
@@ -229,7 +229,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with metadata filter."""
-        docs = await existing_store_bq_vectorstore.aget_documents(
+        docs = existing_store_bq_vectorstore.get_documents(
             filter={"kind": "fruit"}
         )
         kinds = [d.metadata["kind"] for d in docs]
@@ -243,10 +243,10 @@ class TestBigQueryVectorStore_bq_vectorstore:
     ) -> None:
         """Test retrieving documents by their IDs."""
         # Get the first two documents
-        first_two_docs = await store_bq_vectorstore.aget_documents()[:2]
+        first_two_docs = store_bq_vectorstore.get_documents()[:2]
         ids_to_retrieve = [doc.metadata["__id"] for doc in first_two_docs]
         # Retrieve them by their IDs
-        retrieved_docs = await store_bq_vectorstore.aget_documents(ids_to_retrieve)
+        retrieved_docs = store_bq_vectorstore.get_documents(ids_to_retrieve)
         assert len(retrieved_docs) == 2
         # Check that the content and metadata match
         for orig_doc, retrieved_doc in zip(first_two_docs, retrieved_docs):
@@ -266,7 +266,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         )
         assert len(ids) == 2  # Ensure we got IDs back
         # Verify the documents were added correctly
-        retrieved_docs = await store_bq_vectorstore.aget_documents(ids)
+        retrieved_docs = store_bq_vectorstore.get_documents(ids)
         assert retrieved_docs[0].page_content == "chocolate"
         assert retrieved_docs[1].page_content == "mars"
         assert retrieved_docs[0].metadata["kind"] == "treat"
@@ -286,8 +286,8 @@ class TestBigQueryVectorStore_bq_vectorstore:
         )
         # Retrieve addeds documents and
         # retrieved documents them by their IDs and filters
-        orig_docs = await store_bq_vectorstore.aget_documents(ids=ids)
-        retrieved_docs = await store_bq_vectorstore.aget_documents(
+        orig_docs = store_bq_vectorstore.get_documents(ids=ids)
+        retrieved_docs = store_bq_vectorstore.get_documents(
             ids=ids, filter='kind="mammal" AND content="dog"'
         )
         assert len(retrieved_docs) == 1
@@ -314,14 +314,14 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test deleting documents by their IDs."""
-        doc_to_delete = await store_bq_vectorstore.aget_documents()[0]
+        doc_to_delete = store_bq_vectorstore.get_documents()[0]
         id_to_delete = doc_to_delete.metadata["__id"]
         # Delete the document
         delete_result = await store_bq_vectorstore.adelete([id_to_delete])
         assert delete_result is True  # Deletion should succeed
         # Try to retrieve the deleted document
 
-        result = await store_bq_vectorstore.aget_documents([id_to_delete])
+        result = store_bq_vectorstore.get_documents([id_to_delete])
         assert result == []
 
     @pytest.mark.extended
@@ -330,7 +330,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
     ) -> None:
         """Test batch search with queries and embeddings."""
         # Batch search with queries
-        query_results = await store_bq_vectorstore.abatch_search(
+        query_results = store_bq_vectorstore.batch_search(
             queries=["apple", "treat"]
         )
         assert len(query_results) == 2  # 2 queries
@@ -340,7 +340,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
 
         # Batch search with embeddings
         embeddings = store_bq_vectorstore.embedding.embed_documents(["apple", "treat"])
-        embedding_results = await store_bq_vectorstore.abatch_search(
+        embedding_results = store_bq_vectorstore.batch_search(
             embeddings=embeddings
         )
         assert len(embedding_results) == 2  # 2 embeddings
