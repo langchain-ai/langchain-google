@@ -1,5 +1,4 @@
 import os
-import sys
 import libcst as cst
 from libcst.metadata import PositionProvider
 

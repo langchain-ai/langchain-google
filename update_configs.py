@@ -1,4 +1,3 @@
-import os
 import re
 
 def update_pyproject():

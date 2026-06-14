@@ -509,6 +509,7 @@ test = [
 ]
 test-integration = [
     { name = "pytest" },
+    { name = "pytest-xdist" },
 ]
 typing = [
     { name = "mypy" },
@@ -544,7 +545,10 @@ test = [
     { name = "pytest-xdist", specifier = ">=3.8.0,<4.0.0" },
     { name = "syrupy", specifier = ">=4.9.0,<6.0.0" },
 ]
-test-integration = [{ name = "pytest", specifier = ">=8.4.0,<10.0.0" }]
+test-integration = [
+    { name = "pytest", specifier = ">=8.4.0,<10.0.0" },
+    { name = "pytest-xdist", specifier = ">=3.8.0,<4.0.0" },
+]
 typing = [
     { name = "mypy", specifier = ">=1.18.1,<1.21.0" },
     { name = "numpy", specifier = ">=1.26.2" },

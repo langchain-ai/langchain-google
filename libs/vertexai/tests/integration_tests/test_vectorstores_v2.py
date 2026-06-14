@@ -511,7 +511,7 @@ async def test_vector_store_v2_text_search(
     await asyncio.sleep(5)
 
     # Perform text search for exact keyword match
-    results = await vector_store.atext_search(
+    results = vector_store.text_search(
         query="Python",
         k=3,
         data_field_names=["page_content"],
