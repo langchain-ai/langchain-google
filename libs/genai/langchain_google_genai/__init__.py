@@ -60,5 +60,6 @@ __all__ = [
     "HarmCategory",
     "MediaResolution",
     "Modality",
+    "__version__",
     "create_context_cache",
 ]
