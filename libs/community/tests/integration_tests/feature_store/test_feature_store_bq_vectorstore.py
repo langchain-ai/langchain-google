@@ -146,9 +146,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
-        docs = store_bq_vectorstore.get_documents(
-            filter='kind="fruit" OR kind="treat"'
-        )
+        docs = store_bq_vectorstore.get_documents(filter='kind="fruit" OR kind="treat"')
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" in kinds
@@ -229,9 +227,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with metadata filter."""
-        docs = existing_store_bq_vectorstore.get_documents(
-            filter={"kind": "fruit"}
-        )
+        docs = existing_store_bq_vectorstore.get_documents(filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
@@ -330,9 +326,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
     ) -> None:
         """Test batch search with queries and embeddings."""
         # Batch search with queries
-        query_results = store_bq_vectorstore.batch_search(
-            queries=["apple", "treat"]
-        )
+        query_results = store_bq_vectorstore.batch_search(queries=["apple", "treat"])
         assert len(query_results) == 2  # 2 queries
         assert all(
             len(result) > 0 for result in query_results
@@ -340,9 +334,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
 
         # Batch search with embeddings
         embeddings = store_bq_vectorstore.embedding.embed_documents(["apple", "treat"])
-        embedding_results = store_bq_vectorstore.batch_search(
-            embeddings=embeddings
-        )
+        embedding_results = store_bq_vectorstore.batch_search(embeddings=embeddings)
         assert len(embedding_results) == 2  # 2 embeddings
         assert all(len(result) > 0 for result in embedding_results)
 

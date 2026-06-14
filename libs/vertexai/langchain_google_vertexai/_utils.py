@@ -206,7 +206,7 @@ def get_generation_info(
             "usage_metadata": usage_metadata,
             "finish_reason": _get_finish_reason_string(candidate.finish_reason),
             "finish_message": (
-                candidate.finish_message or None
+                candidate.finish_message if candidate.finish_message else None
             ),
         }
 
