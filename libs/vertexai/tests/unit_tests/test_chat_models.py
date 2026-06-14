@@ -100,6 +100,7 @@ def test_init() -> None:
             "ls_max_tokens": 10,
             "ls_stop": ["bar"],
         }
+        assert llm.metadata is not None
         assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     # Test initialization with an invalid argument to check warning

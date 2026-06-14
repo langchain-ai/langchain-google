@@ -99,6 +99,7 @@ def test_integration_initialization() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
     assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     # Ensure temperature is propagated to request config

@@ -41,6 +41,7 @@ def test_model_name() -> None:
     ]:
         assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.max_output_tokens == 10
+        assert llm.metadata is not None
         assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     # Test initialization with an invalid argument to check warning
@@ -76,6 +77,7 @@ def test_model_garden_sets_version(_mock_client: Any, _mock_async_client: Any) -
         endpoint_id="test-endpoint",
         location="us-central1",
     )
+    assert llm.metadata is not None
     assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
     assert "langchain-core" in llm.metadata["lc_versions"]
 

@@ -24,6 +24,7 @@ def test_tracing_params() -> None:
         "ls_model_name": MODEL_NAME,
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
     assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     llm = GoogleGenerativeAI(

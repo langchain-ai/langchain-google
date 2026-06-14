@@ -23,8 +23,10 @@ from langchain_core.language_models.llms import create_base_retry_decorator
 from pydantic import ConfigDict, model_validator
 from typing_extensions import Self
 
-from langchain_google_vertexai._base import _VertexAIBase
-from langchain_google_vertexai._version import __version__
+from langchain_google_vertexai._base import (
+    _add_langchain_google_vertexai_version,
+    _VertexAIBase,
+)
 
 _MISTRAL_MODELS: list[str] = ["mistral-medium-3", "mistral-small-2503", "codestral-2"]
 _LLAMA_MODELS: list[str] = [
@@ -144,7 +146,7 @@ class _BaseVertexMaasModelGarden(_VertexAIBase):
     @model_validator(mode="after")
     def _set_langchain_google_vertexai_version(self) -> Self:
         """Set package version in metadata."""
-        self._add_version("langchain-google-vertexai", __version__)
+        _add_langchain_google_vertexai_version(self)
         return self
 
     @model_validator(mode="after")

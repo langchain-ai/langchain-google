@@ -55,9 +55,12 @@ from langchain_google_vertexai._anthropic_utils import (
     _tools_in_params,
     convert_to_anthropic_tool,
 )
-from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+from langchain_google_vertexai._base import (
+    _add_langchain_google_vertexai_version,
+    _BaseVertexAIModelGarden,
+    _VertexAICommon,
+)
 from langchain_google_vertexai._retry import create_base_retry_decorator
-from langchain_google_vertexai._version import __version__
 from langchain_google_vertexai.data.anthropic._profiles import (
     _PROFILES as _ANTHROPIC_PROFILES,
 )
@@ -105,7 +108,7 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     @model_validator(mode="after")
     def _set_langchain_google_vertexai_version(self) -> Self:
         """Set package version in metadata."""
-        self._add_version("langchain-google-vertexai", __version__)
+        _add_langchain_google_vertexai_version(self)
         return self
 
     def _generate(

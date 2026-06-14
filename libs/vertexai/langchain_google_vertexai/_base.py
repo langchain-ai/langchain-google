@@ -7,6 +7,7 @@ from typing import (
     Any,
     ClassVar,
     Literal,
+    Protocol,
     cast,
 )
 
@@ -54,6 +55,18 @@ from langchain_google_vertexai._utils import (
 from langchain_google_vertexai._version import __version__
 
 _DEFAULT_LOCATION = "us-central1"
+
+
+class _VersionedLanguageModel(Protocol):
+    # LangChain language models provide this private helper at runtime, but the
+    # public base type used here does not expose it for mypy.
+    def _add_version(self, pkg: str, version: str) -> None: ...
+
+
+def _add_langchain_google_vertexai_version(model: Any) -> None:
+    cast("_VersionedLanguageModel", model)._add_version(
+        "langchain-google-vertexai", __version__
+    )
 
 
 class _VertexAIBase(BaseModel):
@@ -304,7 +317,7 @@ class _VertexAICommon(_VertexAIBase):
     @model_validator(mode="after")
     def _set_langchain_google_vertexai_version(self) -> Self:
         """Set package version in metadata."""
-        self._add_version("langchain-google-vertexai", __version__)
+        _add_langchain_google_vertexai_version(self)
         return self
 
     @property
