@@ -1,0 +1,31 @@
+libs/genai/langchain_google_genai/chat_models.py
+  s_316c5507c65dd7::t_0de60d33624c4e 2470
+libs/vertexai/langchain_google_vertexai/_base.py
+  s_316c5507c65dd7::t_9153fff56545df 305
+libs/genai/langchain_google_genai/llms.py
+  s_316c5507c65dd7::t_a41b90156bb9b0 68
+libs/vertexai/langchain_google_vertexai/model_garden_maas/_base.py
+  s_316c5507c65dd7::t_eae8a993cee9ef 145
+libs/vertexai/tests/unit_tests/test_llm.py
+  s_316c5507c65dd7::t_f120d0cdf31ca8 69
+  s_316c5507c65dd7::t_78382c6846168b 22
+  s_316c5507c65dd7::t_c8560ce12b3140 67-68,70-82
+libs/vertexai/langchain_google_vertexai/model_garden.py
+  s_316c5507c65dd7::t_60e868cf0fa7ec 106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "a401a3366b5916d0016063c0a4f8cf9c1cf191e1",
+  "prompts": {},
+  "sessions": {
+    "s_316c5507c65dd7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "31ddb895-7b86-4eee-a692-4841e3c7b62a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
