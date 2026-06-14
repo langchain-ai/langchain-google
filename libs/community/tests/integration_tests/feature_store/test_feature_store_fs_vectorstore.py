@@ -76,18 +76,22 @@ class TestVertexFSVectorStore_fs_vectorstore:
     ]
 
     @pytest.mark.extended
-    def test_semantic_search(self, store_fs_vectorstore: VertexFSVectorStore) -> None:
+    async def test_semantic_search(
+        self, store_fs_vectorstore: VertexFSVectorStore
+    ) -> None:
         """Test on semantic similarity."""
-        docs = store_fs_vectorstore.similarity_search("fruit", k=2)
+        docs = await store_fs_vectorstore.asimilarity_search("fruit", k=2)
         kinds = [d.metadata["kind"] for d in docs]
         assert len(kinds) == 2
 
     @pytest.mark.extended
-    def test_semantic_search_filter_fruits(
+    async def test_semantic_search_filter_fruits(
         self, store_fs_vectorstore: VertexFSVectorStore
     ) -> None:
         """Test on semantic similarity with metadata filter."""
-        docs = store_fs_vectorstore.similarity_search("apple", filter={"kind": "fruit"})
+        docs = await store_fs_vectorstore.asimilarity_search(
+            "apple", filter={"kind": "fruit"}
+        )
         kinds = [d.metadata["kind"] for d in docs]
         assert "fruit" in kinds
         assert "treat" not in kinds
@@ -115,7 +119,9 @@ class TestVertexFSVectorStore_fs_vectorstore:
             )
 
     @pytest.mark.extended
-    def test_get_doc_by_ids(self, store_fs_vectorstore: VertexFSVectorStore) -> None:
+    async def test_get_doc_by_ids(
+        self, store_fs_vectorstore: VertexFSVectorStore
+    ) -> None:
         ids = TestVertexFSVectorStore_fs_vectorstore.ids[0:2]
 
         retrieved_docs = store_fs_vectorstore.get_documents(ids=ids)
@@ -131,7 +137,7 @@ class TestVertexFSVectorStore_fs_vectorstore:
 
 
 @pytest.mark.extended
-def test_psc_feature_store() -> None:
+async def test_psc_feature_store() -> None:
     """Test creation of feature store with private service connect enabled"""
     # ruff: noqa: E501
     from google.cloud.aiplatform_v1.services.feature_online_store_service.transports.grpc import (
@@ -157,4 +163,4 @@ def test_psc_feature_store() -> None:
         )
     finally:
         # Clean up resources
-        vertex_fs.online_store.delete()
+        await vertex_fs.online_store.adelete()

@@ -54,6 +54,7 @@ test = [
     "protobuf>=6.33.5,<8.0.0",
 ]
 test_integration = [
+    "pytest-xdist>=3.8.0,<4.0.0",
     "pytest>=8.4.0,<10.0.0",
 ]
 

@@ -17,10 +17,10 @@ from langchain_google_vertexai.vision_models import (
         "https://cloud.google.com/vertex-ai/generative-ai/docs/image/image-captioning"
     )
 )
-def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
+async def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
     # This should work
     model = VertexAIImageCaptioningChat()
-    response = model.invoke(
+    response = await model.ainvoke(
         input=[
             HumanMessage(
                 content=[{"type": "image_url", "image_url": {"url": base64_image}}]
@@ -33,7 +33,7 @@ def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
     # Content should be an image
     with pytest.raises(ValueError):
         model = VertexAIImageCaptioningChat()
-        response = model.invoke(
+        response = await model.ainvoke(
             input=[
                 HumanMessage(content="Text message"),
             ]
@@ -42,7 +42,7 @@ def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
     # Not more than one message allowed
     with pytest.raises(ValueError):
         model = VertexAIImageCaptioningChat()
-        response = model.invoke(
+        response = await model.ainvoke(
             input=[
                 HumanMessage(content=base64_image),
                 HumanMessage(content="Follow up"),
@@ -56,12 +56,12 @@ def test_vertex_ai_image_captioning_chat(base64_image: str) -> None:
         "https://cloud.google.com/vertex-ai/generative-ai/docs/image/image-captioning"
     )
 )
-def test_vertex_ai_image_captioning(base64_image: str) -> None:
+async def test_vertex_ai_image_captioning(base64_image: str) -> None:
     model = VertexAIImageCaptioning()
-    response = model.invoke(base64_image)
+    response = await model.ainvoke(base64_image)
     assert isinstance(response, str)
 
-    response = model.invoke(base64_image, language="de")
+    response = await model.ainvoke(base64_image, language="de")
     assert isinstance(response, str)
 
 
@@ -71,11 +71,11 @@ def test_vertex_ai_image_captioning(base64_image: str) -> None:
         "https://cloud.google.com/vertex-ai/generative-ai/docs/image/image-captioning"
     )
 )
-def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
+async def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
     model = VertexAIVisualQnAChat()
 
     # This should work
-    response = model.invoke(
+    response = await model.ainvoke(
         input=[
             HumanMessage(
                 content=[
@@ -87,7 +87,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
     )
     assert isinstance(response, AIMessage)
 
-    response = model.invoke(
+    response = await model.ainvoke(
         input=[
             HumanMessage(
                 content=[
@@ -102,7 +102,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
     # This should not work, the image must be first
 
     with pytest.raises(ValueError):
-        response = model.invoke(
+        response = await model.ainvoke(
             input=[
                 HumanMessage(
                     content=[
@@ -115,7 +115,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
 
     # This should not work, only one message with multiparts allowed
     with pytest.raises(ValueError):
-        response = model.invoke(
+        response = await model.ainvoke(
             input=[
                 HumanMessage(content=base64_image),
                 HumanMessage(content="What color is the image?"),
@@ -124,7 +124,7 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
 
     # This should not work, only one message with multiparts allowed
     with pytest.raises(ValueError):
-        response = model.invoke(
+        response = await model.ainvoke(
             input=[
                 HumanMessage(content=base64_image),
                 HumanMessage(content="What color is the image?"),
@@ -136,11 +136,11 @@ def test_vertex_ai_visual_qna_chat(base64_image: str) -> None:
 
 @pytest.mark.release
 @pytest.mark.xfail(reason="Started raising 500 error on 2026-01-26.")
-def test_vertex_ai_image_generation_and_edition() -> None:
+async def test_vertex_ai_image_generation_and_edition() -> None:
     generator = VertexAIImageGeneratorChat()
 
     messages = [HumanMessage(content=["Generate a dog reading the newspaper"])]
-    response = generator.invoke(messages)
+    response = await generator.ainvoke(messages)
     assert isinstance(response, AIMessage)
 
     generated_image = response.content[0]
@@ -154,12 +154,12 @@ def test_vertex_ai_image_generation_and_edition() -> None:
 
     chain = prompt | model
 
-    response = chain.invoke({"img_object": "cat", "img_context": "beach"})
+    response = await chain.ainvoke({"img_object": "cat", "img_context": "beach"})
     assert isinstance(response, AIMessage)
 
     editor = VertexAIImageEditorChat()
 
     messages = [HumanMessage(content=[generated_image, "Change the dog for a cat"])]
 
-    response = editor.invoke(messages)
+    response = await editor.ainvoke(messages)
     assert isinstance(response, AIMessage)
