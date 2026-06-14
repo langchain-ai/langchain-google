@@ -121,6 +121,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
+from langchain_google_genai._version import __version__
 from langchain_google_genai.data._profiles import _PROFILES
 
 logger = logging.getLogger(__name__)
@@ -2464,6 +2465,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         all_required_field_names = get_pydantic_field_names(cls)
         return _build_model_kwargs(values, all_required_field_names)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_genai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-genai", __version__)
+        return self
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:

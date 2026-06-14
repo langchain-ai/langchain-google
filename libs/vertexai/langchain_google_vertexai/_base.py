@@ -51,6 +51,7 @@ from langchain_google_vertexai._utils import (
     get_client_info,
     get_user_agent,
 )
+from langchain_google_vertexai._version import __version__
 
 _DEFAULT_LOCATION = "us-central1"
 
@@ -299,6 +300,12 @@ class _VertexAICommon(_VertexAIBase):
         description="Timeout for API requests.",
     )
     """The timeout for requests to the Vertex AI API, in seconds."""
+
+    @model_validator(mode="after")
+    def _set_langchain_google_vertexai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-vertexai", __version__)
+        return self
 
     @property
     def _llm_type(self) -> str:

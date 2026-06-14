@@ -13,11 +13,13 @@ from google.cloud.aiplatform_v1beta1.types import (
 from pydantic import model_validator
 from typing_extensions import Self
 
+from langchain_google_vertexai import __version__
 from langchain_google_vertexai._base import (
     _BaseVertexAIModelGarden,
     _get_prediction_client,
 )
 from langchain_google_vertexai.llms import VertexAI
+from langchain_google_vertexai.model_garden import VertexAIModelGarden
 from tests.integration_tests.conftest import (
     _DEFAULT_MODEL_NAME,
 )
@@ -39,6 +41,7 @@ def test_model_name() -> None:
     ]:
         assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.max_output_tokens == 10
+        assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     # Test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.llms.logger.warning") as mock_warning:
@@ -59,6 +62,22 @@ def test_model_name() -> None:
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
         assert "Did you mean: 'safety_settings'?" in call_args
+
+
+@patch("langchain_google_vertexai._base.PredictionServiceAsyncClient")
+@patch("langchain_google_vertexai._base.PredictionServiceClient")
+def test_model_garden_sets_version(_mock_client: Any, _mock_async_client: Any) -> None:
+    # VertexAIModelGarden defines its own ``_set_*_version`` validator (it does not
+    # inherit ``_VertexAICommon``), so it needs dedicated coverage. Asserting the
+    # ``langchain-core`` entry also coexists guards against a same-named validator
+    # silently clobbering core's seeded entry.
+    llm = VertexAIModelGarden(
+        project="test-project",
+        endpoint_id="test-endpoint",
+        location="us-central1",
+    )
+    assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
+    assert "langchain-core" in llm.metadata["lc_versions"]
 
 
 def test_tuned_model_name() -> None:

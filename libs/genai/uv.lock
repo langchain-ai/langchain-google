@@ -459,7 +459,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.4.4"
+version = "1.4.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -472,9 +472,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/51/76/bbae1ed44a1362504d2b8a11a947890aeee7075b6e0649235de9d150d982/langchain_core-1.4.4.tar.gz", hash = "sha256:30409ffa24da1dd984a4164c4266dc8079e5379e41cb36d00356130e80be0405", size = 937710, upload-time = "2026-06-10T21:24:02.904Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/2b/fffaff399d20a56d40b9562fa19701e91abd72d8c9d9bc8c2673077b56b6/langchain_core-1.4.7.tar.gz", hash = "sha256:7a825d77de0a3f39adbd9d09612a75e85527e14a52c1601089bcc062972d9f2b", size = 952522, upload-time = "2026-06-12T19:23:57.588Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/1f/1c8b89b116ae979af829c2e0f4cde984fd674dc0fa58ee5e69c0af1d3606/langchain_core-1.4.4-py3-none-any.whl", hash = "sha256:36c2eb73e67bfab28455016f7a4044ffde4343485b8dad104a2b194ff21319d2", size = 551732, upload-time = "2026-06-10T21:24:01.765Z" },
+    { url = "https://files.pythonhosted.org/packages/de/3e/dcdffa60078ae7b3a00ebb4cbbf1a204a14c3609983c604886523a7d4418/langchain_core-1.4.7-py3-none-any.whl", hash = "sha256:bcadd51951140ecdcba98311dbd931ba5de02a5ba8a2288dad5069c1eea2a13d", size = 554941, upload-time = "2026-06-12T19:23:55.826Z" },
 ]
 
 [[package]]
@@ -523,7 +523,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-genai", specifier = ">=1.65.0,<3.0.0" },
-    { name = "langchain-core", specifier = ">=1.4.4,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.4.7,<2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 

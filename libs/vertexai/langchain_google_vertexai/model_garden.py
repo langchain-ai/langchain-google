@@ -57,6 +57,7 @@ from langchain_google_vertexai._anthropic_utils import (
 )
 from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
 from langchain_google_vertexai._retry import create_base_retry_decorator
+from langchain_google_vertexai._version import __version__
 from langchain_google_vertexai.data.anthropic._profiles import (
     _PROFILES as _ANTHROPIC_PROFILES,
 )
@@ -100,6 +101,12 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_vertexai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-vertexai", __version__)
+        return self
 
     def _generate(
         self,
