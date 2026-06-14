@@ -93,14 +93,14 @@ def output_parser(
 
 
 @pytest.mark.extended
-def test_integration_parse(
+async def test_integration_parse(
     output_parser: VertexAICheckGroundingWrapper,
     input_documents: List[Document],
 ) -> None:
     answer_candidate = "Ulm, in the Kingdom of Württemberg in the German Empire"
-    response = output_parser.with_config(
+    response = await output_parser.with_config(
         configurable={"documents": input_documents}
-    ).invoke(answer_candidate)
+    ).ainvoke(answer_candidate)
 
     assert isinstance(response, VertexAICheckGroundingWrapper.CheckGroundingResponse)
     assert response.support_score >= 0 and response.support_score <= 1

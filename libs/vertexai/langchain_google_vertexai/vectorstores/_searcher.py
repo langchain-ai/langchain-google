@@ -451,9 +451,9 @@ class VectorSearchSearcher(Searcher):
         for matching_neighbor_list in response:
             query_results = []
             for neighbor in matching_neighbor_list:
-                dense_score = neighbor.distance if neighbor.distance else 0.0
+                dense_score = neighbor.distance or 0.0
                 sparse_score = (
-                    neighbor.sparse_distance if neighbor.sparse_distance else 0.0
+                    neighbor.sparse_distance or 0.0
                 )
                 result = {
                     "doc_id": neighbor.id,

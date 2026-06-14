@@ -36,9 +36,7 @@ _LLAMA_MODELS: list[str] = [
 def _get_token(credentials: Credentials | None = None) -> str:
     """Returns a valid token for GCP auth."""
     credentials = (
-        credentials
-        if credentials
-        else auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])[0]
+        credentials or auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])[0]
     )
     request = auth_requests.Request()
     credentials.refresh(request)

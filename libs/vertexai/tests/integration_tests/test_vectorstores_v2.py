@@ -1,4 +1,5 @@
 """Test Vertex AI API wrapper for V2.
+import asyncio
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 Additionally in order to run the test you must have set the following environment
@@ -9,8 +10,8 @@ variables:
   (default: langchain-test-collection)
 """
 
+import asyncio
 import os
-import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -160,16 +161,16 @@ def semantic_search_collection():
 
 
 @pytest.mark.extended
-def test_vector_store_v2_add_texts_and_dense_search(
+async def test_vector_store_v2_add_texts_and_dense_search(
     vector_store_v2: VectorSearchVectorStore,
 ):
     """Tests adding texts and performing a dense search in V2."""
     texts = ["my favourite animal is the elephant", "my favourite animal is the lion"]
     ids = [str(uuid4()), str(uuid4())]
-    vector_store_v2.add_texts(texts=texts, ids=ids)
+    await vector_store_v2.aadd_texts(texts=texts, ids=ids)
 
     query = "What are your favourite animals?"
-    docs = vector_store_v2.similarity_search(query, k=2)
+    docs = await vector_store_v2.asimilarity_search(query, k=2)
     assert len(docs) == 2
     for doc in docs:
         assert isinstance(doc, Document)
@@ -182,7 +183,7 @@ def test_vector_store_v2_add_texts_and_dense_search(
     )
 )
 @pytest.mark.extended
-def test_vector_store_v2_hybrid_search(
+async def test_vector_store_v2_hybrid_search(
     vector_store_v2: VectorSearchVectorStore, embeddings: VertexAIEmbeddings
 ):
     """Tests hybrid search in V2.
@@ -192,7 +193,7 @@ def test_vector_store_v2_hybrid_search(
     """
     texts = ["my favourite car is a porsche", "my favourite car is a lamborghini"]
     ids = [str(uuid4()), str(uuid4())]
-    vector_store_v2.add_texts(texts=texts, ids=ids)
+    await vector_store_v2.aadd_texts(texts=texts, ids=ids)
 
     query = "What are your favourite cars?"
     embedding = embeddings.embed_query(query)
@@ -213,7 +214,7 @@ def test_vector_store_v2_hybrid_search(
 
 
 @pytest.mark.extended
-def test_vector_store_v2_advanced_filtering(
+async def test_vector_store_v2_advanced_filtering(
     vector_store_v2: VectorSearchVectorStore,
 ):
     """Tests advanced filtering in V2 with dict-based queries."""
@@ -227,11 +228,13 @@ def test_vector_store_v2_advanced_filtering(
         ),
     ]
     ids = [str(uuid4()) for _ in docs_to_add]
-    vector_store_v2.add_documents(docs_to_add, ids=ids)
+    await vector_store_v2.aadd_documents(docs_to_add, ids=ids)
 
     # Use dict filter
     filter_dict = {"$and": [{"color": {"$eq": "blue"}}, {"price": {"$lt": 15000}}]}
-    documents = vector_store_v2.similarity_search("A vehicle", filter=filter_dict, k=10)
+    documents = await vector_store_v2.asimilarity_search(
+        "A vehicle", filter=filter_dict, k=10
+    )
 
     assert len(documents) > 0
     assert all(doc.metadata["color"] == "blue" for doc in documents)
@@ -239,12 +242,12 @@ def test_vector_store_v2_advanced_filtering(
 
 
 @pytest.mark.extended
-def test_vector_store_v2_return_full_datapoint(
+async def test_vector_store_v2_return_full_datapoint(
     vector_store_v2: VectorSearchVectorStore, embeddings: VertexAIEmbeddings
 ):
     """Tests the return_full_datapoint feature in V2."""
     texts = ["a document about cats", "a document about dogs"]
-    vector_store_v2.add_texts(texts=texts)
+    await vector_store_v2.aadd_texts(texts=texts)
 
     query_embedding = embeddings.embed_query("pets")
     docs_with_scores = vector_store_v2.similarity_search_by_vector_with_score(
@@ -260,25 +263,25 @@ def test_vector_store_v2_return_full_datapoint(
 
 
 @pytest.mark.extended
-def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore):
+async def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore):
     """Tests deleting documents by IDs in V2."""
     texts = ["doc to delete", "doc to keep"]
     delete_id = f"delete_me_{str(uuid4())}"
     keep_id = f"keep_me_{str(uuid4())}"
     ids = [delete_id, keep_id]
-    vector_store_v2.add_texts(texts=texts, ids=ids)
+    await vector_store_v2.aadd_texts(texts=texts, ids=ids)
 
     # Wait for indexing (eventual consistency)
-    time.sleep(10)
+    await asyncio.sleep(10)
 
-    vector_store_v2.delete(ids=[delete_id])
+    await vector_store_v2.adelete(ids=[delete_id])
 
     # Wait for deletion to propagate
-    time.sleep(10)
+    await asyncio.sleep(10)
 
     # Verify the deleted document is not in results
     # Use large k value to thoroughly check the collection
-    results = vector_store_v2.similarity_search("doc", k=100)
+    results = await vector_store_v2.asimilarity_search("doc", k=100)
     result_ids = [doc.metadata.get("id") for doc in results]
     assert delete_id not in result_ids, (
         f"Deleted ID {delete_id} should not be in results"
@@ -286,7 +289,9 @@ def test_vector_store_v2_delete_by_ids(vector_store_v2: VectorSearchVectorStore)
 
 
 @pytest.mark.extended
-def test_vector_store_v2_delete_by_filter(vector_store_v2: VectorSearchVectorStore):
+async def test_vector_store_v2_delete_by_filter(
+    vector_store_v2: VectorSearchVectorStore,
+):
     """Tests deleting documents by filter in V2 using the recommended workaround.
 
     Note: Direct delete by metadata filter has API limitations in V2.
@@ -304,13 +309,13 @@ def test_vector_store_v2_delete_by_filter(vector_store_v2: VectorSearchVectorSto
         ),
     ]
     ids = [str(uuid4()) for _ in docs_to_add]
-    vector_store_v2.add_documents(docs_to_add, ids=ids)
+    await vector_store_v2.aadd_documents(docs_to_add, ids=ids)
 
     # Wait for indexing (eventual consistency)
-    time.sleep(3)
+    await asyncio.sleep(3)
 
     # Use the recommended workaround: search with filter, then delete by IDs
-    results_to_delete = vector_store_v2.similarity_search(
+    results_to_delete = await vector_store_v2.asimilarity_search(
         "document", k=100, filter={"source": {"$eq": "delete_me"}}
     )
     ids_to_delete: list[str] = [
@@ -322,13 +327,13 @@ def test_vector_store_v2_delete_by_filter(vector_store_v2: VectorSearchVectorSto
     # Only proceed with delete if we found documents
     # (test may be affected by eventual consistency)
     if ids_to_delete:
-        vector_store_v2.delete(ids=ids_to_delete)
+        await vector_store_v2.adelete(ids=ids_to_delete)
 
         # Wait for deletion to propagate
-        time.sleep(2)
+        await asyncio.sleep(2)
 
         # Verify deletion worked - check that delete_me docs are gone
-        results = vector_store_v2.similarity_search("document", k=100)
+        results = await vector_store_v2.asimilarity_search("document", k=100)
         deleted_docs = [
             doc for doc in results if doc.metadata.get("source") == "delete_me"
         ]
@@ -339,7 +344,7 @@ def test_vector_store_v2_delete_by_filter(vector_store_v2: VectorSearchVectorSto
 
 
 @pytest.mark.extended
-def test_vector_store_v2_semantic_search(
+async def test_vector_store_v2_semantic_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
     """Tests semantic search in V2 with auto-generated embeddings."""
@@ -412,7 +417,7 @@ def test_vector_store_v2_semantic_search(
     data_client.batch_create_data_objects(request=request)
 
     # Wait for indexing and embedding generation
-    time.sleep(5)
+    await asyncio.sleep(5)
 
     # Perform semantic search - embeddings are generated automatically
     results = vector_store.semantic_search(
@@ -433,7 +438,7 @@ def test_vector_store_v2_semantic_search(
 
 
 @pytest.mark.extended
-def test_vector_store_v2_text_search(
+async def test_vector_store_v2_text_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
     """Tests text/keyword search in V2."""
@@ -503,10 +508,10 @@ def test_vector_store_v2_text_search(
     data_client.batch_create_data_objects(request=request)
 
     # Wait for indexing
-    time.sleep(5)
+    await asyncio.sleep(5)
 
     # Perform text search for exact keyword match
-    results = vector_store.text_search(
+    results = await vector_store.atext_search(
         query="Python",
         k=3,
         data_field_names=["page_content"],
@@ -519,7 +524,7 @@ def test_vector_store_v2_text_search(
 
 
 @pytest.mark.extended
-def test_vector_store_v2_semantic_text_hybrid_search(
+async def test_vector_store_v2_semantic_text_hybrid_search(
     semantic_search_collection, embeddings: VertexAIEmbeddings
 ):
     """Tests hybrid search (semantic + text with RRF) in V2."""
@@ -594,7 +599,7 @@ def test_vector_store_v2_semantic_text_hybrid_search(
     data_client.batch_create_data_objects(request=request)
 
     # Wait for indexing and embedding generation
-    time.sleep(5)
+    await asyncio.sleep(5)
 
     # Perform hybrid search - combines semantic understanding + keyword matching
     results = vector_store.hybrid_search(
