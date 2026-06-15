@@ -50,7 +50,12 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
-from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai import (
+    HarmBlockThreshold,
+    HarmCategory,
+    Modality,
+    __version__,
+)
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
@@ -94,6 +99,8 @@ def test_integration_initialization() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     # Ensure temperature is propagated to request config
     msg = HumanMessage(content="test")

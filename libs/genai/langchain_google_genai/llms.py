@@ -18,6 +18,7 @@ from typing_extensions import Self
 from langchain_google_genai._common import (
     _BaseGoogleGenerativeAI,
 )
+from langchain_google_genai._version import __version__
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,12 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
                     f"provided to GoogleGenerativeAI.{suggestion}"
                 )
         super().__init__(**kwargs)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_genai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-genai", __version__)
+        return self
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:

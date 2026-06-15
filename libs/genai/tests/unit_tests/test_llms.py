@@ -8,6 +8,7 @@ from google.genai.types import (
 )
 from pydantic import SecretStr
 
+from langchain_google_genai import __version__
 from langchain_google_genai.llms import GoogleGenerativeAI
 
 MODEL_NAME = "gemini-2.5-flash"
@@ -23,6 +24,8 @@ def test_tracing_params() -> None:
         "ls_model_name": MODEL_NAME,
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     llm = GoogleGenerativeAI(
         model=MODEL_NAME,

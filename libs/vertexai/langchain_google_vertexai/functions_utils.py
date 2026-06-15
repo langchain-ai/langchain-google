@@ -198,11 +198,15 @@ def _format_base_tool_to_function_declaration(
             ),
         )
 
-    if hasattr(tool.args_schema, "model_json_schema"):
-        schema = tool.args_schema.model_json_schema(mode="serialization")
+    args_schema = tool.args_schema
+    if isinstance(args_schema, dict):
+        schema = args_schema
+        pydantic_version = "v2"
+    elif hasattr(args_schema, "model_json_schema"):
+        schema = args_schema.model_json_schema(mode="serialization")
         pydantic_version = "v2"
     else:
-        schema = tool.args_schema.schema()  # type: ignore[attr-defined]
+        schema = args_schema.schema()
         pydantic_version = "v1"
 
     parameters = _dict_to_gapic_schema(schema, pydantic_version=pydantic_version)
