@@ -881,6 +881,9 @@ def test_chat_vertexai_gemini_image_output() -> None:
         if isinstance(item, str):
             text_element = item
             break
+        elif isinstance(item, dict) and item.get("type") == "text":
+            text_element = item.get("text")
+            break
     assert text_element is not None, "Did not find the expected text content"
 
 
