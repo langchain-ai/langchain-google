@@ -1,0 +1,19 @@
+libs/vertexai/tests/integration_tests/test_chat_models.py
+  s_2e7b4191f12a70::t_117495bb73949c 884-886
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "c37d0fb7c9fed28130de23e571d6419136e02a6d",
+  "prompts": {},
+  "sessions": {
+    "s_2e7b4191f12a70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "353fc9d6-c973-4133-8cc2-956758cf8f35",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
