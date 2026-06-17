@@ -1509,10 +1509,14 @@ async def test_thinking_params_preserved_with_structured_output(
 
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("use_streaming", [False, True])
-async def test_model_methods_without_eventloop(
+def test_model_methods_without_eventloop(
     is_async: bool, use_streaming: bool, backend_config: dict
 ) -> None:
-    """Test `invoke` and `stream` (sync & async) without event loop."""
+    """Test `invoke` and `stream` (sync & async) without event loop.
+
+    This test must remain synchronous: it deliberately drives the async methods
+    via `asyncio.run()`, which raises if called from a running event loop.
+    """
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     if use_streaming:
@@ -1535,7 +1539,7 @@ async def test_model_methods_without_eventloop(
 
             invoke_result = asyncio.run(model_ainvoke("How can you help me?"))
         else:
-            invoke_result = await model.ainvoke("How can you help me?")
+            invoke_result = model.invoke("How can you help me?")
 
         assert isinstance(invoke_result, AIMessage)
 
