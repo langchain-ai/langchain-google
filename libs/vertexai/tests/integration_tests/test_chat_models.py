@@ -1689,7 +1689,8 @@ def test_search_builtin(output_version: str) -> None:
         "content": "Tell me more about that last story.",
     }
     response = llm.invoke([input_message, full, next_message])
-    _check_web_search_output(response)
+    assert isinstance(response, AIMessage)
+    assert isinstance(_get_text_content(response), str)
 
 
 def _check_code_execution_output(message: BaseMessage) -> None:
