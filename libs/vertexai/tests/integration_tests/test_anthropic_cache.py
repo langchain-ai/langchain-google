@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from tests.integration_tests.conftest import _get_text_content
 
 
 @pytest.mark.extended
@@ -27,7 +28,7 @@ def test_anthropic_system_cache() -> None:
 
     response = model.invoke([context, message], model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
     assert response.usage_metadata is not None
     assert "cache_creation_input_tokens" in response.response_metadata["usage"]
 
@@ -63,7 +64,7 @@ def test_anthropic_mixed_cache() -> None:
 
     response = model.invoke([context, message], model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
     assert response.usage_metadata is not None
 
 
@@ -106,8 +107,7 @@ def test_anthropic_conversation_cache() -> None:
 
     response = model.invoke(messages, model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "peter" in response.content.lower()  # Should remember the name
+    assert "peter" in _get_text_content(response).lower()
 
 
 @pytest.mark.extended
@@ -140,5 +140,4 @@ def test_anthropic_chat_template_cache() -> None:
     )
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "Paris" in response.content
+    assert "Paris" in _get_text_content(response)

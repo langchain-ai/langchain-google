@@ -56,6 +56,7 @@ from tests.integration_tests.conftest import (
     _DEFAULT_IMAGE_GENERATION_MODEL_NAME,
     _DEFAULT_MODEL_NAME,
     _DEFAULT_THINKING_MODEL_NAME,
+    _get_text_content,
 )
 
 model_names_to_test = [_DEFAULT_MODEL_NAME]
@@ -82,8 +83,7 @@ def _check_usage_metadata(message: AIMessage) -> None:
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     """Check tool calls are as expected."""
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
+    assert _get_text_content(response) == ""
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
     assert function_call["name"] == expected_name
@@ -141,7 +141,7 @@ def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> 
     message = HumanMessage(content="Hello")
     response = model.invoke([message])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
     _check_usage_metadata(response)
 
 
@@ -259,7 +259,7 @@ def test_multimodal() -> None:
     }
     message = HumanMessage(content=[text_message, image_message])
     output = llm.invoke([message])
-    assert isinstance(output.content, str)
+    assert isinstance(_get_text_content(output), str)
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
@@ -302,7 +302,7 @@ def test_multimodal_media_file_uri(file_uri, mime_type) -> None:
     }
     message = HumanMessage(content=[text_message, media_message])
     output = llm.invoke([message])
-    assert isinstance(output.content, str)
+    assert isinstance(_get_text_content(output), str)
 
 
 @pytest.mark.release
@@ -325,7 +325,7 @@ def test_multimodal_media_inline_base64(file_uri, mime_type) -> None:
     }
     message = HumanMessage(content=[text_message, media_message])
     output = llm.invoke([message])
-    assert isinstance(output.content, str)
+    assert isinstance(_get_text_content(output), str)
 
 
 @pytest.mark.release
@@ -360,7 +360,7 @@ def test_multimodal_media_inline_base64_template() -> None:
     media_base64 = base64.b64encode(blob.download_as_bytes()).decode()
     chain = prompt_template | llm
     output = chain.invoke({"media_base64": media_base64, "mime_type": mime_type})
-    assert isinstance(output.content, str)
+    assert isinstance(_get_text_content(output), str)
 
 
 @pytest.mark.extended
@@ -426,9 +426,10 @@ def test_audio_timestamp() -> None:
 
     message = HumanMessage(content=[media_message, text_message])
     output = llm.invoke([message], audio_timestamp=True)
+    content_text = _get_text_content(output)
 
-    assert isinstance(output.content, str)
-    assert re.search(r"(\d{2}:\d{2}:?|\[\d{2}:\d{2}:\d{2}\])", output.content)
+    assert isinstance(content_text, str)
+    assert re.search(r"(\d{2}:\d{2}:?|\[\d{2}:\d{2}:\d{2}\])", content_text)
 
 
 def test_parse_history_gemini_multimodal_FC() -> None:
@@ -485,7 +486,7 @@ def test_multimodal_video_metadata(file_uri, mime_type) -> None:
 
     message = HumanMessage(content=[text_message, media_message])
     output = llm.invoke([message])
-    assert isinstance(output.content, str)
+    assert isinstance(_get_text_content(output), str)
 
 
 @pytest.mark.release
@@ -499,7 +500,7 @@ def test_vertexai_single_call_with_history(model_name: str | None) -> None:
     message3 = HumanMessage(content=text_question2)
     response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
 
 
 @pytest.mark.release
@@ -512,8 +513,7 @@ def test_vertexai_system_message() -> None:
     response = model.invoke([sys_message, message1])
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert "london" in response.content.lower()
+    assert "london" in _get_text_content(response).lower()
 
 
 @pytest.mark.release
@@ -526,7 +526,7 @@ def test_vertexai_single_call_with_no_system_messages() -> None:
     message3 = HumanMessage(content=text_question2)
     response = model.invoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
 
 
 @pytest.mark.release
@@ -559,7 +559,7 @@ def test_vertexai_single_call_previous_blocked_response() -> None:
     message2 = HumanMessage(content=text_question2)
     response = model.invoke([message1, message2])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
 
 
 @pytest.mark.release
@@ -658,8 +658,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_any() -> None:
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     response = model.invoke([message])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content == ""
+    assert _get_text_content(response) == ""
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
     assert function_call["name"] == "MyModel"
@@ -692,8 +691,7 @@ def test_chat_vertexai_gemini_function_calling_tool_config_none() -> None:
     message = HumanMessage(content="My name is Erick and I am 27 years old")
     response = model.invoke([message])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    assert response.content != ""
+    assert _get_text_content(response) != ""
     function_call = response.additional_kwargs.get("function_call")
     assert function_call is None
 
@@ -852,8 +850,20 @@ def test_chat_vertexai_gemini_function_calling_with_multiple_parts() -> None:
     result = llm_with_search.invoke([request, response, *tool_messages])
 
     assert isinstance(result, AIMessage)
-    assert "brown" in result.content[0]["text"]  # type: ignore
+    text_blocks = [block for block in result.content_blocks if block["type"] == "text"]
+    assert any("brown" in block["text"] for block in text_blocks)
     assert len(result.tool_calls) == 0
+
+
+def _check_gemini_image_output(message: AIMessage) -> None:
+    content_blocks = message.content_blocks
+
+    image_blocks = [block for block in content_blocks if block["type"] == "image"]
+    assert image_blocks, f"Did not find the expected image content: {content_blocks}"
+
+    text_blocks = [block for block in content_blocks if block["type"] == "text"]
+    for block in text_blocks:
+        assert isinstance(block["text"], str)
 
 
 # Image Generation is knwown to be flaky.
@@ -867,24 +877,7 @@ def test_chat_vertexai_gemini_image_output() -> None:
     result = model.invoke("Generate an image of a cat. Then, say meow!")
 
     assert isinstance(result, AIMessage)
-    assert isinstance(result.content, list)
-
-    image_element = None
-    for item in result.content:
-        if isinstance(item, dict) and item.get("type") == "image_url":
-            image_element = item
-            break
-    assert image_element is not None, "Did not find the expected image content"
-
-    text_element = None
-    for item in result.content:
-        if isinstance(item, str):
-            text_element = item
-            break
-        elif isinstance(item, dict) and item.get("type") == "text":
-            text_element = item.get("text")
-            break
-    assert text_element is not None, "Did not find the expected text content"
+    _check_gemini_image_output(result)
 
 
 # Image Generation is knwown to be flaky.
@@ -898,24 +891,7 @@ def test_chat_vertexai_gemini_image_output_with_generation_config() -> None:
     )
 
     assert isinstance(result, AIMessage)
-    assert isinstance(result.content, list)
-
-    image_element = None
-    for item in result.content:
-        if isinstance(item, dict) and item.get("type") == "image_url":
-            image_element = item
-            break
-    assert image_element is not None, "Did not find the expected image content"
-
-    text_element = None
-    for item in result.content:
-        if isinstance(item, str):
-            text_element = item
-            break
-        elif isinstance(item, dict) and item.get("type") == "text":
-            text_element = item.get("text")
-            break
-    assert text_element is not None, "Did not find the expected text content"
+    _check_gemini_image_output(result)
 
 
 # Marking the following 6 as flaky because it has been observed that gemini 2.5 models
@@ -953,27 +929,28 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
-def _check_thinking_output(content: list, output_version: str) -> None:
+def _check_thinking_output(message: AIMessageChunk, output_version: str) -> None:
+    content_blocks = message.content_blocks
+    assert content_blocks[-1]["type"] == "text"
+    assert isinstance(content_blocks[-1]["text"], str)
+
     if output_version == "v0":
-        thinking_key = "thinking"
-        assert isinstance(content[-1], str)
-
+        thinking_blocks = [
+            block
+            for block in content_blocks
+            if block["type"] == "non_standard"
+            and block["value"].get("type") == "thinking"
+        ]
+        assert thinking_blocks
+        for block in thinking_blocks:
+            assert isinstance(block["value"]["thinking"], str)
     else:
-        # v1
-        thinking_key = "reasoning"
-        assert isinstance(content[-1], dict)
-        assert content[-1].get("type") == "text"
-        assert isinstance(content[-1].get("text"), str)
-
-    assert isinstance(content, list)
-    thinking_blocks = [
-        item
-        for item in content
-        if isinstance(item, dict) and item.get("type") == thinking_key
-    ]
-    assert thinking_blocks
-    for block in thinking_blocks:
-        assert isinstance(block[thinking_key], str)
+        thinking_blocks = [
+            block for block in content_blocks if block["type"] == "reasoning"
+        ]
+        assert thinking_blocks
+        for block in thinking_blocks:
+            assert isinstance(block["reasoning"], str)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
@@ -999,7 +976,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
 
-    _check_thinking_output(cast("list", full.content), output_version)
+    _check_thinking_output(full, output_version)
 
     assert full.usage_metadata is not None
     assert full.usage_metadata["output_token_details"]["reasoning"] > 0
@@ -1120,8 +1097,7 @@ def test_structured_output_schema_json() -> None:
     response = model.invoke("List a few popular cookie recipes")
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-    parsed_response = json.loads(response.content)
+    parsed_response = json.loads(_get_text_content(response))
     assert isinstance(parsed_response, list)
     assert len(parsed_response) > 0
     assert "recipe_name" in parsed_response[0]
@@ -1192,9 +1168,7 @@ def test_structured_output_schema_enum() -> None:
     )
 
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
-
-    assert response.content in ("drama", "comedy", "documentary")
+    assert _get_text_content(response) in ("drama", "comedy", "documentary")
 
 
 @pytest.mark.extended
@@ -1247,14 +1221,9 @@ def test_context_catching() -> None:
     response = chat.invoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
-    if isinstance(response.content, str):
-        content_text = response.content
-    else:
-        content_text = " ".join(
-            block.get("text", "")
-            for block in response.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
+    content_text = " ".join(
+        block["text"] for block in response.content_blocks if block["type"] == "text"
+    )
     assert isinstance(content_text, str)
 
     # Using cached content in request
@@ -1262,14 +1231,9 @@ def test_context_catching() -> None:
     response = chat.invoke("What is the secret number?", cached_content=cached_content)
 
     assert isinstance(response, AIMessage)
-    if isinstance(response.content, str):
-        content_text = response.content
-    else:
-        content_text = " ".join(
-            block.get("text", "")
-            for block in response.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
+    content_text = " ".join(
+        block["text"] for block in response.content_blocks if block["type"] == "text"
+    )
     assert isinstance(content_text, str)
 
 
@@ -1679,7 +1643,7 @@ def test_vertexai_global_location_single_call(
     message = HumanMessage(content="Hello")
     response = model.invoke([message])
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
     _check_usage_metadata(response)
 
 
@@ -1701,21 +1665,14 @@ def test_nested_bind_tools() -> None:
     assert response.tool_calls[0]["name"] == "People"
 
 
-def _check_web_search_output(message: AIMessage, output_version: str) -> None:
+def _check_web_search_output(message: BaseMessage) -> None:
     assert "grounding_metadata" in message.response_metadata
 
-    # Lazy parsing
     content_blocks = message.content_blocks
     text_blocks = [block for block in content_blocks if block["type"] == "text"]
     assert len(text_blocks) == 1
     text_block = text_blocks[0]
     assert text_block["annotations"]
-
-    if output_version == "v1":
-        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[misc,index]
-        assert len(text_blocks) == 1
-        text_block = text_blocks[0]
-        assert text_block["annotations"]
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
@@ -1735,7 +1692,7 @@ def test_search_builtin(output_version: str) -> None:
         assert isinstance(chunk, AIMessageChunk)
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
-    _check_web_search_output(full, output_version)
+    _check_web_search_output(full)
 
     # Test we can process chat history
     next_message = {
@@ -1743,21 +1700,10 @@ def test_search_builtin(output_version: str) -> None:
         "content": "Tell me more about that last story.",
     }
     response = llm.invoke([input_message, full, next_message])
-    _check_web_search_output(response, output_version)
+    _check_web_search_output(response)
 
 
-def _check_code_execution_output(message: AIMessage, output_version: str) -> None:
-    if output_version == "v0":
-        blocks = [block for block in message.content if isinstance(block, dict)]
-        expected_block_types = {"executable_code", "code_execution_result"}
-        assert {block.get("type") for block in blocks} == expected_block_types
-
-    else:
-        # v1
-        expected_block_types = {"server_tool_call", "server_tool_result", "text"}
-        assert {block["type"] for block in message.content} == expected_block_types  # type: ignore[index]
-
-    # Lazy parsing
+def _check_code_execution_output(message: BaseMessage) -> None:
     expected_block_types = {"server_tool_call", "server_tool_result", "text"}
     assert {block["type"] for block in message.content_blocks} == expected_block_types
 
@@ -1778,7 +1724,7 @@ def test_code_execution_builtin(output_version: str) -> None:
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
 
-    _check_code_execution_output(full, output_version)
+    _check_code_execution_output(full)
 
     # Test passing back in chat history without raising errors
     next_message = {
@@ -1786,7 +1732,7 @@ def test_code_execution_builtin(output_version: str) -> None:
         "content": "Can you show me the calculation again with comments?",
     }
     response = llm.invoke([input_message, full, next_message])
-    _check_code_execution_output(response, output_version)
+    _check_code_execution_output(response)
 
 
 @pytest.mark.release
