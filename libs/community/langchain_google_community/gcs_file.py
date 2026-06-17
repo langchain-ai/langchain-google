@@ -72,7 +72,7 @@ class GCSFileLoader(BaseLoader):
                 message = (
                     "UnstructuredFileLoader loader not found! Either provide a "
                     "custom loader with loader_func argument, or install "
-                    "`pip install langchain-google-community`"
+                    "`pip install langchain-community`"
                 )
                 print(message)
             return UnstructuredFileLoader(file_path)
