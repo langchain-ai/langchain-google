@@ -929,28 +929,17 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     )
 
 
-def _check_thinking_output(message: AIMessageChunk, output_version: str) -> None:
+def _check_thinking_output(message: AIMessageChunk) -> None:
     content_blocks = message.content_blocks
     assert content_blocks[-1]["type"] == "text"
     assert isinstance(content_blocks[-1]["text"], str)
 
-    if output_version == "v0":
-        thinking_blocks = [
-            block
-            for block in content_blocks
-            if block["type"] == "non_standard"
-            and block["value"].get("type") == "thinking"
-        ]
-        assert thinking_blocks
-        for thinking_block in thinking_blocks:
-            assert isinstance(thinking_block["value"]["thinking"], str)
-    else:
-        reasoning_blocks = [
-            block for block in content_blocks if block["type"] == "reasoning"
-        ]
-        assert reasoning_blocks
-        for reasoning_block in reasoning_blocks:
-            assert isinstance(reasoning_block["reasoning"], str)
+    reasoning_blocks = [
+        block for block in content_blocks if block["type"] == "reasoning"
+    ]
+    assert reasoning_blocks
+    for reasoning_block in reasoning_blocks:
+        assert isinstance(reasoning_block["reasoning"], str)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
@@ -976,7 +965,7 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
         full = chunk if full is None else full + chunk
     assert isinstance(full, AIMessageChunk)
 
-    _check_thinking_output(full, output_version)
+    _check_thinking_output(full)
 
     assert full.usage_metadata is not None
     assert full.usage_metadata["output_token_details"]["reasoning"] > 0

@@ -7,9 +7,7 @@ _DEFAULT_IMAGE_GENERATION_MODEL_NAME = "gemini-2.5-flash-image"
 
 
 def _get_text_content(message: BaseMessage) -> str:
-    content_blocks = message.content_blocks
-    text_blocks = [block for block in content_blocks if block["type"] == "text"]
-    assert len(text_blocks) == len(content_blocks)
+    text_blocks = [block for block in message.content_blocks if block["type"] == "text"]
     return " ".join(block["text"] for block in text_blocks)
 
 
