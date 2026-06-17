@@ -942,15 +942,15 @@ def _check_thinking_output(message: AIMessageChunk, output_version: str) -> None
             and block["value"].get("type") == "thinking"
         ]
         assert thinking_blocks
-        for block in thinking_blocks:
-            assert isinstance(block["value"]["thinking"], str)
+        for thinking_block in thinking_blocks:
+            assert isinstance(thinking_block["value"]["thinking"], str)
     else:
-        thinking_blocks = [
+        reasoning_blocks = [
             block for block in content_blocks if block["type"] == "reasoning"
         ]
-        assert thinking_blocks
-        for block in thinking_blocks:
-            assert isinstance(block["reasoning"], str)
+        assert reasoning_blocks
+        for reasoning_block in reasoning_blocks:
+            assert isinstance(reasoning_block["reasoning"], str)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
