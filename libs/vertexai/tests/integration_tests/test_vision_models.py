@@ -11,6 +11,22 @@ from langchain_google_vertexai.vision_models import (
 )
 
 
+def _get_first_image_content_part(
+    message: AIMessage,
+) -> dict[str, dict[str, str] | str]:
+    image_blocks = [
+        block for block in message.content_blocks if block["type"] == "image"
+    ]
+    assert image_blocks
+    image_block = image_blocks[0]
+    return {
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:{image_block['mime_type']};base64,{image_block['base64']}"
+        },
+    }
+
+
 @pytest.mark.skip(
     reason=(
         "Image captioning is deprecated: "
@@ -143,7 +159,7 @@ async def test_vertex_ai_image_generation_and_edition() -> None:
     response = await generator.ainvoke(messages)
     assert isinstance(response, AIMessage)
 
-    generated_image = response.content[0]
+    generated_image = _get_first_image_content_part(response)
 
     model = VertexAIImageGeneratorChat()
 

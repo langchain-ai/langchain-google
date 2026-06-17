@@ -3,6 +3,7 @@ import os
 import pytest
 
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from tests.integration_tests.conftest import _get_text_content
 
 AVG_CHARS_PER_TOKEN = 4
 
@@ -63,7 +64,7 @@ async def test_long_context_init():
     )
 
     response = await llm.ainvoke(long_prompt, model_name="claude-sonnet-4@20250514")
-    print(response.content)
+    print(_get_text_content(response))
 
 
 @pytest.mark.skip(reason="too long & expensive")
@@ -81,4 +82,4 @@ async def test_long_context_args():
         model_name="claude-sonnet-4@20250514",
         betas=["context-1m-2025-08-07"],
     )
-    print(response.content)
+    print(_get_text_content(response))
