@@ -137,7 +137,7 @@ class TestVertexFSVectorStore_fs_vectorstore:
 
 
 @pytest.mark.extended
-async def test_psc_feature_store() -> None:
+def test_psc_feature_store() -> None:
     """Test creation of feature store with private service connect enabled"""
     # ruff: noqa: E501
     from google.cloud.aiplatform_v1.services.feature_online_store_service.transports.grpc import (
@@ -163,4 +163,6 @@ async def test_psc_feature_store() -> None:
         )
     finally:
         # Clean up resources
-        await vertex_fs.online_store.adelete()
+        # `online_store` is a Vertex AI SDK `FeatureOnlineStore` object, not a
+        # LangChain runnable, so it only exposes the synchronous `delete()`.
+        vertex_fs.online_store.delete()
