@@ -1,0 +1,23 @@
+libs/community/tests/unit_tests/test_gcs_file.py
+  s_5f09aef12b5de4::t_8f42e7abbe3511 1-34
+libs/community/langchain_google_community/gcs_file.py
+  s_5f09aef12b5de4::t_8f42e7abbe3511 25-28,46,81
+libs/community/langchain_google_community/gcs_directory.py
+  s_5f09aef12b5de4::t_8f42e7abbe3511 24-27,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "45b511a4b482ea001189c3784e85705edb5b02de",
+  "prompts": {},
+  "sessions": {
+    "s_5f09aef12b5de4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbce-45d3-7d53-a34d-d29d3a6d7f39",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
