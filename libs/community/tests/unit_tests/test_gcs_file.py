@@ -1,5 +1,6 @@
 """Unit tests for the GCS file loader."""
 
+from collections.abc import Mapping, Sequence
 from unittest.mock import patch
 
 import pytest
@@ -17,10 +18,16 @@ def test_gcs_file_loader_default_loader_missing_langchain_community() -> None:
 
     original_import = __import__
 
-    def mock_import(name: str, *args: object, **kwargs: object) -> object:
+    def mock_import(
+        name: str,
+        globals_: Mapping[str, object] | None = None,
+        locals_: Mapping[str, object] | None = None,
+        fromlist: Sequence[str] | None = (),
+        level: int = 0,
+    ) -> object:
         if name == "langchain_community.document_loaders.unstructured":
             raise ImportError("No module named 'langchain_community'")
-        return original_import(name, *args, **kwargs)
+        return original_import(name, globals_, locals_, fromlist, level)
 
     with (
         patch("builtins.__import__", side_effect=mock_import),
