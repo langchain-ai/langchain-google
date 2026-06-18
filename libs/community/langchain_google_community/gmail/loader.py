@@ -3,7 +3,7 @@ import re
 from typing import Any, Iterator
 
 from googleapiclient.discovery import build  # type: ignore[import]
-from langchain_community.chat_loaders.base import BaseChatLoader
+from langchain_core.chat_loaders import BaseChatLoader
 from langchain_core.chat_sessions import ChatSession
 from langchain_core.messages import HumanMessage
 
@@ -67,7 +67,7 @@ class GMailLoader(BaseChatLoader):
     """Load chat sessions from Gmail.
 
     Inherits from
-    [`BaseChatLoader`][langchain_community.chat_loaders.base.BaseChatLoader].
+    [`BaseChatLoader`][langchain_core.chat_loaders.BaseChatLoader].
 
     Loads sent messages and their preceding emails to create chat training examples.
 
