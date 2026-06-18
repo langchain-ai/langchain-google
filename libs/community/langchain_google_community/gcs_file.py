@@ -22,6 +22,10 @@ class GCSFileLoader(BaseLoader):
         ```bash
         pip install langchain-google-community[gcs]
         ```
+
+        The default `UnstructuredFileLoader` additionally requires
+        `langchain-community`. To avoid that dependency, provide a custom
+        `loader_func`.
     """
 
     def __init__(
@@ -39,7 +43,7 @@ class GCSFileLoader(BaseLoader):
             blob: The name of the GCS blob to load.
             loader_func: A loader function that instantiates a loader based on a
                 `file_path` argument. If nothing is provided, the
-                `UnstructuredFileLoader` is used.
+                `UnstructuredFileLoader` is used and requires `langchain-community`.
 
         ??? example "Using Alternative PDF Loader"
 
@@ -74,7 +78,7 @@ class GCSFileLoader(BaseLoader):
                     "custom loader with loader_func argument, or install "
                     "`pip install langchain-community`"
                 )
-                print(message)
+                raise ImportError(message)
             return UnstructuredFileLoader(file_path)
 
         self._loader_func = loader_func if loader_func else default_loader_func
