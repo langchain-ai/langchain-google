@@ -42,6 +42,7 @@ from vertexai.language_models import (
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai import __version__
 from langchain_google_vertexai._base import _get_prediction_client
 from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -100,6 +101,8 @@ def test_init() -> None:
             "ls_max_tokens": 10,
             "ls_stop": ["bar"],
         }
+        assert llm.metadata is not None
+        assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     # Test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.chat_models.logger.warning") as mock_warning:

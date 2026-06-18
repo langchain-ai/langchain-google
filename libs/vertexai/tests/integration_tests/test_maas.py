@@ -16,6 +16,7 @@ from langchain_google_vertexai.model_garden_maas import (
     _MISTRAL_MODELS,
     get_vertex_maas_model,
 )
+from tests.integration_tests.conftest import _get_text_content
 
 # Some MaaS live-test endpoints regularly exhaust quota during the parametrized
 # sweep (429 `RESOURCE_EXHAUSTED`), and pytest-retry's short backoff isn't
@@ -158,5 +159,5 @@ async def test_tools(model_name: str) -> None:
 
     assert isinstance(result, AIMessage)
     if model_name in _MISTRAL_MODELS:
-        assert "brown" in result.content
+        assert "brown" in _get_text_content(result)
     assert len(result.tool_calls) == 0

@@ -206,6 +206,7 @@ jobs:
     needs:
       - build
       - release-notes
+      - pre-release-checks
     runs-on: ubuntu-latest
     permissions:
       # This permission is used for trusted publishing:
@@ -241,7 +242,6 @@ jobs:
     needs:
       - build
       - release-notes
-      - test-pypi-publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -279,15 +279,7 @@ jobs:
         env:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
-        # Here we use:
-        # - The default regular PyPI index as the *primary* index, meaning
-        #   that it takes priority (https://pypi.org/simple)
-        # - The test PyPI index as an extra index, so that any dependencies that
-        #   are not found on test PyPI can be resolved and installed anyway.
-        #   (https://test.pypi.org/simple). This will include the PKG_NAME==VERSION
-        #   package because VERSION will not have been uploaded to regular PyPI yet.
-        # - attempt install again after 5 seconds if it fails because there is
-        #   sometimes a delay in availability on test pypi
+        # Install directly from the locally-built wheel (no index resolution needed).
         run: |
           uv venv
           VIRTUAL_ENV=.venv uv pip install dist/*.whl
@@ -302,7 +294,7 @@ jobs:
         run: uv sync --group test --group test_integration
         working-directory: ${{ inputs.working-directory }}
 
-      # Overwrite the local version of the package with the built PyPI version.
+      # Overwrite the local editable package with the built wheel.
       - name: Import published package (again)
         working-directory: ${{ inputs.working-directory }}
         shell: bash

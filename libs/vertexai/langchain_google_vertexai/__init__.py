@@ -46,6 +46,7 @@ from langchain_google_vertexai._enums import (
     Modality,
     SafetySetting,
 )
+from langchain_google_vertexai._version import __version__
 from langchain_google_vertexai.chains import create_structured_runnable
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain_google_vertexai.embeddings import VertexAIEmbeddings
@@ -102,6 +103,7 @@ __all__ = [
     "VertexAIVisualQnAChat",
     "VertexPairWiseStringEvaluator",
     "VertexStringEvaluator",
+    "__version__",
     "create_context_cache",
     "create_structured_runnable",
     "get_vertex_maas_model",

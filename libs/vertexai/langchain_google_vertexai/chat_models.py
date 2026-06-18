@@ -2866,6 +2866,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             raise ValueError(msg)
 
         parser: OutputParserLike
+        llm: Runnable
 
         if method == "json_mode":
             if isinstance(schema, type) and is_basemodel_subclass(schema):

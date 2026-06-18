@@ -20,6 +20,8 @@ from google.genai.types import (
     FunctionResponse,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
+    HttpOptions,
+    HttpRetryOptions,
     Language,
     Part,
     ThinkingLevel,
@@ -48,7 +50,12 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
-from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai import (
+    HarmBlockThreshold,
+    HarmCategory,
+    Modality,
+    __version__,
+)
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
@@ -61,6 +68,7 @@ from langchain_google_genai.chat_models import (
     _get_ai_message_tool_messages_parts,
     _is_gemini_3_or_later,
     _is_gemini_25_model,
+    _merge_http_options,
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
@@ -91,6 +99,8 @@ def test_integration_initialization() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     # Ensure temperature is propagated to request config
     msg = HumanMessage(content="test")
@@ -495,6 +505,191 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     if headers:
         for key, value in headers.items():
             assert call_http_options.headers[key] == value
+
+
+def _mock_chat(**model_kwargs: Any) -> tuple[ChatGoogleGenerativeAI, Mock]:
+    """Build a `ChatGoogleGenerativeAI` whose client is mocked.
+
+    Returns the chat model and the `generate_content` mock so callers can
+    inspect the `config` forwarded to the API.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock(
+        return_value=GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))],
+        )
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **model_kwargs,
+        )
+    return chat, mock_generate_content
+
+
+def test_per_request_http_options_dict_injects_headers() -> None:
+    """A per-invocation `http_options` dict reaches the request config."""
+    chat, mock_generate_content = _mock_chat()
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_object_injects_headers() -> None:
+    """A per-invocation `HttpOptions` object is accepted as well as a dict."""
+    chat, mock_generate_content = _mock_chat()
+
+    chat.invoke(
+        "test",
+        http_options=HttpOptions(headers={"Authorization": "Bearer token"}),
+    )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_preserves_model_timeout() -> None:
+    """Per-request headers merge without clobbering the model's timeout.
+
+    The `timeout` derived from the model config must survive when the
+    per-request `http_options` only sets headers (previously this collided and
+    raised a duplicate-keyword error).
+    """
+    chat, mock_generate_content = _mock_chat(timeout=30)
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.headers == {"Authorization": "Bearer token"}
+    assert http_options.timeout == 30 * 1000  # seconds -> milliseconds
+
+
+def test_merge_http_options_precedence() -> None:
+    """Explicit per-request fields win; headers merge; base fields persist."""
+    base = HttpOptions(timeout=5000, base_url="https://internal")
+    override = HttpOptions(
+        base_url="https://gateway",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.base_url == "https://gateway"  # override wins
+    assert merged.timeout == 5000  # base persists (not set on override)
+    assert merged.headers == {"Authorization": "Bearer token"}
+
+
+def test_merge_http_options_merges_header_dicts() -> None:
+    """Headers from base and override combine, with override keys winning."""
+    base = HttpOptions(headers={"X-Base": "1", "X-Shared": "base"})
+    override = HttpOptions(headers={"X-Override": "2", "X-Shared": "override"})
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.headers == {
+        "X-Base": "1",
+        "X-Override": "2",
+        "X-Shared": "override",
+    }
+
+
+def test_merge_http_options_preserves_nested_retry_model() -> None:
+    """Per-request `retry_options` remain SDK model objects after merging."""
+    override_retry_options = HttpRetryOptions(attempts=9)
+    base = HttpOptions(retry_options=HttpRetryOptions(attempts=3))
+    override = HttpOptions(retry_options=override_retry_options)
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.retry_options is override_retry_options
+    assert merged.retry_options.attempts == 9
+
+
+async def test_per_request_http_options_async_injects_headers() -> None:
+    """Per-invocation `http_options` reaches the request config via `ainvoke`.
+
+    The async path threads kwargs through separate runnable plumbing than the
+    sync path, so it is verified independently.
+    """
+    with patch(
+        "langchain_google_genai.chat_models.ChatGoogleGenerativeAI.client", create=True
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        mock_method = AsyncMock(
+            return_value=GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+            )
+        )
+        # `llm.client` is typed `Client | None`; treat the mock as `Any` so
+        # attribute assignment on the async path isn't flagged by mypy.
+        mock_client: Any = llm.client
+        mock_client.aio.models.generate_content = mock_method
+
+        await llm.ainvoke(
+            "test",
+            http_options={"headers": {"Authorization": "Bearer token"}},
+        )
+
+    config = mock_method.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_preserves_model_retries() -> None:
+    """Per-request headers merge without clobbering the model's `retry_options`.
+
+    Mirrors the timeout case for the second half of the merge contract.
+    """
+    chat, mock_generate_content = _mock_chat(max_retries=3)
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.headers == {"Authorization": "Bearer token"}
+    assert http_options.retry_options is not None
+    assert http_options.retry_options.attempts == 3
+
+
+def test_per_request_http_options_overrides_model_retries() -> None:
+    """Per-request `retry_options` win over the model-derived retry default."""
+    retry_options = HttpRetryOptions(attempts=9)
+    chat, mock_generate_content = _mock_chat(max_retries=3)
+
+    chat.invoke("test", http_options=HttpOptions(retry_options=retry_options))
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.retry_options is retry_options
+    assert http_options.retry_options.attempts == 9
+
+
+def test_per_request_http_options_overrides_model_timeout() -> None:
+    """An explicit per-request `timeout` wins over the model-derived one."""
+    chat, mock_generate_content = _mock_chat(timeout=30)
+
+    # `HttpOptions.timeout` is in milliseconds (native google-genai unit).
+    chat.invoke("test", http_options={"timeout": 99_000})
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.timeout == 99_000
 
 
 def test_base_url_set_in_constructor() -> None:

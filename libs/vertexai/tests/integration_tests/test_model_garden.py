@@ -18,6 +18,7 @@ from langchain_google_vertexai.model_garden import (
     ChatAnthropicVertex,
     VertexAIModelGarden,
 )
+from tests.integration_tests.conftest import _get_text_content
 
 _ANTHROPIC_LOCATION = "us-east5"
 _ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
@@ -123,7 +124,7 @@ def test_anthropic() -> None:
     message = HumanMessage(content=question)
     response = model.invoke([context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME)
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
 
 
 @pytest.mark.extended
@@ -188,13 +189,13 @@ async def test_anthropic_async() -> None:
         [context, message], model_name=_ANTHROPIC_CLAUDE_MODEL_NAME, temperature=0.2
     )
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
 
 
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
     """Check tool calls are as expected."""
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, list)
+    assert response.content_blocks
     tool_calls = response.tool_calls
     assert len(tool_calls) == 1
     tool_call = tool_calls[0]
@@ -332,8 +333,7 @@ def test_anthropic_multiturn_tool_calling() -> None:
 
     # Verify model responded with final answer
     assert isinstance(response2, AIMessage)
-    assert isinstance(response2.content, str)
-    assert "paris" in response2.content.lower()
+    assert "paris" in _get_text_content(response2).lower()
 
 
 @pytest.mark.extended
@@ -377,7 +377,7 @@ def test_anthropic_tool_error_handling() -> None:
 
     # Verify model acknowledged the error
     assert isinstance(response2, AIMessage)
-    assert isinstance(response2.content, str)
+    assert isinstance(_get_text_content(response2), str)
 
 
 @pytest.mark.extended
@@ -397,7 +397,7 @@ async def test_anthropic_async_invoke_with_betas() -> None:
         betas=[_ANTHROPIC_CLAUDE_BETA_HEADER],
     )
     assert isinstance(response, AIMessage)
-    assert isinstance(response.content, str)
+    assert isinstance(_get_text_content(response), str)
 
 
 @pytest.mark.extended

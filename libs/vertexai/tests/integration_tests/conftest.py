@@ -1,8 +1,14 @@
 import pytest
+from langchain_core.messages import BaseMessage
 
 _DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 _DEFAULT_THINKING_MODEL_NAME = "gemini-2.5-flash"
 _DEFAULT_IMAGE_GENERATION_MODEL_NAME = "gemini-2.5-flash-image"
+
+
+def _get_text_content(message: BaseMessage) -> str:
+    text_blocks = [block for block in message.content_blocks if block["type"] == "text"]
+    return " ".join(block["text"] for block in text_blocks)
 
 
 @pytest.fixture

@@ -16,7 +16,9 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         self.tokens: list[Any] = []
         self.generations: list[Any] = []
 
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+    def on_llm_new_token(
+        self, token: str | list[str | dict[str, Any]], **kwargs: Any
+    ) -> None:
         self.tokens.append(token)
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:

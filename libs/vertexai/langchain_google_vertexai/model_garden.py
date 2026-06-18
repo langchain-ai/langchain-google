@@ -55,11 +55,25 @@ from langchain_google_vertexai._anthropic_utils import (
     _tools_in_params,
     convert_to_anthropic_tool,
 )
-from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+from langchain_google_vertexai._base import (
+    _add_langchain_google_vertexai_version,
+    _BaseVertexAIModelGarden,
+    _VertexAICommon,
+)
 from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai.data.anthropic._profiles import (
     _PROFILES as _ANTHROPIC_PROFILES,
 )
+
+
+def _move_betas_to_extra_body(params: dict[str, Any]) -> bool:
+    betas = params.pop("betas", None)
+    if not betas:
+        return False
+
+    extra_body = params.get("extra_body") or {}
+    params["extra_body"] = {**extra_body, "anthropic_beta": betas}
+    return True
 
 
 def _create_retry_decorator(
@@ -100,6 +114,12 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_vertexai_version(self) -> Self:
+        """Set package version in metadata."""
+        _add_langchain_google_vertexai_version(self)
+        return self
 
     def _generate(
         self,
@@ -398,7 +418,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
-            has_betas = True if params.get("betas") else False
+            has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return self.client.beta.messages.create(**params)
             return self.client.messages.create(**params)
@@ -428,7 +448,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
-            has_betas = True if params.get("betas") else False
+            has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return await self.async_client.beta.messages.create(**params)
             return await self.async_client.messages.create(**params)
@@ -462,7 +482,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = True if params.get("betas") else False
+            has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return self.client.beta.messages.create(**params, stream=True)
             return self.client.messages.create(**params, stream=True)
@@ -506,7 +526,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = True if params.get("betas") else False
+            has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return await self.async_client.beta.messages.create(
                     stream=True, **params

@@ -121,6 +121,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
+from langchain_google_genai._version import __version__
 from langchain_google_genai.data._profiles import _PROFILES
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,35 @@ def _bytes_to_base64(data: bytes) -> str:
 
 def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
+
+
+def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
+    """Merge a per-request `HttpOptions` over internally-derived options.
+
+    `timeout` and `retry_options` are derived internally (from the model config
+    or call-time `timeout`/`max_retries`); those are preserved unless the
+    per-request `override` explicitly sets them.
+    Any field explicitly set on `override` (e.g. `base_url`, `api_version`) wins,
+    and `headers` from both are merged with `override` keys taking precedence.
+
+    Args:
+        base: Options derived from the model config (`timeout`/`retry_options`),
+            or `None` when neither is set.
+        override: Per-request options supplied at invocation time.
+
+    Returns:
+        The merged `HttpOptions`.
+    """
+    if base is None:
+        return override
+    merged = base.model_copy(deep=True)
+    for field in override.model_fields_set:
+        value = getattr(override, field)
+        if field == "headers":
+            merged.headers = {**(merged.headers or {}), **(value or {})}
+        else:
+            setattr(merged, field, value)
+    return merged
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
@@ -1423,8 +1453,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **For Gemini Developer API** (simplest):
 
         1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
-        2. Pass your API key using the [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
-            parameter
+        2. Pass your API key using the `api_key` parameter
 
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -1491,8 +1520,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         For SOCKS5 proxies or advanced proxy configuration, use the
-        [`client_args`][langchain_google_genai.ChatGoogleGenerativeAI.client_args]
-        parameter:
+        `client_args` parameter:
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -1995,14 +2023,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         ```
 
-        Gemini 2.5 models use [`thinking_budget`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_budget]
+        Gemini 2.5 models use `thinking_budget`
         (an integer token count) to control reasoning. Set to `0` to disable thinking
         (where supported), or `-1` for dynamic thinking.
 
         See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
         more details on thinking models.
 
-        To see a thinking model's thoughts, set [`include_thoughts=True`][langchain_google_genai.ChatGoogleGenerativeAI.include_thoughts]
+        To see a thinking model's thoughts, set `include_thoughts=True`
         to have the model's reasoning summaries included in the response.
 
         ```python
@@ -2449,6 +2477,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         all_required_field_names = get_pydantic_field_names(cls)
         return _build_model_kwargs(values, all_required_field_names)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_genai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-genai", __version__)
+        return self
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
@@ -3140,6 +3174,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
 
+        # Pop any per-request `http_options` so it can be merged with the
+        # internally-derived timeout/retry options below. Passing it through to
+        # `GenerateContentConfig` directly would collide with the explicit
+        # `http_options` keyword argument and raise a duplicate-keyword error.
+        per_request_http_options = kwargs.pop("http_options", None)
+        if isinstance(per_request_http_options, dict):
+            per_request_http_options = HttpOptions(**per_request_http_options)
+
         retry_options = None
         if max_retries is not None:
             retry_options = HttpRetryOptions(attempts=max_retries)
@@ -3150,6 +3192,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 timeout=timeout,
                 retry_options=retry_options,
             )
+
+        if per_request_http_options is not None:
+            http_options = _merge_http_options(http_options, per_request_http_options)
 
         image_config_dict = (
             image_config if image_config is not None else self.image_config
