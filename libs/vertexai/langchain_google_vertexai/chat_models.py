@@ -1029,7 +1029,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Key init args — completion params:
         model: str
-            Name of ChatVertexAI model to use. e.g. `'gemini-3.5-flash'`,
+            Name of ChatVertexAI model to use. e.g. `'gemini-3.1-flash-lite'`,
             `'gemini-3.1-pro-preview'`, etc.
         temperature: Optional[float]
             Sampling temperature.
@@ -1070,7 +1070,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from langchain_google_vertexai import ChatVertexAI
 
         llm = ChatVertexAI(
-            model="gemini-3.5-flash",
+            model="gemini-3.1-flash-lite",
             temperature=0,
             max_tokens=None,
             max_retries=6,
@@ -1092,7 +1092,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         ```python
         llm = ChatVertexAI(
-            model="gemini-3.5-flash",
+            model="gemini-3.1-flash-lite",
             include_thoughts=True,
         )
         ai_msg = llm.invoke("How many 'r's are in the word 'strawberry'?")
@@ -1343,7 +1343,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             ]
 
             cache = client.caches.create(
-                model="gemini-3.5-flash",
+                model="gemini-3.1-flash-lite",
                 config=CreateCachedContentConfig(
                     contents=contents,
                     system_instruction="You are an expert content analyzer.",
@@ -1353,7 +1353,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
 
             llm = ChatVertexAI(
-                model="gemini-3.5-flash",
+                model="gemini-3.1-flash-lite",
                 cached_content=cache.name,
             )
             message = HumanMessage(
@@ -1422,7 +1422,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
         from langchain_google_vertexai import ChatVertexAI
 
-        llm = ChatVertexAI(model="gemini-3.5-flash")
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite")
         resp = llm.invoke(
             "When is the next total solar eclipse in US?",
             tools=[VertexTool(google_search={})],
@@ -1434,7 +1434,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
         from langchain_google_vertexai import ChatVertexAI
 
-        llm = ChatVertexAI(model="gemini-3.5-flash")
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite")
         resp = llm.invoke(
             "What is 3^3?",
             tools=[VertexTool(code_execution={})],
@@ -1690,7 +1690,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         ```python
         from langchain_core.messages import HumanMessage
 
-        llm = ChatVertexAI(model="gemini-3.5-flash")
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite")
 
         llm.invoke(
             [
@@ -1724,7 +1724,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Logprobs:
         ```python
-        llm = ChatVertexAI(model="gemini-3.5-flash", logprobs=True)
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite", logprobs=True)
         ai_msg = llm.invoke(messages)
         ai_msg.response_metadata["logprobs_result"]
         ```
@@ -2477,7 +2477,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             from langchain_core.messages import HumanMessage
             from langchain_google_vertexai import ChatVertexAI
 
-            llm = ChatVertexAI(model="gemini-3.5-flash")
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite")
 
             # Text-only message
             messages = [HumanMessage(content="Hello, world!")]
@@ -2724,7 +2724,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model="gemini-3.5-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(AnswerWithJustification)
 
             structured_llm.invoke(
@@ -2748,7 +2748,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model="gemini-3.5-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(
                 AnswerWithJustification, include_raw=True
             )
@@ -2780,7 +2780,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 
             dict_schema = convert_to_openai_function(AnswerWithJustification)
-            llm = ChatVertexAI(model="gemini-3.5-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(dict_schema)
 
             structured_llm.invoke(
@@ -2807,7 +2807,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 examples: str = Field(description="Two examples related to the topic.")
 
 
-            llm = ChatVertexAI(model="gemini-3.5-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(Explanation, method="json_mode")
 
             for chunk in structured_llm.stream("Tell me about transformer models"):

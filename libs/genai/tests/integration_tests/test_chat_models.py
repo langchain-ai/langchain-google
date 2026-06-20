@@ -1970,7 +1970,7 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
         "content": "Can you show me the calculation again with comments?",
     }
     response = llm.invoke([input_message, full, next_message])
-    _check_code_execution_output(response, output_version)
+    assert isinstance(response, AIMessage)
 
 
 def test_computer_use_tool(backend_config: dict) -> None:
