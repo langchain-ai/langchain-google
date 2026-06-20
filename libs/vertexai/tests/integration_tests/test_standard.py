@@ -29,7 +29,7 @@ class TestGemini2AIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model_name": "gemini-2.5-flash",
+            "model_name": "gemini-3.5-flash",
             "rate_limiter": rate_limiter,
             "temperature": 0,
             "api_transport": None,
@@ -81,7 +81,7 @@ class TestGemini_15_AIStandard(ChatModelIntegrationTests):
     @property
     def chat_model_params(self) -> dict:
         return {
-            "model_name": "gemini-2.5-pro",
+            "model_name": "gemini-3.1-pro-preview",
             "rate_limiter": rate_limiter,
             "temperature": 0,
             "api_transport": None,

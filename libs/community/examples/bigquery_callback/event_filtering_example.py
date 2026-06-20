@@ -48,7 +48,7 @@ def run_with_handler(
     print("-" * 50)
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview",
+        model="gemini-3.5-flash",
         project=PROJECT_ID,
         temperature=1,
         top_p=0.95,

@@ -75,7 +75,7 @@ def create_context_cache(
         from langchain_core.messages import HumanMessage, SystemMessage
         from langchain_google_genai import ChatGoogleGenerativeAI, create_context_cache
 
-        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        model = ChatGoogleGenerativeAI(model="gemini-3.5-flash")
 
         # Example 1: Cache with text content
         cache = create_context_cache(
@@ -138,7 +138,7 @@ def create_context_cache(
         # When using the cache, do NOT bind tools again
         # The tools are already in the cache
         model_with_cache = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             cached_content=cache_with_tools,
         )
         # DON'T do this: .bind_tools([search_database])

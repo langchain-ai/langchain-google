@@ -289,7 +289,7 @@ def create_agent() -> CompiledStateGraph:
 
     # Create the LLM with Gemini 3 Flash
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview",
+        model="gemini-3.5-flash",
         project=PROJECT_ID,
         temperature=1,
         top_p=0.95,

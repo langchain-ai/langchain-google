@@ -63,7 +63,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         # Either set GOOGLE_API_KEY env var or pass api_key directly
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key="MY_API_KEY")
+        llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", api_key="MY_API_KEY")
         ```
 
         **Vertex AI with API key**:
@@ -97,7 +97,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         # Either set GOOGLE_CLOUD_PROJECT env var or pass project directly
         # Location defaults to global or can be set via GOOGLE_CLOUD_LOCATION
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             project="my-project",
             # location="global",
         )
@@ -131,7 +131,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     ```python
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         client_args={"proxy": "socks5://user:pass@host:port"},
     )
     ```
@@ -188,7 +188,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         )
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             credentials=credentials,
             project="my-project-id",
         )
@@ -277,7 +277,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             additional_headers={
                 "X-Custom-Header": "value",
             },
@@ -294,7 +294,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```

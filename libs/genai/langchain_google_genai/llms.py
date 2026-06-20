@@ -32,7 +32,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         ```python
         from langchain_google_genai import GoogleGenerativeAI
 
-        llm = GoogleGenerativeAI(model="gemini-2.5-pro")
+        llm = GoogleGenerativeAI(model="gemini-3.1-pro-preview")
         ```
     """
 

@@ -14,7 +14,7 @@ pytestmark = pytest.mark.flaky(retries=3, delay=1)
 
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
-_FLASH_MODEL = "gemini-3-flash-preview"
+_FLASH_MODEL = "gemini-3.5-flash"
 _PRO_MODEL = "gemini-3.1-pro-preview"
 
 
