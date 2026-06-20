@@ -11,7 +11,7 @@ from pydantic import SecretStr
 from langchain_google_genai import __version__
 from langchain_google_genai.llms import GoogleGenerativeAI
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 
 def test_tracing_params() -> None:

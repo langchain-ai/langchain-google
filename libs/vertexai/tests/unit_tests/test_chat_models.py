@@ -58,6 +58,8 @@ from tests.integration_tests.conftest import (
     _DEFAULT_MODEL_NAME,
 )
 
+_DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
+
 
 @pytest.fixture
 def clear_prediction_client_cache() -> None:
@@ -167,7 +169,7 @@ def test_init_client(model: str, location: str) -> None:
 def test_init_client_with_custom_api_endpoint() -> None:
     """Test that custom API endpoint and transport are set correctly."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "api_endpoint": "https://example.com",
         "api_transport": "rest",
     }
@@ -191,7 +193,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
 def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
     """Test that `base_url` alias is preserved and used in API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "base_url": "https://example.com",
         "api_transport": "rest",
     }
@@ -218,7 +220,7 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
 def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
     """Test that `api_endpoint` field is preserved and used in API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "api_endpoint": "https://direct-endpoint.com",
         "api_transport": "rest",
     }
@@ -243,7 +245,7 @@ def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
 async def test_async_base_url_support(clear_prediction_client_cache: Any) -> None:
     """Test that `base_url` is properly used in async API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "base_url": "https://async-example.com",
         "api_transport": "grpc_asyncio",
     }
@@ -275,7 +277,7 @@ async def test_async_base_url_support(clear_prediction_client_cache: Any) -> Non
 async def test_async_api_endpoint_support(clear_prediction_client_cache: Any) -> None:
     """Test that `api_endpoint` is properly used in async API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "api_endpoint": "https://async-direct-endpoint.com",
         "api_transport": "grpc_asyncio",
     }
@@ -310,7 +312,7 @@ async def test_async_api_endpoint_alias_behavior(
     """Test that `api_endpoint` and `base_url` are aliases in async calls."""
     # Test 1: Only api_endpoint specified
     llm1 = ChatVertexAI(
-        model="gemini-2.5-pro",
+        model=_DEFAULT_GEMINI_MODEL,
         project="test-proj",
         api_endpoint="https://api-endpoint-only.com",
         api_transport="grpc_asyncio",
@@ -319,7 +321,7 @@ async def test_async_api_endpoint_alias_behavior(
 
     # Test 2: Only base_url specified (should be aliased to api_endpoint)
     llm2 = ChatVertexAI(
-        model="gemini-2.5-pro",
+        model=_DEFAULT_GEMINI_MODEL,
         project="test-proj",
         base_url="https://base-url-only.com",
         api_transport="grpc_asyncio",
@@ -473,7 +475,7 @@ def test_profile() -> None:
     assert not model.profile["reasoning_output"]
 
     model = ChatVertexAI(
-        model="gemini-2.5-flash", project="test-project", location="moon-dark1"
+        model=_DEFAULT_GEMINI_MODEL, project="test-project", location="moon-dark1"
     )
     assert model.profile
     assert model.profile["reasoning_output"]
@@ -1102,7 +1104,7 @@ def test_parse_chat_history_gemini_without_literal_eval() -> None:
 
 def test_python_literal_inputs() -> None:
     """In relation to literal eval, ensure that inputs are not misinterpreted."""
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
         _ = llm._prepare_request_gemini([HumanMessage(input_string)])
@@ -1669,7 +1671,7 @@ def test_parser_multiple_tools() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model="gemini-2.5-pro", project="test-project")
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
         message = HumanMessage(content="Hello")
         parser = PydanticToolsParser(tools=[Add, Multiply])
         llm = model | parser
@@ -2090,7 +2092,7 @@ def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
         name: str = Field(description="Person's name")
         age: int = Field(gt=0, le=150, description="Person's age")
 
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     # This should not raise any errors when creating structured output
     structured_llm = llm.with_structured_output(TestModel, method="json_mode")
@@ -2124,7 +2126,7 @@ def test_json_mode_pydantic_v1_backward_compatibility() -> None:
         name: str
         age: int
 
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     # V1 models should work without issues
     structured_llm = llm.with_structured_output(V1Model, method="json_mode")
@@ -2295,7 +2297,7 @@ def test_parse_chat_history_with_text_signature() -> None:
 def test_timeout_parameter_override(clear_prediction_client_cache: Any) -> None:
     """Test that timeout can be set in constructor and overridden in invoke."""
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
         timeout=30.0,  # Default timeout
     )
@@ -2328,7 +2330,7 @@ def test_timeout_parameter_override(clear_prediction_client_cache: Any) -> None:
 def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> None:
     """Test that timeout=None in invoke uses constructor timeout."""
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
         timeout=30.0,
     )
@@ -2351,7 +2353,7 @@ def test_gemini_response_to_chat_result_emits_string_modality() -> None:
     """`response_metadata["usage_metadata"]` exposes modality as a string (#1053)."""
     from vertexai.generative_models._generative_models import GenerationResponse
 
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
     response = GenerationResponse.from_dict(
         {
             "candidates": [
@@ -2380,7 +2382,7 @@ def test_gemini_response_to_chat_result_emits_string_modality() -> None:
 def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
     """Test get_num_tokens_from_messages uses count_tokens API properly."""
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
     )
 
@@ -2415,7 +2417,7 @@ def test_get_num_tokens_from_messages_multimodal(
     passed to the count_tokens API rather than being converted to a string.
     """
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
     )
 

@@ -263,7 +263,7 @@ def test_multimodal() -> None:
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
-    llm = ChatVertexAI(model="gemini-2.5-pro", rate_limiter=RATE_LIMITER)
+    llm = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, rate_limiter=RATE_LIMITER)
     for chunk in llm.stream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
@@ -987,7 +987,7 @@ def test_thought_signatures() -> None:
     to GAPIC to LangChain parsing and back into subsequent calls, without crashing or
     losing type safety.
     """
-    llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
+    llm = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
 
     def get_weather(location: str) -> str:
         """Get the weather for a location."""
