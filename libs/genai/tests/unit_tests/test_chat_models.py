@@ -1229,9 +1229,7 @@ def test_parse_response_candidate_includes_model_name() -> None:
     }
 
     response_candidate = Candidate.model_validate(raw_candidate)
-    result = _parse_response_candidate(
-        response_candidate, model_name=MODEL_NAME
-    )
+    result = _parse_response_candidate(response_candidate, model_name=MODEL_NAME)
 
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
