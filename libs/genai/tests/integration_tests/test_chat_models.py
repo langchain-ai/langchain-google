@@ -1718,7 +1718,7 @@ def test_structured_output_with_google_search(
         final_match_score: str
         scorers: list[str]
 
-    llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
+    llm = ChatGoogleGenerativeAI(model=_PRO_MODEL, **backend_config)
 
     # Bind tools and configure for structured output
     llm_with_search = llm.bind(
@@ -1950,7 +1950,7 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
 def test_code_execution_builtin(output_version: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(
-        model=_MODEL, output_version=output_version, **backend_config
+        model=_PRO_MODEL, output_version=output_version, **backend_config
     ).bind_tools([{"code_execution": {}}])
     input_message = {
         "role": "user",
