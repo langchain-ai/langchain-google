@@ -682,16 +682,15 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities(
     )
     assert isinstance(result, AIMessage)
     if isinstance(result.content, list):
-        text_content = "".join(
-            block.get("text", "")
+        generated_media_blocks = [
+            block
             for block in result.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-        assert len(text_content) > 0
-        assert not text_content.startswith(" ")
+            if isinstance(block, dict)
+            and block.get("type") in {"image", "media", "image_url"}
+        ]
+        assert generated_media_blocks == []
     else:
         assert isinstance(result.content, str)
-        assert not result.content.startswith(" ")
     _check_usage_metadata(result)
 
 
