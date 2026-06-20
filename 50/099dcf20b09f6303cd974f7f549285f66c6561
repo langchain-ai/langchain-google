@@ -1,0 +1,28 @@
+libs/genai/langchain_google_genai/chat_models.py
+  s_f59a48244d2637::t_8a6a79adea2b77 224
+AGENTS.md
+  s_f59a48244d2637::t_a8a0bfd276bd38 283
+CLAUDE.md
+  s_f59a48244d2637::t_91a81f38560859 283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "50099dcf20b09f6303cd974f7f549285f66c6561",
+  "prompts": {},
+  "humans": {
+    "h_9f69767fa5fabf": {
+      "author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  },
+  "sessions": {
+    "s_f59a48244d2637": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dea3ff06-2822-42fb-837d-7a84b8deda1d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
