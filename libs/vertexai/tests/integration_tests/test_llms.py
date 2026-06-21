@@ -44,7 +44,7 @@ async def test_vertex_generate() -> None:
 @pytest.mark.release
 @pytest.mark.xfail(reason="VertexAI doesn't always respect number of candidates")
 async def test_vertex_generate_multiple_candidates() -> None:
-    llm = VertexAI(temperature=0.3, n=2, model="text-bison@001")
+    llm = VertexAI(temperature=0.3, n=2, model=_DEFAULT_MODEL_NAME)
     output = await llm.agenerate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1

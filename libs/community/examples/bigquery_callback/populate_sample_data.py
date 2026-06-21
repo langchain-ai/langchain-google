@@ -174,7 +174,7 @@ def create_agent(agent_type: str) -> CompiledStateGraph:
         tools = [check_order_status, process_refund]
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview",
+        model="gemini-3.5-flash",
         project=PROJECT_ID,
         temperature=1,
         top_p=0.95,

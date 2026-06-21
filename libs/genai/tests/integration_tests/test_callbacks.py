@@ -7,7 +7,7 @@ from langchain_core.prompts import PromptTemplate
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-MODEL_NAMES = ["gemini-3-flash-preview"]
+MODEL_NAMES = ["gemini-3.5-flash"]
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):

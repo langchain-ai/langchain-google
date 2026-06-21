@@ -2091,7 +2091,7 @@ def test_llm_request_attributes_capture_llm_config_and_tools(
         serialized={
             "name": "gemini-flash",
             "kwargs": {
-                "model": "gemini-2.5-flash",
+                "model": "gemini-3.5-flash",
                 "temperature": 0.2,
                 "top_p": 0.9,
                 "tools": [

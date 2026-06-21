@@ -221,7 +221,7 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
 
 
 def _is_gemini_3_or_later(model_name: str) -> bool:
-    """Checks if the model is a pre-Gemini 3 model."""
+    """Checks if the model is Gemini 3 or later."""
     if not model_name:
         return False
     model_name = model_name.lower().replace("models/", "")
@@ -1472,7 +1472,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             project="your-project-id",
             # Uses Application Default Credentials (ADC)
         )
@@ -1512,7 +1512,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
@@ -1575,7 +1575,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        model = ChatGoogleGenerativeAI(model="gemini-3.5-flash")
 
         for chunk in model.stream(messages):
             print(chunk)
@@ -2554,7 +2554,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             # Normalize model name for Vertex AI - strip 'models/' prefix
             # Vertex AI expects model names without the prefix
-            # (e.g., "gemini-2.5-flash") while Google AI accepts both formats
+            # (e.g., "gemini-3.5-flash") while Google AI accepts both formats
             if self.model.startswith("models/"):
                 object.__setattr__(self, "model", self.model.replace("models/", "", 1))
 
@@ -3676,7 +3676,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ```python
                     from langchain_google_genai import ChatGoogleGenerativeAI
 
-                    model = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
+                    model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
                     response = model.invoke(
                         "What Italian restaurants are near here?",

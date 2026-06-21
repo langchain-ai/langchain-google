@@ -3,7 +3,7 @@ from langchain_tests.unit_tests import ChatModelUnitTests
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 FAKE_API_KEY = "fake-api-key"
 

@@ -10,7 +10,7 @@ from langchain_core.outputs import LLMResult
 
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
-MODEL_NAMES = ["gemini-3-flash-preview"]
+MODEL_NAMES = ["gemini-3.5-flash"]
 
 
 @pytest.mark.parametrize(

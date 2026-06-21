@@ -24,6 +24,8 @@ from tests.integration_tests.conftest import (
     _DEFAULT_MODEL_NAME,
 )
 
+_DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
+
 
 @pytest.fixture
 def clear_prediction_client_cache() -> None:
@@ -195,12 +197,12 @@ def test_tracing_params() -> None:
     ) as mc:
         response = GenerateContentResponse(candidates=[])
         mc.return_value.generate_content.return_value = response
-        llm = VertexAI(model="gemini-2.5-pro", project="test-proj")
+        llm = VertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-proj")
         ls_params = llm._get_ls_params()
         assert ls_params == {
             "ls_provider": "google_vertexai",
             "ls_model_type": "llm",
-            "ls_model_name": "gemini-2.5-pro",
+            "ls_model_name": _DEFAULT_GEMINI_MODEL,
         }
 
         llm = VertexAI(

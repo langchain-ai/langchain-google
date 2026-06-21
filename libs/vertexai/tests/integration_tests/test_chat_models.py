@@ -150,12 +150,9 @@ async def test_vertexai_single_call(
 @pytest.mark.release
 @pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
 async def test_candidates() -> None:
-    """Test making a single invoke call with `n>1`.
-
-    # TODO: what is chat-bison@001? is it marked for deprecation?
-    """
+    """Test making a single invoke call with `n>1`."""
     model = ChatVertexAI(
-        model="chat-bison@001", temperature=0.3, n=2, rate_limiter=RATE_LIMITER
+        model=_DEFAULT_MODEL_NAME, temperature=0.3, n=2, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
     response = await model.agenerate(messages=[[message]])
@@ -265,7 +262,7 @@ async def test_multimodal() -> None:
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
-    llm = ChatVertexAI(model="gemini-2.5-pro", rate_limiter=RATE_LIMITER)
+    llm = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, rate_limiter=RATE_LIMITER)
     for chunk in llm.stream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
@@ -993,7 +990,7 @@ async def test_thought_signatures() -> None:
     to GAPIC to LangChain parsing and back into subsequent calls, without crashing or
     losing type safety.
     """
-    llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
+    llm = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
 
     def get_weather(location: str) -> str:
         """Get the weather for a location."""

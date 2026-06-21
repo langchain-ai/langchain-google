@@ -101,6 +101,7 @@ Every new feature or bugfix MUST be covered by unit tests.
 - Integration tests: `tests/integration_tests/` (network calls permitted)
 - We use `pytest` as the testing framework; if in doubt, check other existing tests for examples.
 - The testing file structure should mirror the source code structure.
+- In tests, centralize repeated model strings in module-level constants when the exact model choice is not what the test asserts. Keep literal model strings when the test intentionally checks model parsing, version detection, or provider-specific model naming behavior.
 
 **Checklist:**
 
@@ -207,7 +208,7 @@ from google import genai
 client = genai.Client()
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='why is the sky blue?',
 )
 
@@ -225,7 +226,7 @@ client = genai.Client()
 image = Image.open(img_path)
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents=[image, 'explain that image'],
 )
 
@@ -242,7 +243,7 @@ with open('path/to/small-sample.jpg', 'rb') as f:
     image_bytes = f.read()
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents=[
         types.Part.from_bytes(
             data=image_bytes,
@@ -261,7 +262,7 @@ For larger files, use `client.files.upload`:
 f = client.files.upload(file=img_path)
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents=[f, 'can you describe this image?']
 )
 ```
@@ -279,7 +280,7 @@ Below are examples of advanced configurations.
 
 ### Thinking
 
-Gemini 2.5 series models and above support thinking, which is on by default for `gemini-2.5-flash`. It can be adjusted by using `thinking_budget` setting. Setting it to zero turns thinking off, and will reduce latency.
+Gemini 2.5 series and later support thinking, which is on by default for `gemini-3.5-flash`. It can be adjusted by using `thinking_budget` setting. Setting it to zero turns thinking off, and will reduce latency.
 
 ```python
 from google import genai
@@ -288,7 +289,7 @@ from google.genai import types
 client = genai.Client()
 
 client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='What is AI?',
     config=types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(
@@ -297,11 +298,6 @@ client.models.generate_content(
     )
 )
 ```
-
-IMPORTANT NOTES:
-
-- Minimum thinking budget for `gemini-2.5-pro` is `128` and thinking can not be turned off for that model.
-- No models (apart from Gemini 2.5 series) support thinking or thinking budgets APIs. Do not try to adjust thinking budgets other models (such as `gemini-2.0-flash` or `gemini-2.0-pro`) otherwise it will cause syntax errors.
 
 ### System instructions
 
@@ -318,7 +314,7 @@ config = types.GenerateContentConfig(
 )
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     config=config,
 )
 
@@ -369,7 +365,7 @@ from google import genai
 client = genai.Client()
 
 response = client.models.generate_content_stream(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents=['Explain how AI works']
 )
 for chunk in response:
@@ -384,7 +380,7 @@ For multi-turn conversations, use the `chats` service to maintain conversation h
 from google import genai
 
 client = genai.Client()
-chat = client.chats.create(model='gemini-2.5-flash')
+chat = client.chats.create(model='gemini-3.5-flash')
 
 response = chat.send_message('I have 2 dogs in my house.')
 print(response.text)
@@ -417,7 +413,7 @@ class Recipe(BaseModel):
 
 # Request the model to populate the schema
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='Provide a classic recipe for chocolate chip cookies.',
     config=types.GenerateContentConfig(
         response_mime_type='application/json',
@@ -449,7 +445,7 @@ def get_current_weather(city: str) -> str:
 
 # Make the function available to the model as a tool
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='What is the weather like in Boston?',
     config=types.GenerateContentConfig(
         tools=[get_current_weather]
@@ -572,7 +568,7 @@ from google.genai import types
 client = genai.Client()
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='What was the score of the latest Olympique Lyonais game?',
     config=types.GenerateContentConfig(
         tools=[
@@ -602,7 +598,7 @@ from google.genai import types
 client = genai.Client()
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='What are the best Italian restaurants within a 15-minute walk from here?',
     config=types.GenerateContentConfig(
         tools=[types.Tool(google_maps=types.GoogleMaps())],
@@ -635,7 +631,7 @@ from google import genai
 client = genai.Client()
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents='How does AI work?'
 )
 print(response.text)
@@ -650,7 +646,7 @@ from google.genai import types
 client = genai.Client()
 
 response = client.models.generate_content(
-    model='gemini-2.5-flash',
+    model='gemini-3.5-flash',
     contents=[
         types.Content(role='user', parts=[types.Part.from_text(text='How does AI work?')]),
     ]
