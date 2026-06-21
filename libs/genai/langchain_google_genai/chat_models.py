@@ -77,7 +77,13 @@ from langchain_core.messages import (
     is_data_content_block,
 )
 from langchain_core.messages import content as types
-from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
+from langchain_core.messages.ai import (
+    InputTokenDetails,
+    OutputTokenDetails,
+    UsageMetadata,
+    add_usage,
+    subtract_usage,
+)
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.base import OutputParserLike
@@ -1260,6 +1266,22 @@ def _parse_response_candidate(
     )
 
 
+def _get_token_count_for_modality(
+    token_counts: Sequence[Any] | None, modality: str
+) -> int:
+    if not token_counts:
+        return 0
+
+    count = 0
+    for token_count in token_counts:
+        token_modality = getattr(token_count, "modality", None)
+        token_modality_value = getattr(token_modality, "value", token_modality)
+        if token_modality_value == modality:
+            count += cast("int", getattr(token_count, "token_count", 0) or 0)
+
+    return count
+
+
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
@@ -1284,21 +1306,45 @@ def _response_to_result(
         ) + thought_tokens
         total_tokens = response.usage_metadata.total_token_count or 0
         cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
-        if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
+        audio_input_tokens = _get_token_count_for_modality(
+            response.usage_metadata.prompt_tokens_details, "AUDIO"
+        )
+        audio_output_tokens = _get_token_count_for_modality(
+            response.usage_metadata.candidates_tokens_details, "AUDIO"
+        )
+        if (
+            input_tokens
+            + output_tokens
+            + cache_read_tokens
+            + total_tokens
+            + audio_input_tokens
+            + audio_output_tokens
+            > 0
+        ):
+            input_token_details = InputTokenDetails(cache_read=cache_read_tokens)
+            if audio_input_tokens > 0:
+                input_token_details["audio"] = audio_input_tokens
+
+            output_token_details = OutputTokenDetails()
             if thought_tokens > 0:
+                output_token_details["reasoning"] = thought_tokens
+            if audio_output_tokens > 0:
+                output_token_details["audio"] = audio_output_tokens
+
+            if output_token_details:
                 cumulative_usage = UsageMetadata(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens},
-                    output_token_details={"reasoning": thought_tokens},
+                    input_token_details=input_token_details,
+                    output_token_details=output_token_details,
                 )
             else:
                 cumulative_usage = UsageMetadata(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens},
+                    input_token_details=input_token_details,
                 )
             # previous usage metadata needs to be subtracted because gemini api returns
             # already-accumulated token counts with each chunk
