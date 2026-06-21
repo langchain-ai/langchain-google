@@ -148,12 +148,9 @@ def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> 
 @pytest.mark.release
 @pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
 def test_candidates() -> None:
-    """Test making a single invoke call with `n>1`.
-
-    # TODO: what is chat-bison@001? is it marked for deprecation?
-    """
+    """Test making a single invoke call with `n>1`."""
     model = ChatVertexAI(
-        model="chat-bison@001", temperature=0.3, n=2, rate_limiter=RATE_LIMITER
+        model=_DEFAULT_MODEL_NAME, temperature=0.3, n=2, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
     response = model.generate(messages=[[message]])
