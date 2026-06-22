@@ -640,7 +640,7 @@ def _tools_in_params(params: dict) -> bool:
 
 
 def _thinking_in_params(params: dict) -> bool:
-    return params.get("thinking", {}).get("type") == "enabled"
+    return params.get("thinking", {}).get("type") in ("enabled", "adaptive")
 
 
 def _documents_in_params(params: dict) -> bool:
