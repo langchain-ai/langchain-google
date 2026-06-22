@@ -448,6 +448,58 @@ def test_anthropic_profiles_smoke() -> None:
     assert "max_output_tokens" in sample
 
 
+def test_anthropic_vertex_structured_output_thinking_no_tool_choice() -> None:
+    """When `thinking` is enabled, the Anthropic API rejects forcing
+    `tool_choice` with `"Thinking may not be enabled when tool_choice forces
+    tool use."`. `with_structured_output` must avoid passing `tool_choice`
+    in that case, mirroring `langchain-anthropic`'s
+    `_get_llm_for_structured_output_when_thinking_is_enabled`."""
+
+    class Movie(BaseModel):
+        title: str
+        year: int
+
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        model_kwargs={"thinking": {"type": "enabled", "budget_tokens": 1024}},
+    )
+
+    with patch.object(ChatAnthropicVertex, "bind_tools", autospec=True) as mock_bind:
+        mock_bind.return_value = MagicMock()
+        with pytest.warns(UserWarning, match="thinking"):
+            llm.with_structured_output(Movie)
+
+    mock_bind.assert_called_once()
+    # autospec passes the instance as the first positional arg
+    _, call_kwargs = mock_bind.call_args
+    assert call_kwargs.get("tool_choice") is None
+
+
+def test_anthropic_vertex_structured_output_no_thinking_forces_tool_choice() -> None:
+    """Sanity check that the non-thinking path is unchanged: `tool_choice` is
+    still forced to the schema's tool name when `thinking` is not enabled."""
+
+    class Movie(BaseModel):
+        title: str
+        year: int
+
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+    )
+
+    with patch.object(ChatAnthropicVertex, "bind_tools", autospec=True) as mock_bind:
+        mock_bind.return_value = MagicMock()
+        llm.with_structured_output(Movie)
+
+    mock_bind.assert_called_once()
+    _, call_kwargs = mock_bind.call_args
+    assert call_kwargs.get("tool_choice") == "Movie"
+
+
 def test_anthropic_vertex_profile_missing_max_output_tokens(
     monkeypatch: Any,
 ) -> None:
