@@ -129,19 +129,28 @@ async def test_init_from_credentials_obj() -> None:
 
 
 @pytest.mark.release
+@pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize("model_name", model_names_to_test)
 @pytest.mark.parametrize("endpoint_version", endpoint_versions)
 async def test_vertexai_single_call(
-    model_name: str | None, endpoint_version: str
+    is_async: bool, model_name: str | None, endpoint_version: str
 ) -> None:
-    """Test making a single invoke call."""
+    """Test making a single invoke call.
+
+    Parametrized over both the sync (``invoke``) and async (``ainvoke``) paths so
+    the sync transport layer keeps coverage even though most integration tests
+    exercise the async path.
+    """
     model = ChatVertexAI(
         model=model_name,
         rate_limiter=RATE_LIMITER,
         endpoint_version=endpoint_version,
     )
     message = HumanMessage(content="Hello")
-    response = await model.ainvoke([message])
+    if is_async:
+        response = await model.ainvoke([message])
+    else:
+        response = model.invoke([message])
     assert isinstance(response, AIMessage)
     assert isinstance(_get_text_content(response), str)
     _check_usage_metadata(response)
