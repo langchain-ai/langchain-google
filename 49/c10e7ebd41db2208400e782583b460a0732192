@@ -1,0 +1,32 @@
+libs/vertexai/langchain_google_vertexai/chat_models.py
+  s_6d4d07fad9d325::t_6b4063510c996a 2243,2249-2250,2343,2352,2364,2375
+  s_6d4d07fad9d325::t_9dfcf8f1a3ad8f 1900
+  s_6d4d07fad9d325::t_2f1200bb4a89b6 2244-2248
+libs/vertexai/tests/unit_tests/test_chat_models.py
+  s_6d4d07fad9d325::t_ec59e2dce34308 1944,1953,1965-2027
+  s_69629c3b2c451f::t_71371a4aa9485e 1935-1943,1945-1952,1954-1964,2028-2029
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "49c10e7ebd41db2208400e782583b460a0732192",
+  "prompts": {},
+  "sessions": {
+    "s_69629c3b2c451f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8d4c117-c709-4ec3-97de-9e433a28ca67",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    },
+    "s_6d4d07fad9d325": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a040b3c5-abf8-4cae-a53f-314d0c80c150",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
