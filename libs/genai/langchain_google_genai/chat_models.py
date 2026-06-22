@@ -1175,7 +1175,8 @@ def _parse_response_candidate(
             args_dict = dict(part.function_call.args) if part.function_call.args else {}
             function_call_args_dict = _convert_integer_like_floats(args_dict)
             function_call["arguments"] = json.dumps(
-                {k: function_call_args_dict[k] for k in function_call_args_dict}
+                {k: function_call_args_dict[k] for k in function_call_args_dict},
+                ensure_ascii=False,
             )
             additional_kwargs["function_call"] = function_call
 
