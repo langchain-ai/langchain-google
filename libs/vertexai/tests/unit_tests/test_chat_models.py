@@ -1835,6 +1835,7 @@ def test_anthropic_format_output() -> None:
             "cache_read": 1,
         },
     }
+    assert message.response_metadata.get("model_provider") == "anthropic"
 
 
 def test_anthropic_format_output_with_chain_of_thoughts() -> None:
@@ -1904,6 +1905,7 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
             "cache_read": 1,
         },
     }
+    assert message.response_metadata.get("model_provider") == "anthropic"
 
 
 def test_thinking_configuration() -> None:
