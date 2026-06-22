@@ -1932,6 +1932,101 @@ def test_thinking_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
 
+def test_labels_on_request_envelope() -> None:
+    """`labels` belongs on the request envelope, not on `GenerationConfig`.
+
+    Regression test: passing `labels` as an invocation-time keyword used to leak into
+    `GenerationConfig`, which rejects unknown fields and raised
+    ``ValueError: Unknown field for GenerationConfig: labels``.
+    """
+    input_message = HumanMessage("Query.")
+
+    # Init param: labels land on the request envelope.
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    # Invocation param must not raise (the regression) and overrides the init value.
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+    # Invocation param with no init value.
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    request = llm._prepare_request_gemini([input_message], labels={"only": "per-call"})
+    assert dict(request.labels) == {"only": "per-call"}
+
+    # No labels anywhere.
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {}
+
+
+def test_labels_on_request_envelope_cached_content() -> None:
+    """`labels` reach the envelope on the cached-content path.
+
+    Previously the cached-content branches omitted `labels` entirely, silently
+    dropping them; init-time and per-call values must now propagate.
+    """
+    input_message = HumanMessage("Query.")
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        cached_content="my-cache",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+
+def test_labels_on_request_envelope_v1_endpoint() -> None:
+    """`labels` reach the envelope on the ``v1`` endpoint path."""
+    input_message = HumanMessage("Query.")
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        endpoint_version="v1",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+
+def test_labels_via_public_invoke() -> None:
+    """End-to-end: ``invoke(..., labels=...)`` routes labels to the envelope only.
+
+    Guards the user-facing path. ``labels`` must land on ``request.labels`` and must
+    NOT leak as a keyword to the GAPIC ``generate_content`` call, which has no
+    ``labels`` parameter and would raise ``TypeError`` in production.
+    """
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
+        response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
+
+        llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+        llm.invoke([HumanMessage("Query.")], labels={"env": "prod"})
+
+        mock_generate_content.assert_called_once()
+        call_kwargs = mock_generate_content.call_args.kwargs
+        assert dict(call_kwargs["request"].labels) == {"env": "prod"}
+        assert "labels" not in call_kwargs
+
+
 def test_thought_signature() -> None:
     """Test that thought signatures are correctly parsed and included in requests."""
     llm = ChatVertexAI(

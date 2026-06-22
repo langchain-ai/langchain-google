@@ -1414,7 +1414,6 @@ async def test_astream_events_langgraph_example() -> None:
     assert output.additional_kwargs["function_call"]["name"] == "multiply"
 
 
-@pytest.mark.xfail(reason="can't add labels to the gemini content")
 @pytest.mark.release
 def test_label_metadata() -> None:
     llm = ChatVertexAI(
@@ -1427,7 +1426,6 @@ def test_label_metadata() -> None:
     llm.invoke("hey! how are you")
 
 
-@pytest.mark.xfail(reason="can't add labels to the gemini content using invoke method")
 @pytest.mark.release
 def test_label_metadata_invoke_method() -> None:
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
