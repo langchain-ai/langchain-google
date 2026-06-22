@@ -1462,3 +1462,69 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+def test_format_to_genai_handles_titleless_dict_schema() -> None:
+    """Regression test for #1807.
+
+    ``with_structured_output(dict_schema, method="function_calling")`` with a
+    schema that has no top-level ``title`` used to crash inside the
+    ``bind_tools`` fallback path because the schema was treated as a
+    malformed function dict (yielding ``name="MISSING_NAME"`` /
+    ``parameters=None``), which then crashed on re-entry in
+    ``_prepare_request``.
+
+    Bare JSON Schema dicts (``type: object`` with ``properties``) must
+    instead be wrapped as the parameters block of a synthesised function
+    declaration.
+    """
+    schema = {
+        "type": "object",
+        "properties": {
+            "answer": {"type": "string"},
+            "score": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        },
+        "required": ["answer"],
+    }
+
+    fd = _format_to_genai_function_declaration(schema)
+    assert fd.name == "structured_output"
+    assert fd.parameters is not None
+    assert fd.parameters.type == Type.OBJECT
+    assert fd.parameters.properties is not None
+    assert set(fd.parameters.properties.keys()) == {"answer", "score"}
+    assert fd.parameters.required == ["answer"]
+
+
+def test_format_to_genai_uses_title_as_function_name() -> None:
+    """Regression test for #1807.
+
+    When a bare JSON Schema dict carries a ``title``, the synthesised
+    function declaration should use that title as its name rather than
+    falling back to the generic ``structured_output``.
+    """
+    schema = {
+        "title": "MyOutput",
+        "description": "An output object.",
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+    }
+
+    fd = _format_to_genai_function_declaration(schema)
+    assert fd.name == "MyOutput"
+    assert fd.description == "An output object."
+
+
+def test_format_to_genai_round_trip_with_none_parameters() -> None:
+    """Regression test for #1807.
+
+    ``tool_to_dict`` can serialise a function declaration with
+    ``parameters=None``. When that serialised dict is fed back into
+    ``_format_to_genai_function_declaration`` (which happens in
+    ``_prepare_request``), the converter must not crash with
+    ``AttributeError: 'NoneType' object has no attribute 'get'``.
+    """
+    serialised = {"name": "MISSING_NAME", "parameters": None}
+    fd = _format_to_genai_function_declaration(serialised)
+    assert fd.name == "MISSING_NAME"
