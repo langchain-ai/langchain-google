@@ -1601,6 +1601,21 @@ def test_max_retries_parameter_handling(
         assert config.http_options is None or config.http_options.retry_options is None
 
 
+def _strip_none(value: Any) -> Any:
+    """Recursively drop keys whose values are `None`.
+
+    Lets equality assertions on `grounding_metadata` tolerate new optional
+    fields (defaulting to `None`) being added to upstream `google-genai`
+    schemas across the supported version range, without weakening checks
+    on fields the test actually cares about.
+    """
+    if isinstance(value, dict):
+        return {k: _strip_none(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [_strip_none(v) for v in value]
+    return value
+
+
 @pytest.mark.parametrize(
     ("raw_response", "expected_grounding_metadata"),
     [
@@ -1795,7 +1810,9 @@ def test_response_to_result_grounding_metadata(
             if generation.generation_info is not None
             else {}
         )
-        assert grounding_metadata == expected_grounding_metadata
+        assert _strip_none(grounding_metadata) == _strip_none(
+            expected_grounding_metadata
+        )
 
         # Check content format based on whether grounding metadata is present
         if expected_grounding_metadata:
