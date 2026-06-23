@@ -26,5 +26,5 @@ jobs:
           {"provider":"anthropic",       "data_dir":"libs/vertexai/langchain_google_vertexai/data/anthropic"}
         ]
     secrets:
-      MODEL_PROFILE_BOT_APP_ID: ${{ secrets.MODEL_PROFILE_BOT_APP_ID }}
+      MODEL_PROFILE_BOT_CLIENT_ID: ${{ secrets.MODEL_PROFILE_BOT_CLIENT_ID }}
       MODEL_PROFILE_BOT_PRIVATE_KEY: ${{ secrets.MODEL_PROFILE_BOT_PRIVATE_KEY }}

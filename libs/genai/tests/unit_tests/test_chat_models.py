@@ -75,7 +75,7 @@ from langchain_google_genai.chat_models import (
     _validate_video_metadata,
 )
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 FAKE_API_KEY = "fake-api-key"
 
@@ -118,7 +118,7 @@ def test_integration_initialization() -> None:
         "ls_provider": "google_genai",
         "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
-        "ls_temperature": 0.7,
+        "ls_temperature": 1.0,
         "ls_max_tokens": 10,
     }
 
@@ -126,7 +126,7 @@ def test_integration_initialization() -> None:
     msg = HumanMessage(content="test")
     request = llm._prepare_request([msg])
     config = request["config"]
-    assert config.temperature == 0.7
+    assert config.temperature == 1.0
     assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
@@ -275,7 +275,7 @@ def test_profile() -> None:
     assert not model.profile["reasoning_output"]
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert model.profile
@@ -1229,13 +1229,11 @@ def test_parse_response_candidate_includes_model_name() -> None:
     }
 
     response_candidate = Candidate.model_validate(raw_candidate)
-    result = _parse_response_candidate(
-        response_candidate, model_name="gemini-2.5-flash"
-    )
+    result = _parse_response_candidate(response_candidate, model_name=MODEL_NAME)
 
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
-    assert result.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert result.response_metadata["model_name"] == MODEL_NAME
 
     # No name
 
@@ -1261,7 +1259,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk1_candidate = Candidate.model_validate(raw_chunk1)
     response1 = GenerateContentResponse(
-        candidates=[chunk1_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk1_candidate], model_version=MODEL_NAME
     )
 
     # Second chunk without finish_reason
@@ -1271,7 +1269,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk2_candidate = Candidate.model_validate(raw_chunk2)
     response2 = GenerateContentResponse(
-        candidates=[chunk2_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk2_candidate], model_version=MODEL_NAME
     )
 
     # Final chunk with finish_reason
@@ -1282,7 +1280,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk3_candidate = Candidate.model_validate(raw_chunk3)
     response3 = GenerateContentResponse(
-        candidates=[chunk3_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk3_candidate], model_version=MODEL_NAME
     )
 
     # Convert to LangChain messages (simulating what _stream does)
@@ -1299,13 +1297,13 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     assert "model_name" not in msg2.response_metadata
 
     # Only the last chunk should have model_name
-    assert msg3.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert msg3.response_metadata["model_name"] == MODEL_NAME
 
     # Concatenate chunks (simulating user code with +=)
     full = msg1 + msg2 + msg3
 
     # Verify model_name is not duplicated
-    assert full.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert full.response_metadata["model_name"] == MODEL_NAME
     assert full.response_metadata["model_name"].count("gemini") == 1, (
         "model_name should not be duplicated"
     )
@@ -1476,12 +1474,12 @@ def test_supports_thinking() -> None:
     )
     assert not llm_tts._supports_thinking()
     llm_normal = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_normal._supports_thinking()
     llm_pro = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
+        model="gemini-3.1-pro-preview",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_pro._supports_thinking()
@@ -5104,7 +5102,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
-        assert llm_vertex.model == "gemini-2.5-flash"
+        assert llm_vertex.model == MODEL_NAME
         assert llm_vertex._use_vertexai is True  # type: ignore[attr-defined]
 
         # Test with models/ prefix for Google AI - should remain unchanged
@@ -5113,7 +5111,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=False,
         )
-        assert llm_google_ai.model == "models/gemini-2.5-flash"
+        assert llm_google_ai.model == f"models/{MODEL_NAME}"
         assert llm_google_ai._use_vertexai is False  # type: ignore[attr-defined]
 
         # Test without models/ prefix for Vertex AI - should remain unchanged
@@ -5122,7 +5120,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
-        assert llm_vertex_no_prefix.model == "gemini-2.5-flash"
+        assert llm_vertex_no_prefix.model == MODEL_NAME
         assert llm_vertex_no_prefix._use_vertexai is True  # type: ignore[attr-defined]
     finally:
         os.environ.clear()

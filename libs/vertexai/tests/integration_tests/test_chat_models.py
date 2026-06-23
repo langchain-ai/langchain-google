@@ -148,12 +148,9 @@ def test_vertexai_single_call(model_name: str | None, endpoint_version: str) -> 
 @pytest.mark.release
 @pytest.mark.xfail(reason="vertex api doesn't respect n/candidate_count")
 def test_candidates() -> None:
-    """Test making a single invoke call with `n>1`.
-
-    # TODO: what is chat-bison@001? is it marked for deprecation?
-    """
+    """Test making a single invoke call with `n>1`."""
     model = ChatVertexAI(
-        model="chat-bison@001", temperature=0.3, n=2, rate_limiter=RATE_LIMITER
+        model=_DEFAULT_MODEL_NAME, temperature=0.3, n=2, rate_limiter=RATE_LIMITER
     )
     message = HumanMessage(content="Hello")
     response = model.generate(messages=[[message]])
@@ -263,7 +260,7 @@ def test_multimodal() -> None:
     assert isinstance(output, AIMessage)
     _check_usage_metadata(output)
 
-    llm = ChatVertexAI(model="gemini-2.5-pro", rate_limiter=RATE_LIMITER)
+    llm = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, rate_limiter=RATE_LIMITER)
     for chunk in llm.stream([message]):
         assert isinstance(chunk, AIMessageChunk)
 
@@ -987,7 +984,7 @@ def test_thought_signatures() -> None:
     to GAPIC to LangChain parsing and back into subsequent calls, without crashing or
     losing type safety.
     """
-    llm = ChatVertexAI(model="gemini-2.5-pro", include_thoughts=True)
+    llm = ChatVertexAI(model=_DEFAULT_THINKING_MODEL_NAME, include_thoughts=True)
 
     def get_weather(location: str) -> str:
         """Get the weather for a location."""
@@ -1417,7 +1414,6 @@ async def test_astream_events_langgraph_example() -> None:
     assert output.additional_kwargs["function_call"]["name"] == "multiply"
 
 
-@pytest.mark.xfail(reason="can't add labels to the gemini content")
 @pytest.mark.release
 def test_label_metadata() -> None:
     llm = ChatVertexAI(
@@ -1430,7 +1426,6 @@ def test_label_metadata() -> None:
     llm.invoke("hey! how are you")
 
 
-@pytest.mark.xfail(reason="can't add labels to the gemini content using invoke method")
 @pytest.mark.release
 def test_label_metadata_invoke_method() -> None:
     llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME)
