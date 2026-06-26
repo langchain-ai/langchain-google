@@ -346,7 +346,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     Scales with the count of prior appearances, so it discourages verbatim
     repetition more strongly than `presence_penalty`.
 
-    Must be within `[-2.0, 2.0)`.
+    Must be within `[-2.0, 2.0]`.
     """
 
     presence_penalty: float | None = None
@@ -355,7 +355,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     Applied once a token has appeared, regardless of how many times, so it
     encourages introducing new topics rather than reducing repetition.
 
-    Must be within `[-2.0, 2.0)`.
+    Must be within `[-2.0, 2.0]`.
     """
 
     top_p: float | None = None

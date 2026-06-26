@@ -2530,16 +2530,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         if (
             self.frequency_penalty is not None
-            and not -2.0 <= self.frequency_penalty < 2.0
+            and not -2.0 <= self.frequency_penalty <= 2.0
         ):
-            msg = "frequency_penalty must be in the range [-2.0, 2.0)"
+            msg = "frequency_penalty must be in the range [-2.0, 2.0]"
             raise ValueError(msg)
 
         if (
             self.presence_penalty is not None
-            and not -2.0 <= self.presence_penalty < 2.0
+            and not -2.0 <= self.presence_penalty <= 2.0
         ):
-            msg = "presence_penalty must be in the range [-2.0, 2.0)"
+            msg = "presence_penalty must be in the range [-2.0, 2.0]"
             raise ValueError(msg)
 
         additional_headers = self.additional_headers or {}

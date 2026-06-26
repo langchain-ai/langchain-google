@@ -4848,15 +4848,28 @@ def test_n_and_candidate_count_alias_resolves_to_alias() -> None:
 
 
 @pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
-@pytest.mark.parametrize("value", [-2.5, 2.0, 5.0])
+@pytest.mark.parametrize("value", [-2.5, 2.1, 5.0])
 def test_penalty_out_of_range_raises(field: str, value: float) -> None:
-    """Test penalties outside `[-2.0, 2.0)` are rejected at construction."""
+    """Test penalties outside `[-2.0, 2.0]` are rejected at construction."""
     with pytest.raises(ValueError, match=f"{field} must be in the range"):
         ChatGoogleGenerativeAI(
             model=MODEL_NAME,
             google_api_key=SecretStr(FAKE_API_KEY),
             **{field: value},
         )
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.0, 2.0])
+def test_penalty_range_bounds_are_allowed(field: str, value: float) -> None:
+    """Test penalties at the documented bounds are accepted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        **{field: value},
+    )
+
+    assert getattr(llm, field) == value
 
 
 def test_penalties_in_identifying_params() -> None:
