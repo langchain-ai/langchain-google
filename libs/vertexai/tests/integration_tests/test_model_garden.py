@@ -1,6 +1,8 @@
 import json
 import os
+from typing import NoReturn
 
+import anthropic
 import pytest
 from langchain_core.messages import (
     AIMessage,
@@ -22,6 +24,22 @@ from tests.integration_tests.conftest import _get_text_content
 
 _ANTHROPIC_LOCATION = "us-east5"
 _ANTHROPIC_CLAUDE_MODEL_NAME = "claude-sonnet-4-5@20250929"
+# Beta header used to verify `betas` propagation. Beta values are rotated and
+# may not be enabled for every project/model, so callers should treat a
+# rejected beta header as a skip rather than a failure (see
+# `_skip_if_beta_rejected`).
+_ANTHROPIC_BETA = "context-1m-2025-08-07"
+
+
+def _skip_if_beta_rejected(exc: anthropic.BadRequestError) -> NoReturn:
+    """Skip when the live endpoint rejects the beta header value.
+
+    Re-raises anything that is not an `anthropic-beta` header rejection so real
+    propagation regressions still surface.
+    """
+    if "anthropic-beta" in str(exc):
+        pytest.skip(f"Beta header {_ANTHROPIC_BETA!r} not accepted by endpoint: {exc}")
+    raise exc
 
 
 @pytest.mark.extended
@@ -390,12 +408,15 @@ async def test_anthropic_async_invoke_with_betas() -> None:
     )
     message = HumanMessage(content="What is 2+2?")
 
-    # This should work but currently fails because _agenerate doesn't handle betas
-    response = await model.ainvoke(
-        [message],
-        model_name=_ANTHROPIC_CLAUDE_MODEL_NAME,
-        betas=["context-1m-2025-08-07"],
-    )
+    # `_agenerate` should route `betas` through the Anthropic beta client.
+    try:
+        response = await model.ainvoke(
+            [message],
+            model_name=_ANTHROPIC_CLAUDE_MODEL_NAME,
+            betas=[_ANTHROPIC_BETA],
+        )
+    except anthropic.BadRequestError as exc:
+        _skip_if_beta_rejected(exc)
     assert isinstance(response, AIMessage)
     assert isinstance(_get_text_content(response), str)
 
@@ -411,14 +432,17 @@ async def test_anthropic_async_stream_with_betas() -> None:
     )
     message = HumanMessage(content="Say hello")
 
-    # This should work but currently fails because _astream doesn't handle betas
+    # `_astream` should route `betas` through the Anthropic beta client.
     chunks = []
-    async for chunk in model.astream(
-        [message],
-        model=_ANTHROPIC_CLAUDE_MODEL_NAME,
-        betas=["context-1m-2025-08-07"],
-    ):
-        chunks.append(chunk)
-        assert isinstance(chunk, AIMessageChunk)
+    try:
+        async for chunk in model.astream(
+            [message],
+            model=_ANTHROPIC_CLAUDE_MODEL_NAME,
+            betas=[_ANTHROPIC_BETA],
+        ):
+            chunks.append(chunk)
+            assert isinstance(chunk, AIMessageChunk)
+    except anthropic.BadRequestError as exc:
+        _skip_if_beta_rejected(exc)
 
     assert len(chunks) > 0

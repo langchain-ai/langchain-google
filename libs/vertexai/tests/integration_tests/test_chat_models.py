@@ -1678,10 +1678,13 @@ def test_search_builtin(output_version: str) -> None:
     assert isinstance(full, AIMessageChunk)
     _check_web_search_output(full)
 
-    # Test we can process chat history
+    # Test we can process chat history while still verifying grounding on
+    # `invoke`. Use a self-contained current-events query rather than a
+    # context-dependent follow-up (e.g. "that last story"), which the model
+    # may answer with a clarification and thus return no grounding metadata.
     next_message = {
         "role": "user",
-        "content": "Tell me more about that last story.",
+        "content": "What is today's top news story in technology?",
     }
     response = llm.invoke([input_message, full, next_message])
     assert isinstance(response, AIMessage)
