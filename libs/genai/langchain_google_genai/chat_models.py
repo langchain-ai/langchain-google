@@ -96,7 +96,14 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self, is_typeddict
 
@@ -2400,6 +2407,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         this defaults to `'high'`.
     """
 
+    thinking_config: dict[str, Any] | ThinkingConfig | None = Field(
+        default=None,
+    )
+    """Raw Google GenAI thinking configuration.
+
+    Accepts the same fields as `google.genai.types.ThinkingConfig`, including
+    `thinking_level`, `thinking_budget`, and `include_thoughts`.
+
+    !!! note "Precedence"
+
+        If `thinking_config` is provided together with flat thinking arguments,
+        the flat arguments take precedence for matching fields. After merging,
+        `thinking_level` takes precedence over `thinking_budget` for Gemini 3+ models.
+    """
+
     cached_content: str | None = None
     """The name of the cached content used as context to serve the prediction.
 
@@ -2453,6 +2475,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @classmethod
     def is_lc_serializable(cls) -> bool:
         return True
+
+    @field_validator("thinking_config", mode="before")
+    @classmethod
+    def _serialize_thinking_config(
+        cls, value: ThinkingConfig | dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if isinstance(value, ThinkingConfig):
+            return value.model_dump(exclude_none=True)
+        return value
 
     @model_validator(mode="before")
     @classmethod
@@ -2675,6 +2706,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
             "thinking_level": self.thinking_level,
+            "thinking_config": self.thinking_config,
             "image_config": self.image_config,
         }
 
@@ -2796,12 +2828,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _build_thinking_config(self, **kwargs: Any) -> ThinkingConfig | None:
         """Build thinking configuration if supported by the model."""
+        raw_thinking_config = kwargs.get("thinking_config", self.thinking_config)
         thinking_level = kwargs.get("thinking_level", self.thinking_level)
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
 
         has_thinking_params = (
-            thinking_level is not None
+            raw_thinking_config is not None
+            or thinking_level is not None
             or thinking_budget is not None
             or include_thoughts is not None
         )
@@ -2809,23 +2843,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             return None
 
         config: dict[str, Any] = {}
-
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
-        if thinking_level is not None:
-            if thinking_budget is not None:
-                warnings.warn(
-                    "Both 'thinking_level' and 'thinking_budget' were provided. "
-                    "'thinking_level' takes precedence for Gemini 3+ models; "
-                    "'thinking_budget' will be ignored.",
-                    UserWarning,
-                    stacklevel=2,
+        if raw_thinking_config is not None:
+            config.update(
+                ThinkingConfig.model_validate(raw_thinking_config).model_dump(
+                    exclude_none=True
                 )
-            config["thinking_level"] = thinking_level
-        elif thinking_budget is not None:
-            config["thinking_budget"] = thinking_budget
+            )
 
+        if thinking_level is not None:
+            config["thinking_level"] = thinking_level
+        if thinking_budget is not None:
+            config["thinking_budget"] = thinking_budget
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
+
+        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        if "thinking_level" in config and "thinking_budget" in config:
+            warnings.warn(
+                "Both 'thinking_level' and 'thinking_budget' were set after merging "
+                "thinking configuration values. 'thinking_level' takes precedence "
+                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
+            config.pop("thinking_budget")
 
         return ThinkingConfig(**config)
 
