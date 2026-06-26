@@ -1311,6 +1311,119 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     )
 
 
+def test_response_to_result_includes_provider_response_id() -> None:
+    """Test `_response_to_result` includes Gemini response ID in metadata."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+    response = GenerateContentResponse(
+        candidates=[Candidate.model_validate(raw_candidate)],
+        response_id="provider-response-id",
+    )
+
+    result = _response_to_result(response)
+    message = result.generations[0].message
+
+    assert message.response_metadata["id"] == "provider-response-id"
+    assert "response_id" not in message.response_metadata
+
+
+def test_response_to_result_omits_missing_provider_response_id() -> None:
+    """Test `_response_to_result` omits ID metadata when Gemini omits it."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+    response = GenerateContentResponse(
+        candidates=[Candidate.model_validate(raw_candidate)]
+    )
+
+    result = _response_to_result(response)
+    message = result.generations[0].message
+
+    assert "id" not in message.response_metadata
+    assert "response_id" not in message.response_metadata
+
+
+def test_response_to_result_includes_provider_response_id_without_candidates() -> None:
+    """Test no-candidate responses preserve Gemini response ID metadata."""
+    response = GenerateContentResponse(
+        candidates=[], response_id="provider-response-id"
+    )
+
+    result = _response_to_result(response)
+    message = result.generations[0].message
+
+    assert message.response_metadata["id"] == "provider-response-id"
+    assert "response_id" not in message.response_metadata
+
+
+def test_streaming_provider_response_id_added_to_final_chunk() -> None:
+    """Test streamed Gemini response ID is included once after concatenation."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.client is not None
+
+    chunks = [
+        GenerateContentResponse(
+            candidates=[
+                Candidate.model_validate(
+                    {
+                        "content": {"parts": [{"text": "Hello"}]},
+                        "safety_ratings": [],
+                    }
+                )
+            ],
+            model_version=MODEL_NAME,
+            response_id="provider-response-id",
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate.model_validate(
+                    {
+                        "content": {"parts": [{"text": " world"}]},
+                        "safety_ratings": [],
+                    }
+                )
+            ],
+            model_version=MODEL_NAME,
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate.model_validate(
+                    {
+                        "content": {"parts": [{"text": "!"}]},
+                        "finish_reason": "STOP",
+                        "safety_ratings": [],
+                    }
+                )
+            ],
+            model_version=MODEL_NAME,
+        ),
+    ]
+
+    with patch.object(
+        llm.client.models, "generate_content_stream", return_value=iter(chunks)
+    ):
+        generations = list(llm._stream([HumanMessage(content="Hello")]))
+
+    messages = [
+        cast("AIMessageChunk", generation.message) for generation in generations
+    ]
+    assert "id" not in messages[0].response_metadata
+    assert "id" not in messages[1].response_metadata
+    assert messages[2].response_metadata["id"] == "provider-response-id"
+
+    full = messages[0] + messages[1] + messages[2]
+    assert full.response_metadata["id"] == "provider-response-id"
+    assert full.response_metadata["id"].count("provider-response-id") == 1
+
+
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)

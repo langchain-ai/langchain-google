@@ -18,11 +18,16 @@ from langchain_google_vertexai.model_garden_maas import (
 )
 from tests.integration_tests.conftest import _get_text_content
 
-# `us-east5` quota for `llama-4-maverick` is regularly exhausted by the
-# parametrized sweep (429 `RESOURCE_EXHAUSTED`), and pytest-retry's short
-# backoff isn't enough to recover. xfail with `strict=False` so we still
-# get an XPASS signal when quota is available, without blocking unrelated PRs.
-_QUOTA_EXHAUSTED_MODELS = frozenset({"meta/llama-4-maverick-17b-128e-instruct-maas"})
+# Some MaaS live-test endpoints regularly exhaust quota during the parametrized
+# sweep (429 `RESOURCE_EXHAUSTED`), and pytest-retry's short backoff isn't
+# enough to recover. xfail with `strict=False` so we still get an XPASS signal
+# when quota is available, without blocking unrelated PRs.
+_QUOTA_EXHAUSTED_MODELS = frozenset(
+    {
+        "meta/llama-3.3-70b-instruct-maas",
+        "meta/llama-4-maverick-17b-128e-instruct-maas",
+    }
+)
 
 
 def _model_param(model_name: str) -> Any:
@@ -31,8 +36,8 @@ def _model_param(model_name: str) -> Any:
             model_name,
             marks=pytest.mark.xfail(
                 reason=(
-                    "us-east5 quota for llama-4-maverick is consistently "
-                    "exhausted in the integration-test project (429)"
+                    "quota for this MaaS model is consistently exhausted in "
+                    "the integration-test project (429)"
                 ),
                 strict=False,
             ),
