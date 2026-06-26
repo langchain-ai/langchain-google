@@ -340,6 +340,18 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     """
 
+    frequency_penalty: float | None = None
+    """Penalize tokens that repeatedly appear in the generated text.
+
+    Must be within `[-2.0, 2.0]`.
+    """
+
+    presence_penalty: float | None = None
+    """Penalize tokens that already appear in the generated text.
+
+    Must be within `[-2.0, 2.0]`.
+    """
+
     top_p: float | None = None
     """Decode using nucleus sampling.
 
@@ -367,7 +379,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     the `thinking_budget` parameter.
     """
 
-    n: int = 1
+    n: int = Field(default=1, alias="candidate_count")
     """Number of chat completions to generate for each prompt.
 
     Note that the API may not return the full `n` completions if duplicates are
@@ -594,6 +606,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
         return {
             "model": self.model,
             "temperature": self.temperature,
+            "frequency_penalty": self.frequency_penalty,
+            "presence_penalty": self.presence_penalty,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "max_output_tokens": self.max_output_tokens,

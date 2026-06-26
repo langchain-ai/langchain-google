@@ -60,6 +60,19 @@ def test_tracing_params() -> None:
         assert "Did you mean: 'safety_settings'?" in call_args
 
 
+def test_penalties_are_passed_to_internal_chat_model() -> None:
+    """Test penalties propagate to the internal chat model client."""
+    llm = GoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="foo",
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+
+    assert llm.client.frequency_penalty == 0.2
+    assert llm.client.presence_penalty == 0.1
+
+
 def test_base_url_support() -> None:
     """Test that `base_url` is properly passed through to `ChatGoogleGenerativeAI`."""
     mock_client_instance = Mock()
