@@ -1,0 +1,40 @@
+libs/genai/tests/unit_tests/test_chat_models.py
+  s_450e6fc8ef3210::t_b319afafb61635 4818-4900
+  s_450e6fc8ef3210::t_c9d34613c54490 1317-1318
+  s_b244f28f933b54::t_b45fde7452a463 4715-4728
+libs/genai/langchain_google_genai/_common.py
+  s_450e6fc8ef3210::t_8b680cd160cf2a 344,346-349,353-356,358
+libs/genai/langchain_google_genai/chat_models.py
+  s_b244f28f933b54::t_b7d5ce5c63b275 2807-2809
+  h_9f69767fa5fabf 2531,2534,2538,2541
+  s_450e6fc8ef3210::t_97336438775c6d 2532-2533,2535-2537,2539-2540,2542-2544
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "0de3be6836e188e361041bdac5c179bedcbf5859",
+  "prompts": {},
+  "humans": {
+    "h_9f69767fa5fabf": {
+      "author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  },
+  "sessions": {
+    "s_450e6fc8ef3210": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d367779c-d22b-484b-af19-bbbb8a94bc32",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    },
+    "s_b244f28f933b54": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f025a-0cb2-7441-818a-0a79c2744aca",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
