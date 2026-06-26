@@ -87,6 +87,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             presence_penalty=self.presence_penalty,
             top_p=self.top_p,
             top_k=self.top_k,
+            n=self.n,
             max_tokens=self.max_output_tokens,
             max_retries=self.max_retries,
             timeout=self.timeout,

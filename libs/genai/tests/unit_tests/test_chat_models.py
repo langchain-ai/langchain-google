@@ -1314,10 +1314,8 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
-    with pytest.warns(
-        LangChainBetaWarning,
-        match="The function `loads` is in beta",
-    ):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
         llm_loaded = loads(
             serialized,
             secrets_map={"GOOGLE_API_KEY": "test-key"},
@@ -4714,6 +4712,20 @@ def test_kwargs_override_stop() -> None:
     assert config.stop_sequences == ["me"]
 
 
+def test_kwargs_stop_sequences_overrides_constructor_stop() -> None:
+    """Test that per-call `stop_sequences` overrides constructor `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["you"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop_sequences=["me"])
+    config = request["config"]
+    assert config.stop_sequences == ["me"]
+
+
 def test_generation_config_constructor_fields_are_propagated() -> None:
     """Test Google generation config field aliases are propagated."""
     llm = ChatGoogleGenerativeAI(
@@ -4801,6 +4813,89 @@ def test_constructor_stop_is_propagated() -> None:
     request = llm._prepare_request([msg])
     config = request["config"]
     assert config.stop_sequences == ["stop"]
+
+
+def test_per_call_empty_stop_overrides_constructor_stop() -> None:
+    """Test a per-call empty `stop` list clears the model-level `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop=[])
+    config = request["config"]
+    # An empty list is a valid "clear the stops" signal and must not fall back
+    # to the model-level `stop`.
+    assert config.stop_sequences == []
+
+
+def test_n_and_candidate_count_alias_resolves_to_alias() -> None:
+    """Test passing both `n` and its `candidate_count` alias: alias wins.
+
+    Pins the standard Pydantic `populate_by_name=True` resolution order so a
+    future change to alias handling is caught.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+        candidate_count=5,
+    )
+
+    assert llm.n == 5
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.5, 2.0, 5.0])
+def test_penalty_out_of_range_raises(field: str, value: float) -> None:
+    """Test penalties outside `[-2.0, 2.0)` are rejected at construction."""
+    with pytest.raises(ValueError, match=f"{field} must be in the range"):
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **{field: value},
+        )
+
+
+def test_penalties_in_identifying_params() -> None:
+    """Test penalties are included in identifying parameters for tracing."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    params = llm._identifying_params
+    assert params["frequency_penalty"] == 0.2
+    assert params["presence_penalty"] == 0.1
+
+
+def test_serialize_round_trips_generation_config_aliases() -> None:
+    """Test alias-set generation config fields survive serialization."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        candidate_count=2,
+        stop_sequences=["stop"],
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    serialized = dumps(llm)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+    assert llm_loaded.n == 2
+    assert llm_loaded.stop == ["stop"]
 
 
 def test_kwargs_override_thinking_budget() -> None:

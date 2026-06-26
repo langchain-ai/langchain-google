@@ -341,15 +341,21 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """
 
     frequency_penalty: float | None = None
-    """Penalize tokens that repeatedly appear in the generated text.
+    """Penalize tokens proportionally to how often they have already appeared.
 
-    Must be within `[-2.0, 2.0]`.
+    Scales with the count of prior appearances, so it discourages verbatim
+    repetition more strongly than `presence_penalty`.
+
+    Must be within `[-2.0, 2.0)`.
     """
 
     presence_penalty: float | None = None
-    """Penalize tokens that already appear in the generated text.
+    """Penalize tokens that have already appeared at all in the generated text.
 
-    Must be within `[-2.0, 2.0]`.
+    Applied once a token has appeared, regardless of how many times, so it
+    encourages introducing new topics rather than reducing repetition.
+
+    Must be within `[-2.0, 2.0)`.
     """
 
     top_p: float | None = None

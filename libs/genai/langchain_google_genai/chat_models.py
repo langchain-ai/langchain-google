@@ -2528,6 +2528,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "top_k must be positive"
             raise ValueError(msg)
 
+        if (
+            self.frequency_penalty is not None
+            and not -2.0 <= self.frequency_penalty < 2.0
+        ):
+            msg = "frequency_penalty must be in the range [-2.0, 2.0)"
+            raise ValueError(msg)
+
+        if (
+            self.presence_penalty is not None
+            and not -2.0 <= self.presence_penalty < 2.0
+        ):
+            msg = "presence_penalty must be in the range [-2.0, 2.0)"
+            raise ValueError(msg)
+
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
 
@@ -2790,7 +2804,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         config: dict[str, Any] = {
             "candidate_count": kwargs.get("candidate_count", self.n),
             "temperature": kwargs.get("temperature", self.temperature),
-            "stop_sequences": stop if stop is not None else self.stop,
+            "stop_sequences": (
+                stop if stop is not None else kwargs.get("stop_sequences", self.stop)
+            ),
             "max_output_tokens": kwargs.get(
                 "max_output_tokens", self.max_output_tokens
             ),
