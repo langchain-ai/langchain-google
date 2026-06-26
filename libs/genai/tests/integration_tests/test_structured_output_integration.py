@@ -57,7 +57,7 @@ class TreeNode(BaseModel):
 TreeNode.model_rebuild()
 
 
-def test_basic_response_json_schema(backend_config: dict) -> None:
+async def test_basic_response_json_schema(backend_config: dict) -> None:
     """Test basic functionality."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
@@ -71,7 +71,9 @@ def test_basic_response_json_schema(backend_config: dict) -> None:
         response_mime_type="application/json", response_json_schema=schema
     )
 
-    result = llm_with_schema.invoke("Respond with a message 'Hello World' and count 5")
+    result = await llm_with_schema.ainvoke(
+        "Respond with a message 'Hello World' and count 5"
+    )
 
     if isinstance(result.content, list) and len(result.content) > 0:
         # Extract text from structured content block
@@ -92,7 +94,7 @@ def test_basic_response_json_schema(backend_config: dict) -> None:
     assert response_data["count"] == 5
 
 
-def test_response_json_schema_union(backend_config: dict) -> None:
+async def test_response_json_schema_union(backend_config: dict) -> None:
     """Test that `response_json_schema` works with unions"""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
@@ -125,7 +127,7 @@ def test_response_json_schema_union(backend_config: dict) -> None:
     prompt = "Respond with type 'greeting' and message 'Hello there'"
 
     # Both should work with their respective schemas
-    result = llm_schema.invoke(prompt)
+    result = await llm_schema.ainvoke(prompt)
 
     if isinstance(result.content, list) and len(result.content) > 0:
         # Extract text from structured content block
@@ -148,12 +150,12 @@ def test_response_json_schema_union(backend_config: dict) -> None:
     )
 
 
-def test_json_schema_with_pydantic_model(backend_config: dict) -> None:
+async def test_json_schema_with_pydantic_model(backend_config: dict) -> None:
     """Test `json_schema` with a Pydantic model."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
     structured_llm = llm.with_structured_output(SimpleResponse, method="json_schema")
 
-    result = structured_llm.invoke(
+    result = await structured_llm.ainvoke(
         "Create a simple response with message 'Test successful' and count 42"
     )
 
@@ -162,7 +164,7 @@ def test_json_schema_with_pydantic_model(backend_config: dict) -> None:
     assert result.count == 42
 
 
-def test_json_schema_with_dict_schema(backend_config: dict) -> None:
+async def test_json_schema_with_dict_schema(backend_config: dict) -> None:
     """Test `json_schema` with a `dict` schema."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
@@ -177,7 +179,7 @@ def test_json_schema_with_dict_schema(backend_config: dict) -> None:
 
     structured_llm = llm.with_structured_output(schema, method="json_schema")
 
-    result = structured_llm.invoke(
+    result = await structured_llm.ainvoke(
         "Create a task with title 'Complete project' and priority 3"
     )
 
@@ -188,13 +190,13 @@ def test_json_schema_with_dict_schema(backend_config: dict) -> None:
     assert result["priority"] == 3
 
 
-def test_recursive_schema_integration(backend_config: dict) -> None:
+async def test_recursive_schema_integration(backend_config: dict) -> None:
     """Test recursive schemas."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
     structured_llm = llm.with_structured_output(TreeNode, method="json_schema")
 
-    result = structured_llm.invoke(
+    result = await structured_llm.ainvoke(
         "Create a simple tree structure with root 'A' that has two children 'B' "
         "and 'C', where 'B' has one child 'D'"
     )
@@ -213,7 +215,7 @@ def test_recursive_schema_integration(backend_config: dict) -> None:
     assert b_node.children[0].value == "D"
 
 
-def test_union_schema_integration(backend_config: dict) -> None:
+async def test_union_schema_integration(backend_config: dict) -> None:
     """Test union schemas with `anyOf` support."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
@@ -242,7 +244,7 @@ def test_union_schema_integration(backend_config: dict) -> None:
     structured_llm = llm.with_structured_output(union_schema, method="json_schema")
 
     # Test with text response
-    text_result = structured_llm.invoke(
+    text_result = await structured_llm.ainvoke(
         "Create a text content with type 'text' and the message 'Hello world'"
     )
     assert isinstance(text_result, dict)
@@ -257,7 +259,7 @@ def test_union_schema_integration(backend_config: dict) -> None:
         pytest.fail(f"Expected either text or number format, got: {text_result}")
 
     # Test with number response
-    number_result = structured_llm.invoke(
+    number_result = await structured_llm.ainvoke(
         "Create a number content with type 'number' and value 42.5"
     )
     assert isinstance(number_result, dict)
@@ -271,7 +273,7 @@ def test_union_schema_integration(backend_config: dict) -> None:
         pytest.fail(f"Expected either text or number format, got: {number_result}")
 
 
-def test_complex_schema_handling(backend_config: dict) -> None:
+async def test_complex_schema_handling(backend_config: dict) -> None:
     """Test handling of complex schemas with constraints."""
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, **backend_config)
 
@@ -297,7 +299,7 @@ def test_complex_schema_handling(backend_config: dict) -> None:
 
     structured_llm = llm.with_structured_output(complex_schema, method="json_schema")
 
-    result = structured_llm.invoke(
+    result = await structured_llm.ainvoke(
         "Create a list with 3 items: Alice (score 95), Bob (score 87), Carol (score 92)"
     )
 
@@ -500,7 +502,7 @@ def test_streaming_parsed_output_behavior(backend_config: dict) -> None:
     assert "Data Science" in final_chunk.skills
 
 
-def test_moderation_union_schema(backend_config: dict) -> None:
+async def test_moderation_union_schema(backend_config: dict) -> None:
     """Test Union types work correctly."""
 
     class SpamDetails(BaseModel):
@@ -536,17 +538,17 @@ def test_moderation_union_schema(backend_config: dict) -> None:
     spam_prompt = "Review this content: 'Click here to win $1000000!!!'"
 
     # Test with Pydantic model (should return Pydantic object)
-    safe_result_model = structured_llm_model.invoke(safe_prompt)
+    safe_result_model = await structured_llm_model.ainvoke(safe_prompt)
     assert isinstance(safe_result_model, ModerationResult)
     assert hasattr(safe_result_model.decision, "summary") or hasattr(
         safe_result_model.decision, "reason"
     )
 
     # Test with dict schema (should return dict)
-    safe_result_dict = structured_llm_dict.invoke(safe_prompt)
+    safe_result_dict = await structured_llm_dict.ainvoke(safe_prompt)
     assert isinstance(safe_result_dict, dict)
     assert "decision" in safe_result_dict
 
     # Test spam detection
-    spam_result = structured_llm_model.invoke(spam_prompt)
+    spam_result = await structured_llm_model.ainvoke(spam_prompt)
     assert isinstance(spam_result, ModerationResult)
