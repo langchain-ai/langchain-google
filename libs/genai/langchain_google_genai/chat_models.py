@@ -2343,7 +2343,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
-    stop: list[str] | None = None
+    stop: list[str] | None = Field(default=None, alias="stop_sequences")
     """Stop sequences for the model."""
 
     response_mime_type: str | None = None
@@ -2528,6 +2528,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "top_k must be positive"
             raise ValueError(msg)
 
+        if (
+            self.frequency_penalty is not None
+            and not -2.0 <= self.frequency_penalty <= 2.0
+        ):
+            msg = "frequency_penalty must be in the range [-2.0, 2.0]"
+            raise ValueError(msg)
+
+        if (
+            self.presence_penalty is not None
+            and not -2.0 <= self.presence_penalty <= 2.0
+        ):
+            msg = "presence_penalty must be in the range [-2.0, 2.0]"
+            raise ValueError(msg)
+
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
 
@@ -2696,6 +2710,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return {
             "model": self.model,
             "temperature": self.temperature,
+            "frequency_penalty": self.frequency_penalty,
+            "presence_penalty": self.presence_penalty,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "max_output_tokens": self.max_output_tokens,
@@ -2786,14 +2802,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> dict[str, Any]:
         """Build the base generation configuration from instance attributes."""
         config: dict[str, Any] = {
-            "candidate_count": self.n,
+            "candidate_count": kwargs.get("candidate_count", self.n),
             "temperature": kwargs.get("temperature", self.temperature),
-            "stop_sequences": stop,
+            "stop_sequences": (
+                stop if stop is not None else kwargs.get("stop_sequences", self.stop)
+            ),
             "max_output_tokens": kwargs.get(
                 "max_output_tokens", self.max_output_tokens
             ),
             "top_k": kwargs.get("top_k", self.top_k),
             "top_p": kwargs.get("top_p", self.top_p),
+            "frequency_penalty": kwargs.get(
+                "frequency_penalty", self.frequency_penalty
+            ),
+            "presence_penalty": kwargs.get("presence_penalty", self.presence_penalty),
             "response_modalities": kwargs.get(
                 "response_modalities", self.response_modalities
             ),
