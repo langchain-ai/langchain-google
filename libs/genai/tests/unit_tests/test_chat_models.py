@@ -23,6 +23,7 @@ from google.genai.types import (
     HttpOptions,
     HttpRetryOptions,
     Language,
+    ModalityTokenCount,
     Part,
     ThinkingConfig,
     ThinkingLevel,
@@ -2652,6 +2653,36 @@ def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     assert audio_block["type"] == "audio"
     assert "base64" in audio_block
     assert audio_block["base64"] == base64.b64encode(wav_bytes).decode()
+
+
+def test_response_to_result_includes_audio_usage_metadata() -> None:
+    """Test audio token details are exposed in LangChain usage metadata."""
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="ok")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+            cached_content_token_count=0,
+            prompt_tokens_details=[ModalityTokenCount(modality="AUDIO", token_count=4)],
+            candidates_tokens_details=[
+                ModalityTokenCount(modality="AUDIO", token_count=16)
+            ],
+        ),
+    )
+
+    result = _response_to_result(mock_response)
+    message = result.generations[0].message
+
+    assert isinstance(message, AIMessage)
+    assert message.usage_metadata is not None
+    assert message.usage_metadata["input_token_details"]["audio"] == 4
+    assert message.usage_metadata["output_token_details"]["audio"] == 16
 
 
 def test_auto_audio_modality_for_tts_models() -> None:
