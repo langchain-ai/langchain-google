@@ -1344,6 +1344,14 @@ def _response_to_result(
             generation_info["model_name"] = response.model_version or ""
             # Set for final chunk
             model_name_for_metadata = response.model_version
+
+            # Surface Vertex AI traffic type (e.g. ON_DEMAND, ON_DEMAND_PRIORITY)
+            # so observability tools can track which billing tier served the request.
+            tt = getattr(response.usage_metadata, "traffic_type", None)
+            if tt is not None:
+                generation_info["traffic_type"] = (
+                    tt.value if hasattr(tt, "value") else str(tt)
+                )
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings

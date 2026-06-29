@@ -1853,6 +1853,111 @@ def test_response_to_result_grounding_metadata(
             assert generation.message.content == "Test response"
 
 
+@pytest.mark.parametrize(
+    "traffic_type_value, expected_traffic_type",
+    [
+        ("ON_DEMAND_PRIORITY", "ON_DEMAND_PRIORITY"),
+        ("ON_DEMAND", "ON_DEMAND"),
+        ("PROVISIONED_THROUGHPUT", "PROVISIONED_THROUGHPUT"),
+    ],
+)
+def test_response_to_result_traffic_type(
+    traffic_type_value: str, expected_traffic_type: str
+) -> None:
+    """Test that traffic_type from usage_metadata is surfaced in generation_info."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Hello!"}]},
+                "finish_reason": "STOP",
+            }
+        ],
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 3,
+            "total_token_count": 8,
+            "traffic_type": traffic_type_value,
+        },
+    }
+    response = GenerateContentResponse.model_validate(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    assert len(result.generations) == 1
+    gen_info = result.generations[0].generation_info
+    assert gen_info is not None
+    assert gen_info["traffic_type"] == expected_traffic_type
+
+
+def test_response_to_result_traffic_type_absent() -> None:
+    """Test that missing traffic_type does not add the key to generation_info."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Hello!"}]},
+                "finish_reason": "STOP",
+            }
+        ],
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 3,
+            "total_token_count": 8,
+        },
+    }
+    response = GenerateContentResponse.model_validate(raw_response)
+    result = _response_to_result(response, stream=False)
+
+    gen_info = result.generations[0].generation_info
+    assert gen_info is not None
+    assert "traffic_type" not in gen_info
+
+
+def test_response_to_result_traffic_type_streaming() -> None:
+    """Test that traffic_type is surfaced in the final streaming chunk."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Hello!"}]},
+                "finish_reason": "STOP",
+            }
+        ],
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 3,
+            "total_token_count": 8,
+            "traffic_type": "ON_DEMAND_PRIORITY",
+        },
+    }
+    response = GenerateContentResponse.model_validate(raw_response)
+    result = _response_to_result(response, stream=True)
+
+    gen_info = result.generations[0].generation_info
+    assert gen_info is not None
+    assert gen_info["traffic_type"] == "ON_DEMAND_PRIORITY"
+
+
+def test_response_to_result_traffic_type_no_finish_reason() -> None:
+    """Test that traffic_type is NOT added to intermediate streaming chunks."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Hel"}]},
+            }
+        ],
+        "usage_metadata": {
+            "prompt_token_count": 5,
+            "candidates_token_count": 1,
+            "total_token_count": 6,
+            "traffic_type": "ON_DEMAND_PRIORITY",
+        },
+    }
+    response = GenerateContentResponse.model_validate(raw_response)
+    result = _response_to_result(response, stream=True)
+
+    gen_info = result.generations[0].generation_info
+    assert gen_info is not None
+    assert "traffic_type" not in gen_info
+
+
 def test_grounding_metadata_to_citations_conversion() -> None:
     """Test grounding metadata is properly converted to citations in content blocks."""
     raw_response = {
