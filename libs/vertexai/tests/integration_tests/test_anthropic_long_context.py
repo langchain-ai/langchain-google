@@ -53,7 +53,7 @@ def _generate_long_text(target_tokens: int):
 
 
 @pytest.mark.skip(reason="too long & expensive")
-def test_long_context_init():
+async def test_long_context_init():
     long_prompt = _generate_long_text(600 * 1000)
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
@@ -63,12 +63,12 @@ def test_long_context_init():
         additional_headers={"anthropic-beta": "context-1m-2025-08-07"},
     )
 
-    response = llm.invoke(long_prompt, model_name="claude-sonnet-4@20250514")
+    response = await llm.ainvoke(long_prompt, model_name="claude-sonnet-4@20250514")
     print(_get_text_content(response))
 
 
 @pytest.mark.skip(reason="too long & expensive")
-def test_long_context_args():
+async def test_long_context_args():
     long_prompt = _generate_long_text(600 * 1000)
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
@@ -77,7 +77,7 @@ def test_long_context_args():
         location=location,
     )
 
-    response = llm.invoke(
+    response = await llm.ainvoke(
         long_prompt,
         model_name="claude-sonnet-4@20250514",
         betas=["context-1m-2025-08-07"],

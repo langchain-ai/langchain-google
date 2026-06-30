@@ -1162,6 +1162,7 @@ test-integration = [
     { name = "numexpr" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pytest-xdist" },
 ]
 typing = [
     { name = "anthropic" },
@@ -1222,6 +1223,7 @@ test-integration = [
     { name = "numexpr", marker = "python_full_version >= '3.9'", specifier = ">=2.8.8" },
     { name = "numpy", marker = "python_full_version < '3.13'", specifier = ">=1.26.4" },
     { name = "numpy", marker = "python_full_version >= '3.13'", specifier = ">=2.1.0" },
+    { name = "pytest-xdist", specifier = ">=3.8.0,<4.0.0" },
 ]
 typing = [
     { name = "anthropic", specifier = ">=0.64.0,<1.0.0" },

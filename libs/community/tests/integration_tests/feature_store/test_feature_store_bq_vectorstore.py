@@ -118,11 +118,11 @@ class TestBigQueryVectorStore_bq_vectorstore:
     ]
 
     @pytest.mark.extended
-    def test_semantic_search_sql_filter_fruits(
+    async def test_semantic_search_sql_filter_fruits(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on semantic similarity with sql filter."""
-        docs = store_bq_vectorstore.similarity_search(
+        docs = await store_bq_vectorstore.asimilarity_search(
             "food", filter='kind="fruit"', k=10
         )
         kinds = [d.metadata["kind"] for d in docs]
@@ -131,7 +131,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_get_doc_by_sql_filter(
+    async def test_get_doc_by_sql_filter(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
@@ -142,7 +142,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_get_doc_by_complexe_sql_filter(
+    async def test_get_doc_by_complexe_sql_filter(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
@@ -153,11 +153,11 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_existing_store_semantic_search_sql_filter_fruits(
+    async def test_existing_store_semantic_search_sql_filter_fruits(
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on semantic similarity with sql filter."""
-        docs = existing_store_bq_vectorstore.similarity_search(
+        docs = await existing_store_bq_vectorstore.asimilarity_search(
             "food", filter='kind="fruit"', k=10
         )
         kinds = [d.metadata["kind"] for d in docs]
@@ -166,7 +166,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_existing_store_get_doc_by_sql_filter(
+    async def test_existing_store_get_doc_by_sql_filter(
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
@@ -177,18 +177,20 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_semantic_search(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
+    async def test_semantic_search(
+        self, store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
         """Test on semantic similarity."""
-        docs = store_bq_vectorstore.similarity_search("food", k=4)
+        docs = await store_bq_vectorstore.asimilarity_search("food", k=4)
         kinds = [d.metadata["kind"] for d in docs]
         assert len(kinds) == 4
 
     @pytest.mark.extended
-    def test_semantic_search_filter_fruits(
+    async def test_semantic_search_filter_fruits(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on semantic similarity with metadata filter."""
-        docs = store_bq_vectorstore.similarity_search(
+        docs = await store_bq_vectorstore.asimilarity_search(
             "food", filter={"kind": "fruit"}, k=10
         )
         kinds = [d.metadata["kind"] for d in docs]
@@ -197,7 +199,9 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_get_doc_by_filter(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
+    async def test_get_doc_by_filter(
+        self, store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
         """Test on document retrieval with metadata filter."""
         docs = store_bq_vectorstore.get_documents(filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
@@ -206,11 +210,11 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_existing_store_semantic_search_filter_fruits(
+    async def test_existing_store_semantic_search_filter_fruits(
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on semantic similarity with metadata filter."""
-        docs = existing_store_bq_vectorstore.similarity_search(
+        docs = await existing_store_bq_vectorstore.asimilarity_search(
             "food", filter={"kind": "fruit"}, k=10
         )
         kinds = [d.metadata["kind"] for d in docs]
@@ -219,7 +223,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_existing_store_get_doc_by_filter(
+    async def test_existing_store_get_doc_by_filter(
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with metadata filter."""
@@ -230,7 +234,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    def test_get_documents_by_ids(
+    async def test_get_documents_by_ids(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test retrieving documents by their IDs."""
@@ -246,7 +250,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
             assert orig_doc.metadata == retrieved_doc.metadata
 
     @pytest.mark.extended
-    def test_add_texts_with_embeddings(
+    async def test_add_texts_with_embeddings(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test adding texts with pre-computed embeddings."""
@@ -265,7 +269,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert retrieved_docs[1].metadata["kind"] == "planet"
 
     @pytest.mark.extended
-    def test_get_documents_by_ids_and_filters(
+    async def test_get_documents_by_ids_and_filters(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test retrieving documents by their IDs and with filters."""
@@ -302,12 +306,14 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "dog" == page_content[0]
 
     @pytest.mark.extended
-    def test_delete_documents(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
+    async def test_delete_documents(
+        self, store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
         """Test deleting documents by their IDs."""
         doc_to_delete = store_bq_vectorstore.get_documents()[0]
         id_to_delete = doc_to_delete.metadata["__id"]
         # Delete the document
-        delete_result = store_bq_vectorstore.delete([id_to_delete])
+        delete_result = await store_bq_vectorstore.adelete([id_to_delete])
         assert delete_result is True  # Deletion should succeed
         # Try to retrieve the deleted document
 
@@ -315,7 +321,9 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert result == []
 
     @pytest.mark.extended
-    def test_batch_search(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
+    async def test_batch_search(
+        self, store_bq_vectorstore: BigQueryVectorStore
+    ) -> None:
         """Test batch search with queries and embeddings."""
         # Batch search with queries
         query_results = store_bq_vectorstore.batch_search(queries=["apple", "treat"])

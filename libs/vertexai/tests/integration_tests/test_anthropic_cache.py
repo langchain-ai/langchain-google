@@ -11,7 +11,7 @@ from tests.integration_tests.conftest import _get_text_content
 
 
 @pytest.mark.extended
-def test_anthropic_system_cache() -> None:
+async def test_anthropic_system_cache() -> None:
     """Test chat with system message having cache control."""
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
@@ -26,7 +26,7 @@ def test_anthropic_system_cache() -> None:
     )
     message = HumanMessage(content="Hello! What can you do for me?")
 
-    response = model.invoke([context, message], model_name="claude-sonnet-4-6")
+    response = await model.ainvoke([context, message], model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
     assert isinstance(_get_text_content(response), str)
     assert response.usage_metadata is not None
@@ -34,7 +34,7 @@ def test_anthropic_system_cache() -> None:
 
 
 @pytest.mark.extended
-def test_anthropic_mixed_cache() -> None:
+async def test_anthropic_mixed_cache() -> None:
     """Test chat with different cache control types."""
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
@@ -62,14 +62,14 @@ def test_anthropic_mixed_cache() -> None:
         ]
     )
 
-    response = model.invoke([context, message], model_name="claude-sonnet-4-6")
+    response = await model.ainvoke([context, message], model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
     assert isinstance(_get_text_content(response), str)
     assert response.usage_metadata is not None
 
 
 @pytest.mark.extended
-def test_anthropic_conversation_cache() -> None:
+async def test_anthropic_conversation_cache() -> None:
     """Test chat conversation with cache control."""
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
@@ -105,13 +105,13 @@ def test_anthropic_conversation_cache() -> None:
         ),
     ]
 
-    response = model.invoke(messages, model_name="claude-sonnet-4-6")
+    response = await model.ainvoke(messages, model_name="claude-sonnet-4-6")
     assert isinstance(response, AIMessage)
     assert "peter" in _get_text_content(response).lower()
 
 
 @pytest.mark.extended
-def test_anthropic_chat_template_cache() -> None:
+async def test_anthropic_chat_template_cache() -> None:
     """Test chat template with structured content and cache control."""
     project = os.environ["PROJECT_ID"]
     location = "us-east5"
@@ -135,7 +135,7 @@ def test_anthropic_chat_template_cache() -> None:
 
     chain = prompt | model
 
-    response = chain.invoke(
+    response = await chain.ainvoke(
         {"input": "What's the capital of France?"},
     )
 
