@@ -2873,6 +2873,79 @@ def test_compat_image_url_block_non_google_provider() -> None:
     assert result == []
 
 
+def test_image_file_uri_signature_roundtrip_via_content_blocks() -> None:
+    """Roundtrip an image file URI thought signature through content_blocks and back."""
+    sig_b64 = "roundtrip-fileuri-signature"
+
+    block = {
+        "type": "image",
+        "url": "https://example.com/image.png",
+        "mime_type": "image/png",
+        "extras": {"signature": sig_b64},
+    }
+
+    msg = AIMessage(content=[block])
+    blocks = msg.content_blocks
+
+    assert isinstance(blocks, list)
+    assert len(blocks) == 1
+    image_block = blocks[0]
+    assert image_block["type"] == "image"
+    assert image_block["url"] == "https://example.com/image.png"
+    assert image_block["mime_type"] == "image/png"
+    assert "extras" in image_block and image_block["extras"].get("signature") == sig_b64
+
+    converted = _convert_from_v1_to_generativelanguage_v1beta(blocks, "google_genai")
+    assert isinstance(converted, list)
+    assert len(converted) == 1
+    assert "file_data" in converted[0]
+    assert converted[0]["file_data"]["file_uri"] == "https://example.com/image.png"
+    assert converted[0]["file_data"]["mime_type"] == "image/png"
+    assert converted[0].get("thought_signature") == sig_b64
+
+
+def test_image_signature_roundtrip_via_content_blocks() -> None:
+    """Roundtrip an image thought signature through content_blocks and back.
+
+    This verifies that a parsed image part with a thought_signature is exposed
+    via AIMessage.content_blocks and then converted back to Google GenAI format
+    with the same signature preserved.
+    """
+    sig = b"roundtrip-signature"
+    sig_b64 = base64.b64encode(sig).decode("ascii")
+
+    png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+        "60e6kgAAAABJRU5ErkJggg=="
+    )
+    png_bytes = base64.b64decode(png_b64)
+
+    part = Part(
+        inline_data=Blob(mime_type="image/png", data=png_bytes),
+        thought_signature=sig,
+    )
+    candidate = Candidate(content=Content(parts=[part]))
+
+    message = _parse_response_candidate(candidate, streaming=False)
+    assert isinstance(message, AIMessage)
+    assert message.response_metadata.get("model_provider") == "google_genai"
+
+    blocks = message.content_blocks
+    assert isinstance(blocks, list)
+    assert len(blocks) == 1
+    image_block = blocks[0]
+    assert image_block["type"] == "image"
+    assert image_block["mime_type"] == "image/png"
+    assert image_block["base64"] == png_b64
+    assert "extras" in image_block and image_block["extras"].get("signature") == sig_b64
+
+    converted = _convert_from_v1_to_generativelanguage_v1beta(blocks, "google_genai")
+    assert isinstance(converted, list)
+    assert len(converted) == 1
+    assert converted[0].get("thought_signature") == sig_b64
+    assert "inline_data" in converted[0]
+
+
 def test_thought_signature_extraction_from_response() -> None:
     """Test thought signature extraction from API response Parts."""
 
@@ -3513,6 +3586,46 @@ def test_convert_to_parts_thinking() -> None:
     assert len(result) == 1
     assert result[0].text == "I need to think about this..."
     assert result[0].thought is True
+
+
+def test_convert_to_parts_image_base64_thought_signature() -> None:
+    """_convert_to_parts passes thought_signature from extras into the Part."""
+    sig = b"test-signature-bytes"
+    sig_b64 = base64.b64encode(sig).decode("ascii")
+    png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA"
+        "60e6kgAAAABJRU5ErkJggg=="
+    )
+    content = [
+        {
+            "type": "image",
+            "base64": png_b64,
+            "mime_type": "image/png",
+            "extras": {"signature": sig_b64},
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].inline_data.mime_type == "image/png"
+    assert result[0].thought_signature == sig
+
+
+def test_convert_to_parts_image_url_thought_signature() -> None:
+    """_convert_to_parts passes thought_signature from extras on image_url blocks."""
+    sig = b"url-sig-bytes"
+    sig_b64 = base64.b64encode(sig).decode("ascii")
+    content = [
+        {
+            "type": "image_url",
+            "image_url": {"url": SMALL_VIEWABLE_BASE64_IMAGE},
+            "extras": {"signature": sig_b64},
+        }
+    ]
+    result = _convert_to_parts(content)
+    assert len(result) == 1
+    assert result[0].inline_data is not None
+    assert result[0].thought_signature == sig
 
 
 def test_convert_to_parts_mixed_content() -> None:
