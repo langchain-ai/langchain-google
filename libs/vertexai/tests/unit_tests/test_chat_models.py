@@ -469,7 +469,9 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
 
 def test_profile() -> None:
     model = ChatVertexAI(
-        model="gemini-2.0-flash", project="test-project", location="moon-dark1"
+        model="meta/llama-3.3-70b-instruct-maas",
+        project="test-project",
+        location="moon-dark1",
     )
     assert model.profile
     assert not model.profile["reasoning_output"]
