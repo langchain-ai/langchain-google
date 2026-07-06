@@ -190,10 +190,12 @@ def _dict_to_genai_schema(
             schema_dict["any_of"] = any_of_schemas  # type: ignore[assignment]
         # Default to STRING when no type information is available for a
         # nested schema (e.g., "items": {} meaning "any type" in JSON Schema).
-        # Top-level schemas without type info remain None (no parameters).
+        # Top-level property-only schemas are valid JSON Schema object schemas.
         if "type" not in schema_dict and "any_of" not in schema_dict:
             if is_property:
                 schema_dict["type"] = types.Type.STRING
+            elif "properties" in schema_dict:
+                schema_dict["type"] = types.Type.OBJECT
             else:
                 return None
         return types.Schema.model_validate(schema_dict)
@@ -625,11 +627,15 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
             items["required"] = schema["required"]
         if "enum" in schema:
             items["enum"] = schema["enum"]
-    else:
+    elif schema:
         # str
         items["type"] = _get_type_from_schema({"type": schema})
         if _is_nullable_schema({"type": schema}):
             items["nullable"] = True
+    else:
+        # Empty string carries no type; default to STRING rather than
+        # constructing an invalid empty-value Type that Gemini rejects.
+        items["type"] = types.Type.STRING
 
     return items
 

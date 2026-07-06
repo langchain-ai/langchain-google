@@ -693,6 +693,33 @@ def test_format_dict_to_genai_function() -> None:
     assert function_declaration.parameters.required == []
 
 
+def test_format_dict_to_genai_function_property_only_parameters() -> None:
+    calculator = {
+        "function_declarations": [
+            {
+                "name": "search",
+                "description": "Search with query text.",
+                "parameters": {
+                    "properties": {
+                        "x": {"type": "string"},
+                    },
+                    "required": ["x"],
+                },
+            }
+        ]
+    }
+    schema = convert_to_genai_function_declarations([calculator])[0]
+    assert schema.function_declarations is not None
+    assert len(schema.function_declarations) > 0
+    function_declaration = schema.function_declarations[0]
+    assert function_declaration.name == "search"
+    assert function_declaration.parameters is not None
+    assert function_declaration.parameters.type == Type.OBJECT
+    assert function_declaration.parameters.required == ["x"]
+    assert function_declaration.parameters.properties is not None
+    assert function_declaration.parameters.properties["x"].type == Type.STRING
+
+
 @pytest.mark.parametrize("choice", [True, "foo", ["foo"], "any"])
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = ToolConfig(
@@ -873,14 +900,13 @@ def test_array_with_empty_items_schema() -> None:
     """An array property whose items schema is an empty dict (`'items': {}`)
     must still produce an `items` field in the converted schema.
 
-    Reproduces: the Gemini API rejects `filter_values` with
-    `"properties[filter_values].items: missing field"` because
-    `_get_properties_from_schema` treats `{}` as falsy and silently
-    drops the `items` key.
+    Previously the empty ``{}`` items schema was dropped because it was treated
+    as falsy, and Gemini then rejected the tool with an error like
+    ``properties[filter_values].items: missing field``.
 
     The tool definition below mirrors a real-world OpenAI-formatted tool
     (`pylon_list_issues`) whose `filter_values` parameter is typed as
-    `Optional[list[Any]]`, which Pydantic serialises to
+    `Optional[list[Any]]`, which Pydantic serializes to
     `{"anyOf": [{"items": {}, "type": "array"}, {"type": "null"}]}`.
     """
 
@@ -912,27 +938,27 @@ def test_array_with_empty_items_schema() -> None:
     assert fd.parameters.properties is not None
     filter_values = fd.parameters.properties["filter_values"]
 
-    # The property must be recognised as an array …
     assert filter_values.type == Type.ARRAY
-    # … and it must carry an ``items`` schema (not None).
     assert filter_values.items is not None, (
         "Expected 'filter_values' to have an items schema, but got None. "
         "An empty items dict ({}) should not be silently dropped."
     )
+    # An empty (typeless) items schema resolves to STRING; a missing type would
+    # re-trigger the Gemini "items: missing field" rejection.
+    assert filter_values.items.type == Type.STRING
 
 
 def test_nested_array_with_empty_inner_items_schema() -> None:
     """A doubly-nested array whose innermost items schema is an empty dict
     (`'items': {}`) must still produce an `items` field at every level.
 
-    Reproduces: the Gemini API rejects `values` with
-    `"properties[values].items.items: missing field"` because
-    `_dict_to_genai_schema({})` returns `None` — `bool({})` is
-    `False` in Python, so the guard `if schema:` short-circuits.
+    Previously the innermost empty ``{}`` schema was dropped because it was
+    treated as falsy, and Gemini then rejected the tool with an error like
+    ``properties[values].items.items: missing field``.
 
     The tool definition below mirrors a real-world OpenAI-formatted tool
     (`google_sheets_write_range`) whose `values` parameter is typed as
-    `list[list[Any]]`, which Pydantic serialises to
+    `list[list[Any]]`, which Pydantic serializes to
     `{"type": "array", "items": {"type": "array", "items": {}}}`.
     """
 
@@ -974,6 +1000,58 @@ def test_nested_array_with_empty_inner_items_schema() -> None:
         "Expected inner array to have an items schema, but got None. "
         "An empty items dict ({}) should not be silently dropped."
     )
+    # The innermost typeless items schema resolves to STRING.
+    assert values.items.items.type == Type.STRING
+
+
+def test_array_with_empty_string_items_schema() -> None:
+    """An array whose items schema is an empty string must resolve to a valid
+    typed items schema, not an empty-value ``Type`` that Gemini rejects.
+
+    The ``v.get("items") is not None`` guard now admits falsy-but-present items
+    values; an empty string carries no type, so it must default to STRING rather
+    than constructing ``Type("")``.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "t",
+            "description": "d",
+            "parameters": {
+                "properties": {"arr": {"type": "array", "items": ""}},
+                "type": "object",
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    fd = fds[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    arr = fd.parameters.properties["arr"]
+
+    assert arr.type == Type.ARRAY
+    assert arr.items is not None
+    assert arr.items.type == Type.STRING
+
+
+def test_no_argument_tool_yields_none_parameters() -> None:
+    """A tool with no parameters must convert to ``parameters=None`` (no args),
+    not a schema with a spurious inferred type.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {"name": "ping", "description": "Health check with no args."},
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    assert fds[0].parameters is None
 
 
 def test_tool_with_union_types() -> None:
