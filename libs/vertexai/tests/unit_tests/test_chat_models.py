@@ -41,6 +41,7 @@ from vertexai.language_models import (
     InputOutputTextPair,
 )
 
+from langchain_google_vertexai import __version__
 from langchain_google_vertexai._base import _get_prediction_client
 from langchain_google_vertexai._compat import _convert_from_v1_to_vertex
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -50,11 +51,14 @@ from langchain_google_vertexai.chat_models import (
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
+    _validate_video_metadata,
 )
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 from tests.integration_tests.conftest import (
     _DEFAULT_MODEL_NAME,
 )
+
+_DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 
 
 @pytest.fixture
@@ -98,6 +102,8 @@ def test_init() -> None:
             "ls_max_tokens": 10,
             "ls_stop": ["bar"],
         }
+        assert llm.metadata is not None
+        assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     # Test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.chat_models.logger.warning") as mock_warning:
@@ -163,7 +169,7 @@ def test_init_client(model: str, location: str) -> None:
 def test_init_client_with_custom_api_endpoint() -> None:
     """Test that custom API endpoint and transport are set correctly."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "api_endpoint": "https://example.com",
         "api_transport": "rest",
     }
@@ -187,7 +193,7 @@ def test_init_client_with_custom_api_endpoint() -> None:
 def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) -> None:
     """Test that `base_url` alias is preserved and used in API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "base_url": "https://example.com",
         "api_transport": "rest",
     }
@@ -214,7 +220,7 @@ def test_init_client_with_custom_base_url(clear_prediction_client_cache: Any) ->
 def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
     """Test that `api_endpoint` field is preserved and used in API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "api_endpoint": "https://direct-endpoint.com",
         "api_transport": "rest",
     }
@@ -239,7 +245,7 @@ def test_api_endpoint_preservation(clear_prediction_client_cache: Any) -> None:
 async def test_async_base_url_support(clear_prediction_client_cache: Any) -> None:
     """Test that `base_url` is properly used in async API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "base_url": "https://async-example.com",
         "api_transport": "grpc_asyncio",
     }
@@ -271,7 +277,7 @@ async def test_async_base_url_support(clear_prediction_client_cache: Any) -> Non
 async def test_async_api_endpoint_support(clear_prediction_client_cache: Any) -> None:
     """Test that `api_endpoint` is properly used in async API calls."""
     config = {
-        "model": "gemini-2.5-pro",
+        "model": _DEFAULT_GEMINI_MODEL,
         "api_endpoint": "https://async-direct-endpoint.com",
         "api_transport": "grpc_asyncio",
     }
@@ -306,7 +312,7 @@ async def test_async_api_endpoint_alias_behavior(
     """Test that `api_endpoint` and `base_url` are aliases in async calls."""
     # Test 1: Only api_endpoint specified
     llm1 = ChatVertexAI(
-        model="gemini-2.5-pro",
+        model=_DEFAULT_GEMINI_MODEL,
         project="test-proj",
         api_endpoint="https://api-endpoint-only.com",
         api_transport="grpc_asyncio",
@@ -315,7 +321,7 @@ async def test_async_api_endpoint_alias_behavior(
 
     # Test 2: Only base_url specified (should be aliased to api_endpoint)
     llm2 = ChatVertexAI(
-        model="gemini-2.5-pro",
+        model=_DEFAULT_GEMINI_MODEL,
         project="test-proj",
         base_url="https://base-url-only.com",
         api_transport="grpc_asyncio",
@@ -355,15 +361,123 @@ def test_init_client_with_custom_model_kwargs() -> None:
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
 
 
+@pytest.mark.parametrize(
+    ("model_name", "expected_max_tokens"),
+    [
+        ("claude-sonnet-4-5", 64000),
+        ("claude-sonnet-4-5-20250929", 64000),
+        ("claude-opus-4-0", 32000),
+        ("claude-opus-4-5", 64000),
+        ("claude-opus-4-6", 128000),
+        ("claude-3-5-sonnet-20241022", 8192),
+        ("claude-3-7-sonnet-20250219", 64000),
+        ("claude-haiku-4-5", 64000),
+        ("claude-3-opus-20240229", 4096),
+    ],
+)
+def test_anthropic_vertex_model_aware_max_tokens(
+    model_name: str, expected_max_tokens: int
+) -> None:
+    """Test that max_output_tokens defaults are model-aware."""
+    llm = ChatAnthropicVertex(
+        model_name=model_name,
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == expected_max_tokens
+    assert llm._default_params["max_tokens"] == expected_max_tokens
+
+
+def test_anthropic_vertex_unknown_model_fallback() -> None:
+    """Test that unknown model names fall back to 4096."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-unknown-future-model",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_explicit_max_tokens_override() -> None:
+    """Test that explicitly set max_output_tokens is not overridden."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        max_output_tokens=2048,
+    )
+    assert llm.max_output_tokens == 2048
+
+
+def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
+    """Test that max_tokens alias also prevents override."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+        max_tokens=512,
+    )
+    assert llm.max_output_tokens == 512
+
+
+def test_anthropic_vertex_no_model_falls_back() -> None:
+    """No model_name → still get the fallback default (avoids `max_tokens=None`)."""
+    llm = ChatAnthropicVertex(
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_model_alias_resolves_profile() -> None:
+    """`model=` alias should resolve the same profile as `model_name=`."""
+    llm = ChatAnthropicVertex(
+        model="claude-sonnet-4-5",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 64000
+
+
+def test_anthropic_profiles_smoke() -> None:
+    """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
+    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+
+    assert _PROFILES
+    sample = next(iter(_PROFILES.values()))
+    assert "max_output_tokens" in sample
+
+
+def test_anthropic_vertex_profile_missing_max_output_tokens(
+    monkeypatch: Any,
+) -> None:
+    """Profile entry exists but lacks `max_output_tokens` → fallback to 4096."""
+    from langchain_google_vertexai import model_garden
+
+    monkeypatch.setitem(
+        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        "claude-test-no-output-key",
+        {"name": "Test"},
+    )
+    llm = ChatAnthropicVertex(
+        model_name="claude-test-no-output-key",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
 def test_profile() -> None:
     model = ChatVertexAI(
-        model="gemini-2.0-flash", project="test-project", location="moon-dark1"
+        model="meta/llama-3.3-70b-instruct-maas",
+        project="test-project",
+        location="moon-dark1",
     )
     assert model.profile
     assert not model.profile["reasoning_output"]
 
     model = ChatVertexAI(
-        model="gemini-2.5-flash", project="test-project", location="moon-dark1"
+        model=_DEFAULT_GEMINI_MODEL, project="test-project", location="moon-dark1"
     )
     assert model.profile
     assert model.profile["reasoning_output"]
@@ -411,7 +525,7 @@ def test_tuned_model_name() -> None:
     Tuned models must be specified using the full resource name.
     """
     llm = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         project="test-project",
         tuned_model_name="projects/123/locations/europe-west4/endpoints/456",
         max_tokens=500,
@@ -436,7 +550,7 @@ def test_default_params_gemini() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-2-5-flash", project="test-project")
+        model = ChatVertexAI(model="gemini-2-5-flash", project="test-project")
         message = HumanMessage(content=user_prompt)
         _ = model.invoke([message])
         mock_generate_content.assert_called_once()
@@ -462,7 +576,7 @@ def test_default_params_gemini() -> None:
 def test_generation_config_gemini() -> None:
     """Test that generation config is set correctly in the request when overridden."""
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         project="test-project",
         temperature=0.2,
         top_k=3,
@@ -498,7 +612,7 @@ def test_safety_settings_gemini_init() -> None:
         )
     ]
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash",
+        model="gemini-2-5-flash",
         temperature=0.2,
         top_k=3,
         project="test-project",
@@ -511,7 +625,7 @@ def test_safety_settings_gemini_init() -> None:
 def test_safety_settings_gemini() -> None:
     """Test that safety settings are set correctly in the request."""
     model = ChatVertexAI(
-        model_name="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
+        model="gemini-2-5-flash", temperature=0.2, top_k=3, project="test-project"
     )
     expected_safety_setting = SafetySetting(
         category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
@@ -992,10 +1106,134 @@ def test_parse_chat_history_gemini_without_literal_eval() -> None:
 
 def test_python_literal_inputs() -> None:
     """In relation to literal eval, ensure that inputs are not misinterpreted."""
-    llm = ChatVertexAI(model="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     for input_string in ["None", "(1, 2)", "[1, 2, 3]", "{1, 2, 3}"]:
         _ = llm._prepare_request_gemini([HumanMessage(input_string)])
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"start_offset": {"seconds": 0}, "end_offset": {"seconds": 0}},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": "1s", "end_offset": "5s"},
+        {},
+        {"end_offset": {"seconds": 5}},
+        {"start_offset": {"seconds": 1}},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": {"seconds": -1}, "end_offset": {"seconds": 5}},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": {"seconds": 0}, "end_offset": {"seconds": -1}},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": {"seconds": 10}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": "5s", "end_offset": "1s"},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_parse_chat_history_gemini_video_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    bad_part = {
+        "type": "media",
+        "mime_type": "video/mp4",
+        "file_uri": "gs://example-bucket/clip.mp4",
+        "video_metadata": {
+            "start_offset": {"seconds": 30},
+            "end_offset": {"seconds": 5},
+        },
+    }
+    history: list[BaseMessage] = [HumanMessage(content=[bad_part])]
+    image_bytes_loader = ImageBytesLoader()
+    with pytest.raises(ValueError, match="must not exceed"):
+        _parse_chat_history_gemini(
+            history=history,
+            imageBytesLoader=image_bytes_loader,
+        )
+
+
+def test_validate_video_metadata_accepts_proto_instance() -> None:
+    """`VideoMetadata` proto instances should validate via attribute access."""
+    from google.cloud.aiplatform_v1beta1.types import VideoMetadata
+
+    valid = VideoMetadata(
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}}
+    )
+    _validate_video_metadata(valid)
+
+
+def test_validate_video_metadata_rejects_invalid_proto_instance() -> None:
+    """Proto instances with bad offsets must raise the same clear ValueError."""
+    from google.cloud.aiplatform_v1beta1.types import VideoMetadata
+
+    bad = VideoMetadata({"start_offset": {"seconds": 30}, "end_offset": {"seconds": 5}})
+    with pytest.raises(ValueError, match="must not exceed"):
+        _validate_video_metadata(bad)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        "not a mapping",
+        12345,
+        ["seq", "of", "things"],
+        object(),
+    ],
+)
+def test_validate_video_metadata_rejects_non_mapping_input(
+    video_metadata: object,
+) -> None:
+    """Non-mapping, non-proto input must surface a clear ValueError instead
+    of an opaque `AttributeError` from a missing `.get` method."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `float(None)` would TypeError without the guard.
+        {"start_offset": {"seconds": None, "nanos": None}},
+        # `float('abc')` would ValueError without the guard.
+        {"start_offset": {"seconds": "abc"}},
+        # Garbage string with the `s` suffix.
+        {"start_offset": "abcs"},
+    ],
+)
+def test_validate_video_metadata_tolerates_unparseable_values(
+    video_metadata: dict,
+) -> None:
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
+    only true validation failures (negative offsets, start > end) raise."""
+    # Should not raise -- unparseable values are treated as "not present"
+    # and the proto constructor will surface a clearer error if needed.
+    _validate_video_metadata(video_metadata)
 
 
 @pytest.mark.parametrize(
@@ -1435,7 +1673,7 @@ def test_parser_multiple_tools() -> None:
         mock_generate_content = MagicMock(return_value=response)
         mc.return_value.generate_content = mock_generate_content
 
-        model = ChatVertexAI(model_name="gemini-2.5-pro", project="test-project")
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
         message = HumanMessage(content="Hello")
         parser = PydanticToolsParser(tools=[Add, Multiply])
         llm = model | parser
@@ -1696,6 +1934,101 @@ def test_thinking_configuration() -> None:
     assert request.generation_config.thinking_config.include_thoughts is True
 
 
+def test_labels_on_request_envelope() -> None:
+    """`labels` belongs on the request envelope, not on `GenerationConfig`.
+
+    Regression test: passing `labels` as an invocation-time keyword used to leak into
+    `GenerationConfig`, which rejects unknown fields and raised
+    ``ValueError: Unknown field for GenerationConfig: labels``.
+    """
+    input_message = HumanMessage("Query.")
+
+    # Init param: labels land on the request envelope.
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    # Invocation param must not raise (the regression) and overrides the init value.
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+    # Invocation param with no init value.
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    request = llm._prepare_request_gemini([input_message], labels={"only": "per-call"})
+    assert dict(request.labels) == {"only": "per-call"}
+
+    # No labels anywhere.
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {}
+
+
+def test_labels_on_request_envelope_cached_content() -> None:
+    """`labels` reach the envelope on the cached-content path.
+
+    Previously the cached-content branches omitted `labels` entirely, silently
+    dropping them; init-time and per-call values must now propagate.
+    """
+    input_message = HumanMessage("Query.")
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        cached_content="my-cache",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+
+def test_labels_on_request_envelope_v1_endpoint() -> None:
+    """`labels` reach the envelope on the ``v1`` endpoint path."""
+    input_message = HumanMessage("Query.")
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        endpoint_version="v1",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+
+def test_labels_via_public_invoke() -> None:
+    """End-to-end: ``invoke(..., labels=...)`` routes labels to the envelope only.
+
+    Guards the user-facing path. ``labels`` must land on ``request.labels`` and must
+    NOT leak as a keyword to the GAPIC ``generate_content`` call, which has no
+    ``labels`` parameter and would raise ``TypeError`` in production.
+    """
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
+        response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
+
+        llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+        llm.invoke([HumanMessage("Query.")], labels={"env": "prod"})
+
+        mock_generate_content.assert_called_once()
+        call_kwargs = mock_generate_content.call_args.kwargs
+        assert dict(call_kwargs["request"].labels) == {"env": "prod"}
+        assert "labels" not in call_kwargs
+
+
 def test_thought_signature() -> None:
     """Test that thought signatures are correctly parsed and included in requests."""
     llm = ChatVertexAI(
@@ -1856,7 +2189,7 @@ def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
         name: str = Field(description="Person's name")
         age: int = Field(gt=0, le=150, description="Person's age")
 
-    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     # This should not raise any errors when creating structured output
     structured_llm = llm.with_structured_output(TestModel, method="json_mode")
@@ -1890,7 +2223,7 @@ def test_json_mode_pydantic_v1_backward_compatibility() -> None:
         name: str
         age: int
 
-    llm = ChatVertexAI(model_name="gemini-2.5-flash", project="test-project")
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
 
     # V1 models should work without issues
     structured_llm = llm.with_structured_output(V1Model, method="json_mode")
@@ -2061,7 +2394,7 @@ def test_parse_chat_history_with_text_signature() -> None:
 def test_timeout_parameter_override(clear_prediction_client_cache: Any) -> None:
     """Test that timeout can be set in constructor and overridden in invoke."""
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
         timeout=30.0,  # Default timeout
     )
@@ -2094,7 +2427,7 @@ def test_timeout_parameter_override(clear_prediction_client_cache: Any) -> None:
 def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> None:
     """Test that timeout=None in invoke uses constructor timeout."""
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
         timeout=30.0,
     )
@@ -2113,10 +2446,40 @@ def test_timeout_parameter_none_override(clear_prediction_client_cache: Any) -> 
         assert call_kwargs.get("timeout") is None
 
 
+def test_gemini_response_to_chat_result_emits_string_modality() -> None:
+    """`response_metadata["usage_metadata"]` exposes modality as a string (#1053)."""
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hi"}], "role": "model"},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 4,
+                "candidates_token_count": 1,
+                "total_token_count": 5,
+                "prompt_tokens_details": [{"modality": 1, "token_count": 4}],
+                "candidates_tokens_details": [{"modality": 1, "token_count": 1}],
+            },
+        }
+    )
+    result = llm._gemini_response_to_chat_result(response)
+    generation_info = result.generations[0].generation_info
+    assert generation_info is not None
+    usage = generation_info["usage_metadata"]
+    assert usage["prompt_tokens_details"][0]["modality"] == "TEXT"
+    assert usage["candidates_tokens_details"][0]["modality"] == "TEXT"
+
+
 def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
     """Test get_num_tokens_from_messages uses count_tokens API properly."""
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
     )
 
@@ -2151,7 +2514,7 @@ def test_get_num_tokens_from_messages_multimodal(
     passed to the count_tokens API rather than being converted to a string.
     """
     llm = ChatVertexAI(
-        model="gemini-2.5-flash",
+        model=_DEFAULT_MODEL_NAME,
         project="test-project",
     )
 
@@ -2194,3 +2557,109 @@ def test_get_num_tokens_from_messages_multimodal(
         request_dict = call_args[0][0]
         assert "contents" in request_dict
         assert len(request_dict["contents"]) > 0
+
+
+class TestAnthropicVertexCacheControl:
+    """Regression tests for https://github.com/langchain-ai/langchain-google/issues/1612."""
+
+    def _make_model(self) -> ChatAnthropicVertex:
+        return ChatAnthropicVertex(project="test-project", location="test-location")
+
+    def test_cache_control_applied_to_last_dict_block(self) -> None:
+        """cache_control kwarg is injected into the last content block."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_applied_to_string_content(self) -> None:
+        """String content is converted to a list block with cache_control."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hi")],
+            cache_control={"type": "ephemeral"},
+        )
+        last_msg = params["messages"][-1]
+        assert isinstance(last_msg["content"], list)
+        assert last_msg["content"][-1]["type"] == "text"
+        assert last_msg["content"][-1]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_cache_control_leaves_messages_unchanged(self) -> None:
+        """Without cache_control, messages are not modified."""
+        model = self._make_model()
+        params = model._format_params(messages=[HumanMessage("Hello")])
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert "cache_control" not in last_block
+
+    def test_cache_control_targets_last_message(self) -> None:
+        """With multiple messages, cache_control goes on the last one."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                HumanMessage("First"),
+                AIMessage("Response"),
+                HumanMessage("Second"),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        first_block = params["messages"][0]["content"][-1]
+        assert "cache_control" not in first_block
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_none_is_ignored(self) -> None:
+        """Explicitly passing cache_control=None has no effect."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control=None,
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert "cache_control" not in last_block
+
+    def test_cache_control_not_in_top_level_params(self) -> None:
+        """cache_control must never appear as a top-level API parameter."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[HumanMessage("Hello")],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+
+    def test_cache_control_with_system_message(self) -> None:
+        """cache_control works when conversation includes a system message."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                SystemMessage("You are helpful."),
+                HumanMessage("Hello"),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        assert "cache_control" not in params
+        last_block = params["messages"][-1]["content"][-1]
+        assert last_block["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_with_multipart_content(self) -> None:
+        """cache_control is applied to the last block of multipart content."""
+        model = self._make_model()
+        params = model._format_params(
+            messages=[
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "Describe this:"},
+                        {"type": "text", "text": "A sunny day."},
+                    ]
+                ),
+            ],
+            cache_control={"type": "ephemeral"},
+        )
+        blocks = params["messages"][-1]["content"]
+        assert "cache_control" not in blocks[0]
+        assert blocks[-1]["cache_control"] == {"type": "ephemeral"}

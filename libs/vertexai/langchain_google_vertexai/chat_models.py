@@ -20,7 +20,7 @@ from typing import (
     TypedDict,
     overload,
 )
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
@@ -167,7 +167,6 @@ _allowed_params = [
     "seed",
     "response_logprobs",
     "logprobs",
-    "labels",
     "audio_timestamp",
     "response_modalities",
     "thinking_budget",
@@ -180,7 +179,6 @@ _allowed_params_prediction_service = [
     "request",
     "timeout",
     "metadata",
-    "labels",
     # Allow controlling GAPIC client retries from callers.
     "retry",
 ]
@@ -212,6 +210,89 @@ class _GeminiGenerateContentKwargs(TypedDict):
     safety_settings: SafetySettingsType | None
     tools: list[VertexTool] | None
     tool_config: ToolConfig | None
+
+
+def _validate_video_metadata(video_metadata: object) -> None:
+    """Validate user-supplied video metadata before sending to Vertex AI.
+
+    The Vertex API surfaces an opaque `400 invalid argument` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
+    helper checks the obvious cases up front and raises a clearer error so
+    callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) or a `VideoMetadata` proto-like
+            instance with `start_offset`/`end_offset` attributes. Each
+            offset may be a number of seconds, a `{"seconds": int,
+            "nanos": int}` mapping, a `google.protobuf.duration_pb2.
+            Duration` instance, or a string like `"10s"`.
+
+    Raises:
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
+            proto-like object exposing offset fields.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
+            try:
+                return float(value[:-1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            try:
+                return (
+                    float(value.get("seconds", 0)) + float(value.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        if hasattr(value, "seconds"):
+            try:
+                return float(value.seconds) + float(getattr(value, "nanos", 0)) / 1e9
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    if isinstance(video_metadata, Mapping):
+        raw_start = video_metadata.get("start_offset")
+        raw_end = video_metadata.get("end_offset")
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Proto-like object (e.g. `VideoMetadata` instance). Read fields
+        # via attribute access instead of `.get` so we don't regress
+        # callers that already pass a constructed proto.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
 
 
 def _parse_chat_history_gemini(
@@ -348,6 +429,7 @@ def _parse_chat_history_gemini(
                 raise ValueError(msg)
 
             if "video_metadata" in part:
+                _validate_video_metadata(part["video_metadata"])
                 metadata = VideoMetadata(part["video_metadata"])
                 proto_part.video_metadata = metadata
             return proto_part
@@ -945,8 +1027,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Key init args — completion params:
         model: str
-            Name of ChatVertexAI model to use. e.g. `'gemini-2.0-flash-001'`,
-            `'gemini-2.5-pro'`, etc.
+            Name of ChatVertexAI model to use. e.g. `'gemini-3.1-flash-lite'`,
+            `'gemini-3.1-pro-preview'`, etc.
         temperature: Optional[float]
             Sampling temperature.
         seed: Optional[int]
@@ -986,7 +1068,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from langchain_google_vertexai import ChatVertexAI
 
         llm = ChatVertexAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-flash-lite",
             temperature=0,
             max_tokens=None,
             max_retries=6,
@@ -1008,7 +1090,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
         ```python
         llm = ChatVertexAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-flash-lite",
             include_thoughts=True,
         )
         ai_msg = llm.invoke("How many 'r's are in the word 'strawberry'?")
@@ -1259,7 +1341,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             ]
 
             cache = client.caches.create(
-                model="gemini-2.5-flash",
+                model="gemini-3.1-flash-lite",
                 config=CreateCachedContentConfig(
                     contents=contents,
                     system_instruction="You are an expert content analyzer.",
@@ -1269,7 +1351,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             )
 
             llm = ChatVertexAI(
-                model_name="gemini-2.5-flash",
+                model="gemini-3.1-flash-lite",
                 cached_content=cache.name,
             )
             message = HumanMessage(
@@ -1338,7 +1420,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
         from langchain_google_vertexai import ChatVertexAI
 
-        llm = ChatVertexAI(model="gemini-2.5-flash")
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite")
         resp = llm.invoke(
             "When is the next total solar eclipse in US?",
             tools=[VertexTool(google_search={})],
@@ -1350,7 +1432,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
         from langchain_google_vertexai import ChatVertexAI
 
-        llm = ChatVertexAI(model="gemini-2.5-flash")
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite")
         resp = llm.invoke(
             "What is 3^3?",
             tools=[VertexTool(code_execution={})],
@@ -1551,7 +1633,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         You can also point to GCS files.
 
         ```python
-        llm = ChatVertexAI(model="gemini-2.5-pro")
+        llm = ChatVertexAI(model="gemini-3.1-pro-preview")
 
         llm.invoke(
             [
@@ -1606,7 +1688,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         ```python
         from langchain_core.messages import HumanMessage
 
-        llm = ChatVertexAI(model="gemini-2.5-flash")
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite")
 
         llm.invoke(
             [
@@ -1640,7 +1722,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     Logprobs:
         ```python
-        llm = ChatVertexAI(model="gemini-2.5-flash", logprobs=True)
+        llm = ChatVertexAI(model="gemini-3.1-flash-lite", logprobs=True)
         ai_msg = llm.invoke(messages)
         ai_msg.response_metadata["logprobs_result"]
         ```
@@ -1717,7 +1799,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
 
         llm = ChatVertexAI(
-            model="gemini-2.5-pro",
+            model="gemini-3.1-pro-preview",
             safety_settings={
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
@@ -1815,7 +1897,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """
 
     labels: dict[str, str] | None = None
-    """Optional tag llm calls with metadata to help in tracebility and biling."""
+    """Optional tag llm calls with metadata to help in traceability and billing."""
 
     perform_literal_eval_on_string_raw_content: bool = False
     """Whether to perform literal eval on string raw content."""
@@ -2005,7 +2087,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         params = self._get_invocation_params(stop=stop, **kwargs)
         ls_params = LangSmithParams(
             ls_provider="google_vertexai",
-            ls_model_name=self.model_name,
+            ls_model_name=(
+                params.get("model") or params.get("model_name") or self.model_name
+            ),
             ls_model_type="chat",
             ls_temperature=params.get("temperature", self.temperature),
         )
@@ -2156,6 +2240,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
+        # `labels` belongs on the request envelope (`GenerateContentRequest`), not on
+        # `GenerationConfig` (which rejects unknown fields) nor on the GAPIC
+        # `generate_content` call (which has no `labels` parameter). It is therefore
+        # excluded from both `_allowed_params` and `_allowed_params_prediction_service`
+        # so it cannot leak into either path. Pop any per-call value here and route it
+        # to the envelope below, falling back to the instance value.
+        request_labels = kwargs.pop("labels", None)
+        request_labels = request_labels if request_labels is not None else self.labels
         generation_config = self._generation_config_gemini(
             stream=stream, stop=stop, logprobs=logprobs, **kwargs
         )
@@ -2248,6 +2340,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     safety_settings=v1_safety_settings,
                     generation_config=generation_config,
                     cached_content=full_cache_name,
+                    labels=request_labels,
                 )
 
             return GenerateContentRequest(
@@ -2256,6 +2349,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 safety_settings=formatted_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
+                labels=request_labels,
             )
 
         if self.endpoint_version == "v1":
@@ -2267,7 +2361,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 safety_settings=v1_safety_settings,
                 generation_config=generation_config,
                 model=self.full_model_name,
-                labels=self.labels,
+                labels=request_labels,
             )
 
         return GenerateContentRequest(
@@ -2278,7 +2372,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=formatted_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
-            labels=self.labels,
+            labels=request_labels,
         )
 
     def _request_from_cached_content(
@@ -2391,7 +2485,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             from langchain_core.messages import HumanMessage
             from langchain_google_vertexai import ChatVertexAI
 
-            llm = ChatVertexAI(model="gemini-2.0-flash")
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite")
 
             # Text-only message
             messages = [HumanMessage(content="Hello, world!")]
@@ -2638,7 +2732,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(AnswerWithJustification)
 
             structured_llm.invoke(
@@ -2662,7 +2756,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 justification: str
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(
                 AnswerWithJustification, include_raw=True
             )
@@ -2694,7 +2788,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 
             dict_schema = convert_to_openai_function(AnswerWithJustification)
-            llm = ChatVertexAI(model_name="gemini-2.0-flash-001", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(dict_schema)
 
             structured_llm.invoke(
@@ -2721,7 +2815,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 examples: str = Field(description="Two examples related to the topic.")
 
 
-            llm = ChatVertexAI(model_name="gemini-2.0-flash", temperature=0)
+            llm = ChatVertexAI(model="gemini-3.1-flash-lite", temperature=0)
             structured_llm = llm.with_structured_output(Explanation, method="json_mode")
 
             for chunk in structured_llm.stream("Tell me about transformer models"):
@@ -2739,6 +2833,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             raise ValueError(msg)
 
         parser: OutputParserLike
+        llm: Runnable
 
         if method == "json_mode":
             if isinstance(schema, type) and is_basemodel_subclass(schema):
@@ -2853,7 +2948,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
-        usage = proto.Message.to_dict(response.usage_metadata)
+        usage = proto.Message.to_dict(
+            response.usage_metadata, use_integers_for_enums=False
+        )
         lc_usage = _get_usage_metadata_gemini(usage)
         logprobs = self.logprobs if isinstance(self.logprobs, (int, bool)) else False
         for candidate in response.candidates:
@@ -2890,7 +2987,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         prev_total_usage: UsageMetadata | None = None,
     ) -> tuple[ChatGenerationChunk, UsageMetadata | None]:
         # return an empty completion message if there's no candidates
-        usage_metadata = proto.Message.to_dict(response_chunk.usage_metadata)
+        usage_metadata = proto.Message.to_dict(
+            response_chunk.usage_metadata, use_integers_for_enums=False
+        )
 
         # Gather langchain (standard) usage metadata
         # Note: some models (e.g., gemini-1.5-pro with image inputs) return

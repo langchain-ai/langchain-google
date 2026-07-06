@@ -20,14 +20,19 @@ from google.genai.types import (
     FunctionResponse,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
+    HttpOptions,
+    HttpRetryOptions,
     Language,
     Part,
+    ThinkingConfig,
     ThinkingLevel,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
 from google.protobuf.struct_pb2 import Struct
+from langchain_core._api import LangChainBetaWarning
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
@@ -47,24 +52,32 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
-from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai import (
+    HarmBlockThreshold,
+    HarmCategory,
+    Modality,
+    __version__,
+)
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
+    GoogleContextOverflowError,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
     _is_gemini_3_or_later,
     _is_gemini_25_model,
+    _merge_http_options,
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
+    _validate_video_metadata,
 )
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 FAKE_API_KEY = "fake-api-key"
 
@@ -88,6 +101,8 @@ def test_integration_initialization() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     # Ensure temperature is propagated to request config
     msg = HumanMessage(content="test")
@@ -105,7 +120,7 @@ def test_integration_initialization() -> None:
         "ls_provider": "google_genai",
         "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
-        "ls_temperature": 0.7,
+        "ls_temperature": 1.0,
         "ls_max_tokens": 10,
     }
 
@@ -113,7 +128,7 @@ def test_integration_initialization() -> None:
     msg = HumanMessage(content="test")
     request = llm._prepare_request([msg])
     config = request["config"]
-    assert config.temperature == 0.7
+    assert config.temperature == 1.0
     assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
@@ -255,14 +270,14 @@ def test_api_key_masked_when_passed_via_constructor(
 
 def test_profile() -> None:
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert model.profile
     assert not model.profile["reasoning_output"]
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert model.profile
@@ -483,15 +498,200 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
     call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
     assert call_http_options.base_url == api_endpoint
 
-    # Verify user-agent header is set
-    assert "User-Agent" in call_http_options.headers
-    assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
-    assert "ChatGoogleGenerativeAI" in call_http_options.headers["User-Agent"]
+    # Verify user-agent header is set (lowercase to match google-genai SDK)
+    assert "user-agent" in call_http_options.headers
+    assert "langchain-google-genai" in call_http_options.headers["user-agent"]
+    assert "ChatGoogleGenerativeAI" in call_http_options.headers["user-agent"]
 
     # Verify user-provided headers are included
     if headers:
         for key, value in headers.items():
             assert call_http_options.headers[key] == value
+
+
+def _mock_chat(**model_kwargs: Any) -> tuple[ChatGoogleGenerativeAI, Mock]:
+    """Build a `ChatGoogleGenerativeAI` whose client is mocked.
+
+    Returns the chat model and the `generate_content` mock so callers can
+    inspect the `config` forwarded to the API.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock(
+        return_value=GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))],
+        )
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **model_kwargs,
+        )
+    return chat, mock_generate_content
+
+
+def test_per_request_http_options_dict_injects_headers() -> None:
+    """A per-invocation `http_options` dict reaches the request config."""
+    chat, mock_generate_content = _mock_chat()
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_object_injects_headers() -> None:
+    """A per-invocation `HttpOptions` object is accepted as well as a dict."""
+    chat, mock_generate_content = _mock_chat()
+
+    chat.invoke(
+        "test",
+        http_options=HttpOptions(headers={"Authorization": "Bearer token"}),
+    )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_preserves_model_timeout() -> None:
+    """Per-request headers merge without clobbering the model's timeout.
+
+    The `timeout` derived from the model config must survive when the
+    per-request `http_options` only sets headers (previously this collided and
+    raised a duplicate-keyword error).
+    """
+    chat, mock_generate_content = _mock_chat(timeout=30)
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.headers == {"Authorization": "Bearer token"}
+    assert http_options.timeout == 30 * 1000  # seconds -> milliseconds
+
+
+def test_merge_http_options_precedence() -> None:
+    """Explicit per-request fields win; headers merge; base fields persist."""
+    base = HttpOptions(timeout=5000, base_url="https://internal")
+    override = HttpOptions(
+        base_url="https://gateway",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.base_url == "https://gateway"  # override wins
+    assert merged.timeout == 5000  # base persists (not set on override)
+    assert merged.headers == {"Authorization": "Bearer token"}
+
+
+def test_merge_http_options_merges_header_dicts() -> None:
+    """Headers from base and override combine, with override keys winning."""
+    base = HttpOptions(headers={"X-Base": "1", "X-Shared": "base"})
+    override = HttpOptions(headers={"X-Override": "2", "X-Shared": "override"})
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.headers == {
+        "X-Base": "1",
+        "X-Override": "2",
+        "X-Shared": "override",
+    }
+
+
+def test_merge_http_options_preserves_nested_retry_model() -> None:
+    """Per-request `retry_options` remain SDK model objects after merging."""
+    override_retry_options = HttpRetryOptions(attempts=9)
+    base = HttpOptions(retry_options=HttpRetryOptions(attempts=3))
+    override = HttpOptions(retry_options=override_retry_options)
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.retry_options is override_retry_options
+    assert merged.retry_options.attempts == 9
+
+
+async def test_per_request_http_options_async_injects_headers() -> None:
+    """Per-invocation `http_options` reaches the request config via `ainvoke`.
+
+    The async path threads kwargs through separate runnable plumbing than the
+    sync path, so it is verified independently.
+    """
+    with patch(
+        "langchain_google_genai.chat_models.ChatGoogleGenerativeAI.client", create=True
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        mock_method = AsyncMock(
+            return_value=GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+            )
+        )
+        # `llm.client` is typed `Client | None`; treat the mock as `Any` so
+        # attribute assignment on the async path isn't flagged by mypy.
+        mock_client: Any = llm.client
+        mock_client.aio.models.generate_content = mock_method
+
+        await llm.ainvoke(
+            "test",
+            http_options={"headers": {"Authorization": "Bearer token"}},
+        )
+
+    config = mock_method.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_preserves_model_retries() -> None:
+    """Per-request headers merge without clobbering the model's `retry_options`.
+
+    Mirrors the timeout case for the second half of the merge contract.
+    """
+    chat, mock_generate_content = _mock_chat(max_retries=3)
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.headers == {"Authorization": "Bearer token"}
+    assert http_options.retry_options is not None
+    assert http_options.retry_options.attempts == 3
+
+
+def test_per_request_http_options_overrides_model_retries() -> None:
+    """Per-request `retry_options` win over the model-derived retry default."""
+    retry_options = HttpRetryOptions(attempts=9)
+    chat, mock_generate_content = _mock_chat(max_retries=3)
+
+    chat.invoke("test", http_options=HttpOptions(retry_options=retry_options))
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.retry_options is retry_options
+    assert http_options.retry_options.attempts == 9
+
+
+def test_per_request_http_options_overrides_model_timeout() -> None:
+    """An explicit per-request `timeout` wins over the model-derived one."""
+    chat, mock_generate_content = _mock_chat(timeout=30)
+
+    # `HttpOptions.timeout` is in milliseconds (native google-genai unit).
+    chat.invoke("test", http_options={"timeout": 99_000})
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.timeout == 99_000
 
 
 def test_base_url_set_in_constructor() -> None:
@@ -516,7 +716,50 @@ def test_base_url_passed_to_client() -> None:
         )
         call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == "http://localhost:8000"
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
+
+
+def test_api_version_defaults_to_none() -> None:
+    """`api_version` is unset by default, deferring to the SDK's default."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version is None
+
+
+def test_api_version_forwarded_to_http_options_gemini() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the Gemini backend."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            api_version="v1",
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1"
+
+
+def test_api_version_forwarded_to_http_options_vertex() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the Vertex backend.
+
+    Covers the API gateway proxy scenario: a custom `base_url` plus a
+    non-default `api_version` (e.g. `'v1'`) are both passed through
+    `HttpOptions`, overriding the SDK's `v1beta1` default for Vertex.
+    """
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            vertexai=True,
+            base_url="https://gateway.example.com/api/gemini",
+            api_version="v1",
+            additional_headers={"Authorization": "Bearer fake-token"},
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1"
+        assert call_http_options.base_url == "https://gateway.example.com/api/gemini"
 
 
 def test_async_client_property() -> None:
@@ -576,7 +819,7 @@ def test_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 async def test_async_api_endpoint_via_client_options() -> None:
@@ -620,7 +863,7 @@ async def test_async_api_endpoint_via_client_options() -> None:
         )
         call_http_options = mock_client_class.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == api_endpoint
-        assert "langchain-google-genai" in call_http_options.headers["User-Agent"]
+        assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
 def test_default_metadata_field_alias() -> None:
@@ -988,13 +1231,11 @@ def test_parse_response_candidate_includes_model_name() -> None:
     }
 
     response_candidate = Candidate.model_validate(raw_candidate)
-    result = _parse_response_candidate(
-        response_candidate, model_name="gemini-2.5-flash"
-    )
+    result = _parse_response_candidate(response_candidate, model_name=MODEL_NAME)
 
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
-    assert result.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert result.response_metadata["model_name"] == MODEL_NAME
 
     # No name
 
@@ -1020,7 +1261,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk1_candidate = Candidate.model_validate(raw_chunk1)
     response1 = GenerateContentResponse(
-        candidates=[chunk1_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk1_candidate], model_version=MODEL_NAME
     )
 
     # Second chunk without finish_reason
@@ -1030,7 +1271,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk2_candidate = Candidate.model_validate(raw_chunk2)
     response2 = GenerateContentResponse(
-        candidates=[chunk2_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk2_candidate], model_version=MODEL_NAME
     )
 
     # Final chunk with finish_reason
@@ -1041,7 +1282,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk3_candidate = Candidate.model_validate(raw_chunk3)
     response3 = GenerateContentResponse(
-        candidates=[chunk3_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk3_candidate], model_version=MODEL_NAME
     )
 
     # Convert to LangChain messages (simulating what _stream does)
@@ -1058,13 +1299,13 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     assert "model_name" not in msg2.response_metadata
 
     # Only the last chunk should have model_name
-    assert msg3.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert msg3.response_metadata["model_name"] == MODEL_NAME
 
     # Concatenate chunks (simulating user code with +=)
     full = msg1 + msg2 + msg3
 
     # Verify model_name is not duplicated
-    assert full.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert full.response_metadata["model_name"] == MODEL_NAME
     assert full.response_metadata["model_name"].count("gemini") == 1, (
         "model_name should not be duplicated"
     )
@@ -1073,17 +1314,51 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
-    llm_loaded = loads(
-        serialized,
-        secrets_map={"GOOGLE_API_KEY": "test-key"},
-        valid_namespaces=["langchain_google_genai"],
-        allowed_objects="all",
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
     # Pydantic 2 equality will fail on complex attributes like clients with
     # different IDs
     llm.client = None
     llm_loaded.client = None
     assert llm == llm_loaded
+
+
+def test_serialize_with_thinking_config() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        thinking_config={"include_thoughts": True, "thinkingBudget": 2048},
+    )
+    serialized = dumps(llm)
+    assert "not_implemented" not in serialized
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+
+
+def test_thinking_config_object_is_stored_as_serializable_dict() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=2048),
+    )
+
+    assert llm.thinking_config == {"include_thoughts": True, "thinking_budget": 2048}
 
 
 @pytest.mark.parametrize(
@@ -1122,12 +1397,12 @@ def test_supports_thinking() -> None:
     )
     assert not llm_tts._supports_thinking()
     llm_normal = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_normal._supports_thinking()
     llm_pro = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
+        model="gemini-3.1-pro-preview",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_pro._supports_thinking()
@@ -1390,6 +1665,7 @@ def test_max_retries_parameter_handling(
                                     },
                                     "grounding_chunk_indices": [0],
                                     "confidence_scores": [0.95],
+                                    "rendered_parts": None,
                                 }
                             ],
                             "web_search_queries": ["test query"],
@@ -1410,6 +1686,7 @@ def test_max_retries_parameter_handling(
                 "google_maps_widget_context_token": None,
                 "grounding_chunks": [
                     {
+                        "image": None,
                         "maps": None,
                         "retrieved_context": None,
                         "web": {
@@ -1429,8 +1706,10 @@ def test_max_retries_parameter_handling(
                         },
                         "grounding_chunk_indices": [0],
                         "confidence_scores": [0.95],
+                        "rendered_parts": None,
                     }
                 ],
+                "image_search_queries": [],
                 "retrieval_metadata": None,
                 "retrieval_queries": None,
                 "search_entry_point": None,
@@ -1457,6 +1736,84 @@ def test_max_retries_parameter_handling(
                 },
             },
             {},
+        ),
+        (
+            # Case 3: Response with image_search_queries in grounding_metadata
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Test response"}]},
+                        "grounding_metadata": {
+                            "grounding_chunks": [
+                                {
+                                    "web": {
+                                        "uri": "https://example.com",
+                                        "title": "Example Site",
+                                    }
+                                }
+                            ],
+                            "grounding_supports": [
+                                {
+                                    "segment": {
+                                        "start_index": 0,
+                                        "end_index": 13,
+                                        "text": "Test response",
+                                        "part_index": 0,
+                                    },
+                                    "grounding_chunk_indices": [0],
+                                    "confidence_scores": [0.95],
+                                    "rendered_parts": None,
+                                }
+                            ],
+                            "web_search_queries": ["test query"],
+                            "image_search_queries": ["cat images"],
+                        },
+                    }
+                ],
+                "prompt_feedback": {
+                    "block_reason": "BLOCKED_REASON_UNSPECIFIED",
+                    "safety_ratings": [],
+                },
+                "usage_metadata": {
+                    "prompt_token_count": 10,
+                    "candidates_token_count": 5,
+                    "total_token_count": 15,
+                },
+            },
+            {
+                "google_maps_widget_context_token": None,
+                "grounding_chunks": [
+                    {
+                        "image": None,
+                        "maps": None,
+                        "retrieved_context": None,
+                        "web": {
+                            "domain": None,
+                            "uri": "https://example.com",
+                            "title": "Example Site",
+                        },
+                    }
+                ],
+                "grounding_supports": [
+                    {
+                        "segment": {
+                            "start_index": 0,
+                            "end_index": 13,
+                            "text": "Test response",
+                            "part_index": 0,
+                        },
+                        "grounding_chunk_indices": [0],
+                        "confidence_scores": [0.95],
+                        "rendered_parts": None,
+                    }
+                ],
+                "image_search_queries": ["cat images"],
+                "retrieval_metadata": None,
+                "retrieval_queries": None,
+                "search_entry_point": None,
+                "source_flagging_uris": None,
+                "web_search_queries": ["test query"],
+            },
         ),
     ],
 )
@@ -1536,6 +1893,7 @@ def test_grounding_metadata_to_citations_conversion() -> None:
                             },
                             "grounding_chunk_indices": [0],
                             "confidence_scores": [0.95],
+                            "rendered_parts": None,
                         },
                         {
                             "segment": {
@@ -1959,6 +2317,44 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert result.usage_metadata["input_tokens"] == 20
         assert result.usage_metadata["output_tokens"] == 15
         assert result.usage_metadata["total_tokens"] == 35
+
+
+def test_constructor_thinking_config_is_propagated() -> None:
+    """Test that constructor-level `thinking_config` is sent in request config."""
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="There are 2 O's in Google.")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=20,
+            candidates_token_count=15,
+            total_token_count=35,
+            cached_content_token_count=0,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"include_thoughts": True, "thinkingBudget": 2048},
+    )
+    assert llm.client is not None
+    assert llm.model_kwargs == {}
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        llm.invoke("How many O's are in Google?")
+
+        mock_client_method.assert_called_once()
+        config = mock_client_method.call_args.kwargs.get("config")
+        assert config is not None
+        assert config.thinking_config is not None
+        assert config.thinking_config.include_thoughts is True
+        assert config.thinking_config.thinking_budget == 2048
 
 
 def test_modalities_override_in_generation_config() -> None:
@@ -2430,6 +2826,53 @@ def test_thought_signature_conversion() -> None:
     assert result == []
 
 
+def test_compat_image_url_block() -> None:
+    """Test that ImageContentBlock with url produces correct file_data."""
+    block = {
+        "type": "image",
+        "url": "https://example.com/image.jpg",
+        "mime_type": "image/png",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [block],  # type: ignore[list-item]
+        "google_genai",
+    )
+    assert len(result) == 1
+    assert "file_data" in result[0]
+    assert result[0]["file_data"]["file_uri"] == "https://example.com/image.jpg"
+    assert result[0]["file_data"]["mime_type"] == "image/png"
+
+
+def test_compat_file_url_block() -> None:
+    """Test that FileContentBlock with url produces correct file_data."""
+    block = {
+        "type": "file",
+        "url": "https://example.com/document.pdf",
+        "mime_type": "application/pdf",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [block],  # type: ignore[list-item]
+        "google_genai",
+    )
+    assert len(result) == 1
+    assert "file_data" in result[0]
+    assert result[0]["file_data"]["file_uri"] == "https://example.com/document.pdf"
+    assert result[0]["file_data"]["mime_type"] == "application/pdf"
+
+
+def test_compat_image_url_block_non_google_provider() -> None:
+    """Test that ImageContentBlock with url is ignored for non-google providers."""
+    block = {
+        "type": "image",
+        "url": "https://example.com/image.jpg",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [block],  # type: ignore[list-item]
+        "other_provider",
+    )
+    assert result == []
+
+
 def test_thought_signature_extraction_from_response() -> None:
     """Test thought signature extraction from API response Parts."""
 
@@ -2864,6 +3307,152 @@ def test_convert_to_parts_media_with_video_metadata() -> None:
     assert result[0].video_metadata is not None
     assert result[0].video_metadata.start_offset == "10s"
     assert result[0].video_metadata.end_offset == "20s"
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": "1s", "end_offset": "5s"},
+        {"start_offset": "0s", "end_offset": "0s"},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"startOffset": "1s", "endOffset": "5s"},
+        {},
+        {"end_offset": "5s"},
+        {"start_offset": "1s"},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": "-1s", "end_offset": "5s"},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "0s", "end_offset": "-1s"},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "10s", "end_offset": "5s"},
+            "must not exceed",
+        ),
+        (
+            {"startOffset": "5s", "endOffset": "1s"},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": {"seconds": 30}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_validate_video_metadata_accepts_pydantic_instance() -> None:
+    """`VideoMetadata` instances should validate via attribute access."""
+    from google.genai.types import VideoMetadata
+
+    valid = VideoMetadata(start_offset="1s", end_offset="5s")
+    _validate_video_metadata(valid)
+
+
+def test_validate_video_metadata_rejects_invalid_pydantic_instance() -> None:
+    """Pydantic instances with bad offsets must raise the same clear ValueError."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="30s", end_offset="5s")
+    with pytest.raises(ValueError, match="must not exceed"):
+        _validate_video_metadata(bad)
+
+
+def test_validate_video_metadata_rejects_negative_pydantic_instance() -> None:
+    """Negative offsets reach the same guard via the attribute-access path."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="-1s", end_offset="5s")
+    with pytest.raises(ValueError, match="start_offset must be non-negative"):
+        _validate_video_metadata(bad)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `True` would be silently treated as 1 second without the bool
+        # guard, since `isinstance(True, int) is True`.
+        {"start_offset": True, "end_offset": "5s"},
+        {"start_offset": "5s", "end_offset": False},
+    ],
+)
+def test_validate_video_metadata_ignores_bool_offsets(
+    video_metadata: dict,
+) -> None:
+    """Booleans must not be coerced into integer durations."""
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        "not a mapping",
+        12345,
+        ["seq", "of", "things"],
+        object(),
+    ],
+)
+def test_validate_video_metadata_rejects_non_mapping_input(
+    video_metadata: object,
+) -> None:
+    """Non-mapping, non-model input must surface a clear ValueError instead
+    of an opaque `AttributeError` from a missing `.get` method."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `float(None)` would TypeError without the guard.
+        {"start_offset": {"seconds": None, "nanos": None}},
+        # `float('abc')` would ValueError without the guard.
+        {"start_offset": {"seconds": "abc"}},
+        # Garbage string with the `s` suffix.
+        {"start_offset": "abcs"},
+    ],
+)
+def test_validate_video_metadata_tolerates_unparseable_values(
+    video_metadata: dict,
+) -> None:
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
+    only true validation failures (negative offsets, start > end) raise."""
+    # Should not raise -- unparseable values are treated as "not present"
+    # and `model_validate` will surface a clearer error if needed.
+    _validate_video_metadata(video_metadata)
+
+
+def test_convert_to_parts_video_metadata_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+            "video_metadata": {"start_offset": "30s", "end_offset": "5s"},
+        }
+    ]
+    with pytest.raises(ValueError, match="must not exceed"):
+        _convert_to_parts(content)
 
 
 def test_convert_to_parts_executable_code() -> None:
@@ -4019,6 +4608,83 @@ def test_thinking_budget_alone_still_works() -> None:
     assert config.thinking_config.thinking_level is None
 
 
+def test_thinking_config_flat_args_take_precedence() -> None:
+    """Test flat thinking args override matching raw `thinking_config` keys."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinking_budget": 2048, "include_thoughts": False},
+        thinking_budget=64,
+        include_thoughts=True,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 64
+    assert config.thinking_config.include_thoughts is True
+
+
+def test_thinking_config_cross_source_level_budget_warning() -> None:
+    """Test merged `thinking_level` and `thinking_budget` emit a warning."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinkingLevel": "low"},
+        thinking_budget=128,
+    )
+
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert len(warning_list) == 1
+    assert issubclass(warning_list[0].category, UserWarning)
+    assert "thinking_level' takes precedence" in str(warning_list[0].message)
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_config_single_source_level_budget_warning() -> None:
+    """Test raw `thinking_config` warns when it includes level and budget."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinkingLevel": "high", "thinkingBudget": 128},
+    )
+
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert len(warning_list) == 1
+    assert issubclass(warning_list[0].category, UserWarning)
+    assert "thinking_level' takes precedence" in str(warning_list[0].message)
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_config_object_is_propagated() -> None:
+    """Test `ThinkingConfig` constructor input is propagated to request config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=512),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.include_thoughts is True
+    assert config.thinking_config.thinking_budget == 512
+
+
 def test_kwargs_override_max_output_tokens() -> None:
     """Test that max_output_tokens can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
@@ -4044,6 +4710,205 @@ def test_kwargs_override_stop() -> None:
     request = llm._prepare_request([msg], stop=["me"])
     config = request["config"]
     assert config.stop_sequences == ["me"]
+
+
+def test_kwargs_stop_sequences_overrides_constructor_stop() -> None:
+    """Test that per-call `stop_sequences` overrides constructor `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["you"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop_sequences=["me"])
+    config = request["config"]
+    assert config.stop_sequences == ["me"]
+
+
+def test_generation_config_constructor_fields_are_propagated() -> None:
+    """Test Google generation config field aliases are propagated."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        presence_penalty=0.1,
+        frequency_penalty=0.2,
+        candidate_count=2,
+        stop_sequences=["stop"],
+    )
+
+    assert llm.model_kwargs == {}
+    assert llm.n == 2
+    assert llm.stop == ["stop"]
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.presence_penalty == 0.1
+    assert config.frequency_penalty == 0.2
+    assert config.candidate_count == 2
+    assert config.stop_sequences == ["stop"]
+
+
+def test_generation_config_constructor_defaults_are_preserved() -> None:
+    """Test unset generation config fields keep default request semantics."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.presence_penalty is None
+    assert config.frequency_penalty is None
+
+
+def test_n_constructor_field_sets_candidate_count() -> None:
+    """Test LangChain `n` field still sets Google `candidate_count`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.candidate_count == 2
+
+
+def test_kwargs_override_generation_config_constructor_fields() -> None:
+    """Test per-call kwargs override model-level generation config fields."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        presence_penalty=0.1,
+        frequency_penalty=0.2,
+        candidate_count=2,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        candidate_count=3,
+        presence_penalty=0.0,
+        frequency_penalty=0.5,
+    )
+    config = request["config"]
+    assert config.presence_penalty == 0.0
+    assert config.frequency_penalty == 0.5
+    assert config.candidate_count == 3
+
+
+def test_constructor_stop_is_propagated() -> None:
+    """Test model-level `stop` is propagated when no per-call stop is passed."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.stop_sequences == ["stop"]
+
+
+def test_per_call_empty_stop_overrides_constructor_stop() -> None:
+    """Test a per-call empty `stop` list clears the model-level `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop=[])
+    config = request["config"]
+    # An empty list is a valid "clear the stops" signal and must not fall back
+    # to the model-level `stop`.
+    assert config.stop_sequences == []
+
+
+def test_n_and_candidate_count_alias_resolves_to_alias() -> None:
+    """Test passing both `n` and its `candidate_count` alias: alias wins.
+
+    Pins the standard Pydantic `populate_by_name=True` resolution order so a
+    future change to alias handling is caught.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+        candidate_count=5,
+    )
+
+    assert llm.n == 5
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.5, 2.1, 5.0])
+def test_penalty_out_of_range_raises(field: str, value: float) -> None:
+    """Test penalties outside `[-2.0, 2.0]` are rejected at construction."""
+    with pytest.raises(ValueError, match=f"{field} must be in the range"):
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **{field: value},
+        )
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.0, 2.0])
+def test_penalty_range_bounds_are_allowed(field: str, value: float) -> None:
+    """Test penalties at the documented bounds are accepted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        **{field: value},
+    )
+
+    assert getattr(llm, field) == value
+
+
+def test_penalties_in_identifying_params() -> None:
+    """Test penalties are included in identifying parameters for tracing."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    params = llm._identifying_params
+    assert params["frequency_penalty"] == 0.2
+    assert params["presence_penalty"] == 0.1
+
+
+def test_serialize_round_trips_generation_config_aliases() -> None:
+    """Test alias-set generation config fields survive serialization."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        candidate_count=2,
+        stop_sequences=["stop"],
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    serialized = dumps(llm)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+    assert llm_loaded.n == 2
+    assert llm_loaded.stop == ["stop"]
 
 
 def test_kwargs_override_thinking_budget() -> None:
@@ -4474,7 +5339,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
-        assert llm_vertex.model == "gemini-2.5-flash"
+        assert llm_vertex.model == MODEL_NAME
         assert llm_vertex._use_vertexai is True  # type: ignore[attr-defined]
 
         # Test with models/ prefix for Google AI - should remain unchanged
@@ -4483,7 +5348,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=False,
         )
-        assert llm_google_ai.model == "models/gemini-2.5-flash"
+        assert llm_google_ai.model == f"models/{MODEL_NAME}"
         assert llm_google_ai._use_vertexai is False  # type: ignore[attr-defined]
 
         # Test without models/ prefix for Vertex AI - should remain unchanged
@@ -4492,7 +5357,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
-        assert llm_vertex_no_prefix.model == "gemini-2.5-flash"
+        assert llm_vertex_no_prefix.model == MODEL_NAME
         assert llm_vertex_no_prefix._use_vertexai is True  # type: ignore[attr-defined]
     finally:
         os.environ.clear()
@@ -4969,3 +5834,159 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+def test_context_overflow_error_invoke_sync() -> None:
+    """Test `ClientError` with token overflow is converted to `ContextOverflowError`."""
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate an INVALID_ARGUMENT error from the API (token limit exceeded)
+    mock_generate_content.side_effect = ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            chat.invoke("test")
+
+
+async def test_context_overflow_error_invoke_async() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (async)."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_class:
+        mock_client_instance = Mock()
+        mock_client_class.return_value = mock_client_instance
+
+        context_overflow_error = ClientError(
+            code=400,
+            response_json={
+                "error": {
+                    "message": (
+                        "The input token count (1632254) exceeds the maximum "
+                        "number of tokens allowed (1048576)."
+                    ),
+                    "status": "INVALID_ARGUMENT",
+                }
+            },
+            response=None,
+        )
+
+        # Mock the aio.models.generate_content method for async calls
+        mock_aio = Mock()
+        mock_client_instance.aio = mock_aio
+        mock_aio_models = Mock()
+        mock_aio.models = mock_aio_models
+        mock_aio_models.generate_content = AsyncMock(side_effect=context_overflow_error)
+
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            await chat.ainvoke("test")
+
+
+def test_context_overflow_error_stream_sync() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (stream)."""
+    mock_client = Mock()
+    mock_models = Mock()
+
+    # Simulate an INVALID_ARGUMENT error from the API (token limit exceeded)
+    mock_models.generate_content_stream = Mock(
+        side_effect=ClientError(
+            code=400,
+            response_json={
+                "error": {
+                    "message": (
+                        "The input token count (1632254) exceeds the maximum "
+                        "number of tokens allowed (1048576)."
+                    ),
+                    "status": "INVALID_ARGUMENT",
+                }
+            },
+            response=None,
+        )
+    )
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            list(chat.stream("test"))
+
+
+def test_context_overflow_error_backwards_compatibility() -> None:
+    """Test that `GoogleContextOverflowError` can still be caught as `ClientError`.
+
+    This ensures backwards compatibility: code that catches `ClientError` will
+    continue to work, while new code can catch `ContextOverflowError`.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    mock_generate_content.side_effect = ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(ClientError) as exc_info:
+            chat.invoke("test")
+
+        # Verify it's both types (multiple inheritance)
+        assert isinstance(exc_info.value, ClientError)
+        assert isinstance(exc_info.value, ContextOverflowError)
+        assert isinstance(exc_info.value, GoogleContextOverflowError)

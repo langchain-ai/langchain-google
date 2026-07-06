@@ -43,7 +43,9 @@ class VertexAICallbackHandler(BaseCallbackHandler):
     ) -> None:
         """Runs when LLM starts running."""
 
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+    def on_llm_new_token(
+        self, token: str | list[str | dict[str, Any]], **kwargs: Any
+    ) -> None:
         """Runs on new LLM token.
 
         Only available when streaming is enabled.

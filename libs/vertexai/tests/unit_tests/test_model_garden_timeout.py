@@ -3,7 +3,10 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
-from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from langchain_google_vertexai.model_garden import (
+    ChatAnthropicVertex,
+    _move_betas_to_extra_body,
+)
 
 TIMEOUT_TEST_CASES = [
     pytest.param(30.0, id="float_timeout"),
@@ -14,6 +17,28 @@ TIMEOUT_TEST_CASES = [
         id="default_timeout",
     ),
 ]
+
+
+def test_move_betas_to_extra_body() -> None:
+    params = {
+        "betas": ["context-1m-2025-08-07"],
+        "extra_body": {"existing": True},
+    }
+
+    assert _move_betas_to_extra_body(params) is True
+    assert params == {
+        "extra_body": {
+            "existing": True,
+            "anthropic_beta": ["context-1m-2025-08-07"],
+        }
+    }
+
+
+def test_move_betas_to_extra_body_without_betas() -> None:
+    params = {"extra_body": {"existing": True}}
+
+    assert _move_betas_to_extra_body(params) is False
+    assert params == {"extra_body": {"existing": True}}
 
 
 @pytest.mark.parametrize("timeout_value", TIMEOUT_TEST_CASES)

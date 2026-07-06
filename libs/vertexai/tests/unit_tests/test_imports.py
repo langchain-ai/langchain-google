@@ -28,6 +28,7 @@ EXPECTED_ALL = [
     "VertexAIVisualQnAChat",
     "VertexPairWiseStringEvaluator",
     "VertexStringEvaluator",
+    "__version__",
     "create_context_cache",
     "get_vertex_maas_model",
 ]

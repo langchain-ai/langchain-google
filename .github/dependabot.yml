@@ -4,31 +4,91 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
-      actions:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/genai"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langchain-core"
+      - dependency-name: "langchain"
+      - dependency-name: "langchain-classic"
+      - dependency-name: "langchain-text-splitters"
+      - dependency-name: "langchain-tests"
+      - dependency-name: "langchain-model-profiles"
     groups:
-      genai:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/vertexai"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langchain-core"
+      - dependency-name: "langchain"
+      - dependency-name: "langchain-classic"
+      - dependency-name: "langchain-text-splitters"
+      - dependency-name: "langchain-tests"
+      - dependency-name: "langchain-model-profiles"
     groups:
-      vertexai:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/community"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    versioning-strategy: increase
+    ignore:
+      - dependency-name: "langchain-core"
+      - dependency-name: "langchain"
+      - dependency-name: "langchain-classic"
+      - dependency-name: "langchain-text-splitters"
+      - dependency-name: "langchain-tests"
+      - dependency-name: "langchain-model-profiles"
     groups:
-      community:
-        patterns: ["*"]
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"

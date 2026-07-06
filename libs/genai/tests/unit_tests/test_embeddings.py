@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
-MODEL_NAME = "gemini-embedding-001"
+MODEL_NAME = "gemini-embedding-2-preview"
 
 
 def _mock_embedding_response(values_list: list[list[float]]) -> MagicMock:
@@ -30,13 +30,13 @@ def test_integration_initialization() -> None:
             google_api_key=SecretStr("..."),
         )
         mock_client.assert_called_once()
-        # Check that http_options contains user agent
+        # Check that http_options contains user agent (lowercase for google-genai)
         call_kwargs = mock_client.call_args.kwargs
         assert "http_options" in call_kwargs
         http_options = call_kwargs["http_options"]
-        assert "User-Agent" in http_options.headers
-        assert "langchain-google-genai" in http_options.headers["User-Agent"]
-        assert "GoogleGenerativeAIEmbeddings" in http_options.headers["User-Agent"]
+        assert "user-agent" in http_options.headers
+        assert "langchain-google-genai" in http_options.headers["user-agent"]
+        assert "GoogleGenerativeAIEmbeddings" in http_options.headers["user-agent"]
 
     with patch("langchain_google_genai.embeddings.Client") as mock_client:
         _ = GoogleGenerativeAIEmbeddings(
@@ -118,7 +118,10 @@ def test_embed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        assert call_kwargs["contents"] == [
+            {"parts": [{"text": "test text"}]},
+            {"parts": [{"text": "test text2"}]},
+        ]
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
@@ -171,6 +174,29 @@ def test_base_url_support() -> None:
     assert call_kwargs["http_options"].base_url == base_url
     # Verify api_key is passed (could be from param or env, but should be present)
     assert "api_key" in call_kwargs
+
+
+def test_api_version_forwarded_to_http_options() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the embeddings client."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-api-key"),
+            api_version="v1",
+        )
+    call_http_options = mock_client.call_args.kwargs["http_options"]
+    assert call_http_options.api_version == "v1"
+
+
+def test_api_version_defaults_to_none_embeddings() -> None:
+    """`api_version` is unset by default, deferring to the SDK's default."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-api-key"),
+        )
+    call_http_options = mock_client.call_args.kwargs["http_options"]
+    assert call_http_options.api_version is None
 
 
 def test_embed_query_default_task_type() -> None:
@@ -297,7 +323,10 @@ async def test_aembed_documents() -> None:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args.kwargs
         assert call_kwargs["model"] == MODEL_NAME
-        assert call_kwargs["contents"] == ["test text", "test text2"]
+        assert call_kwargs["contents"] == [
+            {"parts": [{"text": "test text"}]},
+            {"parts": [{"text": "test text2"}]},
+        ]
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result

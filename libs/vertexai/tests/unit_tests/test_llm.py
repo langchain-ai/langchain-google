@@ -13,14 +13,18 @@ from google.cloud.aiplatform_v1beta1.types import (
 from pydantic import model_validator
 from typing_extensions import Self
 
+from langchain_google_vertexai import __version__
 from langchain_google_vertexai._base import (
     _BaseVertexAIModelGarden,
     _get_prediction_client,
 )
 from langchain_google_vertexai.llms import VertexAI
+from langchain_google_vertexai.model_garden import VertexAIModelGarden
 from tests.integration_tests.conftest import (
     _DEFAULT_MODEL_NAME,
 )
+
+_DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 
 
 @pytest.fixture
@@ -39,6 +43,8 @@ def test_model_name() -> None:
     ]:
         assert llm.model_name == _DEFAULT_MODEL_NAME
         assert llm.max_output_tokens == 10
+        assert llm.metadata is not None
+        assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     # Test initialization with an invalid argument to check warning
     with patch("langchain_google_vertexai.llms.logger.warning") as mock_warning:
@@ -59,6 +65,23 @@ def test_model_name() -> None:
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
         assert "Did you mean: 'safety_settings'?" in call_args
+
+
+@patch("langchain_google_vertexai._base.PredictionServiceAsyncClient")
+@patch("langchain_google_vertexai._base.PredictionServiceClient")
+def test_model_garden_sets_version(_mock_client: Any, _mock_async_client: Any) -> None:
+    # VertexAIModelGarden defines its own ``_set_*_version`` validator (it does not
+    # inherit ``_VertexAICommon``), so it needs dedicated coverage. Asserting the
+    # ``langchain-core`` entry also coexists guards against a same-named validator
+    # silently clobbering core's seeded entry.
+    llm = VertexAIModelGarden(
+        project="test-project",
+        endpoint_id="test-endpoint",
+        location="us-central1",
+    )
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
+    assert "langchain-core" in llm.metadata["lc_versions"]
 
 
 def test_tuned_model_name() -> None:
@@ -174,16 +197,16 @@ def test_tracing_params() -> None:
     ) as mc:
         response = GenerateContentResponse(candidates=[])
         mc.return_value.generate_content.return_value = response
-        llm = VertexAI(model_name="gemini-2.5-pro", project="test-proj")
+        llm = VertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-proj")
         ls_params = llm._get_ls_params()
         assert ls_params == {
             "ls_provider": "google_vertexai",
             "ls_model_type": "llm",
-            "ls_model_name": "gemini-2.5-pro",
+            "ls_model_name": _DEFAULT_GEMINI_MODEL,
         }
 
         llm = VertexAI(
-            model_name=_DEFAULT_MODEL_NAME,
+            model=_DEFAULT_MODEL_NAME,
             temperature=0.1,
             max_output_tokens=10,
             project="test-proj",
@@ -200,6 +223,6 @@ def test_tracing_params() -> None:
 
 def test_timeout_parameter() -> None:
     # Test that timeout parameter is passed to ChatVertexAI client.
-    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
+    llm = VertexAI(model=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
     assert llm.timeout == 30.0
     assert llm.client.timeout == 30.0

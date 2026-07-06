@@ -21,6 +21,10 @@ class GCSDirectoryLoader(BaseLoader):
         ```bash
         pip install langchain-google-community[gcs]
         ```
+
+        If `loader_func` is not provided, `GCSFileLoader` uses
+        `UnstructuredFileLoader`, which additionally requires
+        `langchain-community`.
     """
 
     def __init__(
@@ -38,7 +42,7 @@ class GCSDirectoryLoader(BaseLoader):
             prefix: The prefix of the GCS bucket.
             loader_func: A loader function that instantiates a loader based on a
                 `file_path` argument. If nothing is provided, the  `GCSFileLoader`
-                would use its default loader.
+                uses its default loader, which requires `langchain-community`.
         """
         self.project_name = project_name
         self.bucket = bucket

@@ -40,11 +40,14 @@ from google.genai.types import (
     HttpRetryOptions,
     ImageConfig,
     Part,
+    PrebuiltVoiceConfig,
     SafetySetting,
+    SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
     ToolConfig,
     VideoMetadata,
+    VoiceConfig,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -54,6 +57,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -92,7 +96,14 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self, is_typeddict
 
@@ -117,6 +128,7 @@ from langchain_google_genai._image_utils import (
     ImageBytesLoader,
     image_bytes_to_b64_string,
 )
+from langchain_google_genai._version import __version__
 from langchain_google_genai.data._profiles import _PROFILES
 
 logger = logging.getLogger(__name__)
@@ -130,16 +142,36 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class GoogleContextOverflowError(ClientError, ContextOverflowError):
+    """ClientError raised when input exceeds Google's context limit."""
+
+
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
-    """Convert `ClientError` to `ChatGoogleGenerativeAIError` with descriptive message.
+    """Convert `ClientError` to a more specific exception when possible.
+
+    Raises `GoogleContextOverflowError` (a `ContextOverflowError` subclass)
+    when the error indicates that the input exceeded the model's token limit,
+    so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
+    and fall back to context compaction.
 
     Args:
         e: The `ClientError` exception to handle.
         request: The request dict containing model info.
 
     Raises:
-        ChatGoogleGenerativeAIError: Always raised with formatted error message.
+        GoogleContextOverflowError: When the error indicates a context overflow.
+        ChatGoogleGenerativeAIError: For all other client errors.
     """
+    error_str = str(e)
+    if (
+        "exceeds the maximum number of tokens allowed" in error_str
+        or "token limit" in error_str.lower()
+    ):
+        raise GoogleContextOverflowError(
+            code=e.code,
+            response_json=e.details,
+            response=e.response,
+        ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
     raise ChatGoogleGenerativeAIError(msg) from e
@@ -158,6 +190,35 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
+def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
+    """Merge a per-request `HttpOptions` over internally-derived options.
+
+    `timeout` and `retry_options` are derived internally (from the model config
+    or call-time `timeout`/`max_retries`); those are preserved unless the
+    per-request `override` explicitly sets them.
+    Any field explicitly set on `override` (e.g. `base_url`, `api_version`) wins,
+    and `headers` from both are merged with `override` keys taking precedence.
+
+    Args:
+        base: Options derived from the model config (`timeout`/`retry_options`),
+            or `None` when neither is set.
+        override: Per-request options supplied at invocation time.
+
+    Returns:
+        The merged `HttpOptions`.
+    """
+    if base is None:
+        return override
+    merged = base.model_copy(deep=True)
+    for field in override.model_fields_set:
+        value = getattr(override, field)
+        if field == "headers":
+            merged.headers = {**(merged.headers or {}), **(value or {})}
+        else:
+            setattr(merged, field, value)
+    return merged
+
+
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Wrapper exception class for errors associated with the `Google GenAI` API.
 
@@ -167,7 +228,7 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
 
 
 def _is_gemini_3_or_later(model_name: str) -> bool:
-    """Checks if the model is a pre-Gemini 3 model."""
+    """Checks if the model is Gemini 3 or later."""
     if not model_name:
         return False
     model_name = model_name.lower().replace("models/", "")
@@ -180,6 +241,86 @@ def _is_gemini_25_model(model_name: str) -> bool:
         return False
     model_name = model_name.lower().replace("models/", "")
     return "gemini-2.5" in model_name
+
+
+def _validate_video_metadata(video_metadata: object) -> None:
+    """Validate user-supplied video metadata before sending to the API.
+
+    The Gemini API surfaces an opaque `500 Internal error` when video
+    offsets are negative or `start_offset` exceeds `end_offset`. This
+    helper checks the obvious cases up front and raises a clearer error
+    so callers do not have to debug the underlying API response.
+
+    Args:
+        video_metadata: Raw `video_metadata` from a media part. Accepts
+            a `Mapping` (e.g. `dict`) keyed by either `start_offset`/
+            `end_offset` or their camelCase aliases, or a `VideoMetadata`
+            Pydantic instance. Each offset may be a duration string like
+            `"10s"`, a number of seconds, or a `{"seconds": int, "nanos":
+            int}` mapping.
+
+    Raises:
+        ValueError: If an offset is negative, `start_offset` is greater
+            than `end_offset`, or `video_metadata` is not a mapping or
+            object exposing offset fields.
+    """
+
+    def _to_seconds(value: object) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if not value.endswith("s"):
+                return None
+            try:
+                return float(value[:-1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, Mapping):
+            mapping = cast("Mapping[str, Any]", value)
+            try:
+                return (
+                    float(mapping.get("seconds", 0))
+                    + float(mapping.get("nanos", 0)) / 1e9
+                )
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    if isinstance(video_metadata, Mapping):
+        mapping = cast("Mapping[str, Any]", video_metadata)
+        raw_start = mapping.get("start_offset", mapping.get("startOffset"))
+        raw_end = mapping.get("end_offset", mapping.get("endOffset"))
+    elif hasattr(video_metadata, "start_offset") or hasattr(
+        video_metadata, "end_offset"
+    ):
+        # Pydantic `VideoMetadata` instance — read fields via attribute
+        # access so callers passing a constructed model don't regress.
+        raw_start = getattr(video_metadata, "start_offset", None)
+        raw_end = getattr(video_metadata, "end_offset", None)
+    else:
+        msg = (
+            "video_metadata must be a mapping or a VideoMetadata-like object "
+            f"with start_offset/end_offset, got {type(video_metadata).__name__}"
+        )
+        raise ValueError(msg)
+
+    start = _to_seconds(raw_start)
+    end = _to_seconds(raw_end)
+
+    if start is not None and start < 0:
+        msg = f"video_metadata.start_offset must be non-negative, got {start}s"
+        raise ValueError(msg)
+    if end is not None and end < 0:
+        msg = f"video_metadata.end_offset must be non-negative, got {end}s"
+        raise ValueError(msg)
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"video_metadata.start_offset ({start}s) must not exceed "
+            f"video_metadata.end_offset ({end}s)"
+        )
+        raise ValueError(msg)
 
 
 def _convert_to_parts(
@@ -290,10 +431,16 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    thought_signature = None
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            part_kwargs["thought_signature"] = base64.b64decode(sig)
+                        if isinstance(sig, str):
+                            thought_signature = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            thought_signature = sig
+
+                        if thought_signature:
+                            pass
 
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
@@ -307,11 +454,13 @@ def _convert_to_parts(
                     # Check for thought_signature in extras
                     # (needed for multi-turn image editing/usage)
                     thought_sig = None
+                    image_part = image_loader.load_part(img_url)
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            thought_sig = base64.b64decode(sig)
-                    image_part = image_loader.load_part(img_url)
+                        if isinstance(sig, str):
+                            image_part.thought_signature = base64.b64decode(sig)
+                        elif isinstance(sig, bytes):
+                            image_part.thought_signature = sig
                     if thought_sig:
                         image_part.thought_signature = thought_sig
                     parts.append(image_part)
@@ -325,12 +474,23 @@ def _convert_to_parts(
                     media_part_kwargs: dict[str, Any] = {}
 
                     if "data" in part:
-                        # Embedded media
+                        data = part["data"]
+                        if isinstance(data, str):
+                            clean_data = re.sub(r"\s+", "", data)
+                            data_validation_msg = "Data should be valid base64"
+                            if (
+                                not re.match(r"^[A-Za-z0-9+/]*={0,2}$", clean_data)
+                                or len(clean_data) % 4 != 0
+                            ):
+                                raise ValueError(data_validation_msg)
+                            try:
+                                data = base64.b64decode(clean_data)
+                            except Exception:
+                                raise ValueError(data_validation_msg)
                         media_part_kwargs["inline_data"] = Blob(
-                            data=part["data"], mime_type=mime_type
+                            data=data, mime_type=mime_type
                         )
                     elif "file_uri" in part:
-                        # Referenced files (e.g. stored in GCS)
                         media_part_kwargs["file_data"] = FileData(
                             file_uri=part["file_uri"], mime_type=mime_type
                         )
@@ -338,8 +498,15 @@ def _convert_to_parts(
                         msg = f"Media part must have either data or file_uri: {part}"
                         raise ValueError(msg)
                     if "video_metadata" in part:
+                        _validate_video_metadata(part["video_metadata"])
                         metadata = VideoMetadata.model_validate(part["video_metadata"])
                         media_part_kwargs["video_metadata"] = metadata
+                        if "extras" in part and isinstance(part["extras"], dict):
+                            sig = part["extras"].get("signature")
+                            if sig and isinstance(sig, str):
+                                media_part_kwargs["thought_signature"] = (
+                                    base64.b64decode(sig)
+                                )
 
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
@@ -356,10 +523,12 @@ def _convert_to_parts(
                             }
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
+                        if isinstance(sig, str):
                             media_part_kwargs["thought_signature"] = base64.b64decode(
                                 sig
                             )
+                        elif isinstance(sig, bytes):
+                            media_part_kwargs["thought_signature"] = sig
 
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
@@ -563,7 +732,7 @@ def _get_ai_message_tool_messages_parts(
 #     pass
 #
 # model = ChatGoogleGenerativeAI(
-#     model="gemini-3-pro-preview"
+#     model="gemini-3.1-pro-preview"
 # ).bind_tools([generate_placeholder_thoughts])
 #
 # response = model.invoke("Generate a placeholder tool invocation.")
@@ -885,12 +1054,10 @@ def _parse_response_candidate(
     # Use model_name_for_content if provided, otherwise fall back to model_name.
     # This ensures consistent content format across all streaming chunks while
     # only including model_name in response_metadata for the final chunk.
-    effective_model_name = (
-        model_name_for_content if model_name_for_content else model_name
-    )
+    effective_model_name = model_name_for_content or model_name
 
     parts = response_candidate.content.parts or [] if response_candidate.content else []
-    for part in parts:
+    for i, part in enumerate(parts):
         text: str | None = None
         try:
             if hasattr(part, "text") and part.text is not None:
@@ -1019,7 +1186,8 @@ def _parse_response_candidate(
             )
             additional_kwargs["function_call"] = function_call
 
-            tool_call_id = function_call.get("id", str(uuid.uuid4()))
+            raw_id = getattr(part.function_call, "id", None)
+            tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
             if streaming:
                 tool_call_chunks.append(
                     tool_call_chunk(
@@ -1215,6 +1383,11 @@ def _response_to_result(
                     and grounding_metadata["web_search_queries"] is None
                 ):
                     grounding_metadata["web_search_queries"] = []
+                if (
+                    "image_search_queries" in grounding_metadata
+                    and grounding_metadata["image_search_queries"] is None
+                ):
+                    grounding_metadata["image_search_queries"] = []
                 generation_info["grounding_metadata"] = grounding_metadata
                 message.response_metadata["grounding_metadata"] = grounding_metadata
         except AttributeError:
@@ -1275,13 +1448,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **For Gemini Developer API** (simplest):
 
         1. Set the `GOOGLE_API_KEY` environment variable (recommended), or
-        2. Pass your API key using the [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
-            parameter
+        2. Pass your API key using the `api_key` parameter
 
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview", api_key="...")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", api_key="...")
         ```
 
         **For Vertex AI Platform with API key**:
@@ -1293,10 +1465,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         # Or explicitly:
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             api_key="...",
             project="your-project-id",
             vertexai=True,
@@ -1307,7 +1479,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             project="your-project-id",
             # Uses Application Default Credentials (ADC)
         )
@@ -1343,12 +1515,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         For SOCKS5 proxies or advanced proxy configuration, use the
-        [`client_args`][langchain_google_genai.ChatGoogleGenerativeAI.client_args]
-        parameter:
+        `client_args` parameter:
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             client_args={"proxy": "socks5://user:pass@host:port"},
         )
         ```
@@ -1358,7 +1529,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         model.invoke("Write me a ballad about LangChain")
         ```
 
@@ -1385,7 +1556,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             response_metadata={
                 "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
                 "finish_reason": "STOP",
-                "model_name": "gemini-3-pro-preview",
+                "model_name": "gemini-3.1-pro-preview",
                 "safety_ratings": [],
                 "model_provider": "google_genai",
             },
@@ -1411,7 +1582,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        model = ChatGoogleGenerativeAI(model="gemini-3.5-flash")
 
         for chunk in model.stream(messages):
             print(chunk)
@@ -1764,7 +1935,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         message = HumanMessage(
             content=[
@@ -1842,24 +2013,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             thinking_level="low",  # For faster, lower-latency responses
         )
         ```
 
-        Gemini 2.5 models use [`thinking_budget`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_budget]
+        Gemini 2.5 models use `thinking_budget`
         (an integer token count) to control reasoning. Set to `0` to disable thinking
         (where supported), or `-1` for dynamic thinking.
 
         See the [Gemini API docs](https://ai.google.dev/gemini-api/docs/thinking) for
         more details on thinking models.
 
-        To see a thinking model's thoughts, set [`include_thoughts=True`][langchain_google_genai.ChatGoogleGenerativeAI.include_thoughts]
+        To see a thinking model's thoughts, set `include_thoughts=True`
         to have the model's reasoning summaries included in the response.
 
         ```python
         model = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             include_thoughts=True,
         )
         ai_msg = model.invoke("How many 'r's are in the word 'strawberry'?")
@@ -1886,7 +2057,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
         response = model.invoke(
             "When is the next total solar eclipse in US?",
             tools=[{"google_search": {}}],
@@ -1897,7 +2068,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Alternatively, you can bind the tool to the model for easier reuse across calls:
 
         ```python
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         model_with_search = model.bind_tools([{"google_search": {}}])
         response = model_with_search.invoke(
@@ -1920,7 +2091,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```python
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+        model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
         model_with_code_interpreter = model.bind_tools([{"code_execution": {}}])
         response = model_with_code_interpreter.invoke("Use Python to calculate 3^3.")
@@ -1984,7 +2155,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             safety_settings={
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             },
@@ -1992,7 +2163,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         ```
 
         For an enumeration of the categories and thresholds available, see Google's
-        [safety setting types](https://ai.google.dev/api/python/google/generativeai/types/SafetySettingDict).
+        [safety settings](https://ai.google.dev/gemini-api/docs/safety-settings).
 
     ???+ example "Context caching"
 
@@ -2028,7 +2199,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 file = client.files.get(name=file.name)
 
             # Create cache
-            model = "gemini-3-pro-preview"
+            model = "gemini-3.1-pro-preview"
             cache = client.caches.create(
                 model=model,
                 config=types.CreateCachedContentConfig(
@@ -2085,7 +2256,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ],
                 )
             ]
-            model = "gemini-3-pro-preview"
+            model = "gemini-3.1-pro-preview"
             cache = client.caches.create(
                 model=model,
                 config=CreateCachedContentConfig(
@@ -2119,7 +2290,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         ```python
         {
-            "model_name": "gemini-3-pro-preview",
+            "model_name": "gemini-3.1-pro-preview",
             "model_provider": "google_genai",
             "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
             "finish_reason": "STOP",
@@ -2172,7 +2343,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
-    stop: list[str] | None = None
+    stop: list[str] | None = Field(default=None, alias="stop_sequences")
     """Stop sequences for the model."""
 
     response_mime_type: str | None = None
@@ -2236,6 +2407,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         this defaults to `'high'`.
     """
 
+    thinking_config: dict[str, Any] | ThinkingConfig | None = Field(
+        default=None,
+    )
+    """Raw Google GenAI thinking configuration.
+
+    Accepts the same fields as `google.genai.types.ThinkingConfig`, including
+    `thinking_level`, `thinking_budget`, and `include_thoughts`.
+
+    !!! note "Precedence"
+
+        If `thinking_config` is provided together with flat thinking arguments,
+        the flat arguments take precedence for matching fields. After merging,
+        `thinking_level` takes precedence over `thinking_budget` for Gemini 3+ models.
+    """
+
     cached_content: str | None = None
     """The name of the cached content used as context to serve the prediction.
 
@@ -2290,6 +2476,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def is_lc_serializable(cls) -> bool:
         return True
 
+    @field_validator("thinking_config", mode="before")
+    @classmethod
+    def _serialize_thinking_config(
+        cls, value: ThinkingConfig | dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if isinstance(value, ThinkingConfig):
+            return value.model_dump(exclude_none=True)
+        return value
+
     @model_validator(mode="before")
     @classmethod
     def build_extra(cls, values: dict[str, Any]) -> Any:
@@ -2301,6 +2496,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         all_required_field_names = get_pydantic_field_names(cls)
         return _build_model_kwargs(values, all_required_field_names)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_genai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-genai", __version__)
+        return self
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
@@ -2327,11 +2528,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "top_k must be positive"
             raise ValueError(msg)
 
+        if (
+            self.frequency_penalty is not None
+            and not -2.0 <= self.frequency_penalty <= 2.0
+        ):
+            msg = "frequency_penalty must be in the range [-2.0, 2.0]"
+            raise ValueError(msg)
+
+        if (
+            self.presence_penalty is not None
+            and not -2.0 <= self.presence_penalty <= 2.0
+        ):
+            msg = "presence_penalty must be in the range [-2.0, 2.0]"
+            raise ValueError(msg)
+
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
 
         _, user_agent = get_user_agent("ChatGoogleGenerativeAI")
-        headers = {"User-Agent": user_agent, **additional_headers}
+        headers = {"user-agent": user_agent, **additional_headers}
 
         google_api_key = None
         if not self.credentials:
@@ -2369,6 +2584,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
+            api_version=self.api_version,
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
@@ -2383,7 +2599,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             # Normalize model name for Vertex AI - strip 'models/' prefix
             # Vertex AI expects model names without the prefix
-            # (e.g., "gemini-2.5-flash") while Google AI accepts both formats
+            # (e.g., "gemini-3.5-flash") while Google AI accepts both formats
             if self.model.startswith("models/"):
                 object.__setattr__(self, "model", self.model.replace("models/", "", 1))
 
@@ -2494,6 +2710,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return {
             "model": self.model,
             "temperature": self.temperature,
+            "frequency_penalty": self.frequency_penalty,
+            "presence_penalty": self.presence_penalty,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "max_output_tokens": self.max_output_tokens,
@@ -2504,6 +2722,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
             "thinking_level": self.thinking_level,
+            "thinking_config": self.thinking_config,
             "image_config": self.image_config,
         }
 
@@ -2540,10 +2759,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
         models_prefix = "models/"
+        raw_model = params.get("model") or self.model
         ls_model_name = (
-            self.model[len(models_prefix) :]
-            if self.model and self.model.startswith(models_prefix)
-            else self.model
+            raw_model[len(models_prefix) :]
+            if raw_model and raw_model.startswith(models_prefix)
+            else raw_model
         )
         ls_params = LangSmithParams(
             ls_provider="google_genai",
@@ -2582,14 +2802,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> dict[str, Any]:
         """Build the base generation configuration from instance attributes."""
         config: dict[str, Any] = {
-            "candidate_count": self.n,
+            "candidate_count": kwargs.get("candidate_count", self.n),
             "temperature": kwargs.get("temperature", self.temperature),
-            "stop_sequences": stop,
+            "stop_sequences": (
+                stop if stop is not None else kwargs.get("stop_sequences", self.stop)
+            ),
             "max_output_tokens": kwargs.get(
                 "max_output_tokens", self.max_output_tokens
             ),
             "top_k": kwargs.get("top_k", self.top_k),
             "top_p": kwargs.get("top_p", self.top_p),
+            "frequency_penalty": kwargs.get(
+                "frequency_penalty", self.frequency_penalty
+            ),
+            "presence_penalty": kwargs.get("presence_penalty", self.presence_penalty),
             "response_modalities": kwargs.get(
                 "response_modalities", self.response_modalities
             ),
@@ -2603,9 +2829,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             else None
         )
 
-        # Auto-set audio output for TTS models if not explicitly configured
-        if config["response_modalities"] is None and self.model.endswith("-tts"):
-            config["response_modalities"] = ["AUDIO"]
+        # Auto-set audio output and speech_config for TTS models
+        # if not explicitly configured
+        if self.model.endswith("-tts") or "-tts-" in self.model:
+            if config["response_modalities"] is None:
+                config["response_modalities"] = ["AUDIO"]
+            if config.get("speech_config") is None:
+                voice_name = config.pop("voice_name", "Kore")
+                config["speech_config"] = SpeechConfig(
+                    voice_config=VoiceConfig(
+                        prebuilt_voice_config=PrebuiltVoiceConfig(voice_name=voice_name)
+                    )
+                )
 
         thinking_config = self._build_thinking_config(**kwargs)
         if thinking_config is not None:
@@ -2615,12 +2850,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _build_thinking_config(self, **kwargs: Any) -> ThinkingConfig | None:
         """Build thinking configuration if supported by the model."""
+        raw_thinking_config = kwargs.get("thinking_config", self.thinking_config)
         thinking_level = kwargs.get("thinking_level", self.thinking_level)
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
 
         has_thinking_params = (
-            thinking_level is not None
+            raw_thinking_config is not None
+            or thinking_level is not None
             or thinking_budget is not None
             or include_thoughts is not None
         )
@@ -2628,23 +2865,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             return None
 
         config: dict[str, Any] = {}
-
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
-        if thinking_level is not None:
-            if thinking_budget is not None:
-                warnings.warn(
-                    "Both 'thinking_level' and 'thinking_budget' were provided. "
-                    "'thinking_level' takes precedence for Gemini 3+ models; "
-                    "'thinking_budget' will be ignored.",
-                    UserWarning,
-                    stacklevel=2,
+        if raw_thinking_config is not None:
+            config.update(
+                ThinkingConfig.model_validate(raw_thinking_config).model_dump(
+                    exclude_none=True
                 )
-            config["thinking_level"] = thinking_level
-        elif thinking_budget is not None:
-            config["thinking_budget"] = thinking_budget
+            )
 
+        if thinking_level is not None:
+            config["thinking_level"] = thinking_level
+        if thinking_budget is not None:
+            config["thinking_budget"] = thinking_budget
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
+
+        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        if "thinking_level" in config and "thinking_budget" in config:
+            warnings.warn(
+                "Both 'thinking_level' and 'thinking_budget' were set after merging "
+                "thinking configuration values. 'thinking_level' takes precedence "
+                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
+            config.pop("thinking_budget")
 
         return ThinkingConfig(**config)
 
@@ -2981,6 +3225,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
 
+        # Pop any per-request `http_options` so it can be merged with the
+        # internally-derived timeout/retry options below. Passing it through to
+        # `GenerateContentConfig` directly would collide with the explicit
+        # `http_options` keyword argument and raise a duplicate-keyword error.
+        per_request_http_options = kwargs.pop("http_options", None)
+        if isinstance(per_request_http_options, dict):
+            per_request_http_options = HttpOptions(**per_request_http_options)
+
         retry_options = None
         if max_retries is not None:
             retry_options = HttpRetryOptions(attempts=max_retries)
@@ -2991,6 +3243,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 timeout=timeout,
                 retry_options=retry_options,
             )
+
+        if per_request_http_options is not None:
+            http_options = _merge_http_options(http_options, per_request_http_options)
 
         image_config_dict = (
             image_config if image_config is not None else self.image_config
@@ -3246,7 +3501,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         Example:
             ```python
-            llm = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             num_tokens = llm.get_num_tokens("Hello, world!")
             print(num_tokens)
             # -> 4
@@ -3308,7 +3563,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 age: int
 
 
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             structured_model = model.with_structured_output(
                 Person,
                 method="json_schema",
@@ -3331,7 +3586,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 steps: list[str]
 
 
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
             structured_model = model.with_structured_output(
                 Recipe, method="json_schema"
             )
@@ -3344,7 +3599,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             ```
 
             ```python title="Using with dict schema"
-            model = ChatGoogleGenerativeAI(model="gemini-3-pro-preview")
+            model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
             schema = {
                 "type": "object",
@@ -3378,6 +3633,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             raise ValueError(msg)
 
         parser: OutputParserLike
+        llm: Runnable[LanguageModelInput, AIMessage]
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
         if method in ("json_mode", "json_schema"):
@@ -3483,7 +3739,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     ```python
                     from langchain_google_genai import ChatGoogleGenerativeAI
 
-                    model = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
+                    model = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview")
 
                     response = model.invoke(
                         "What Italian restaurants are near here?",

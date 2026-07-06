@@ -1,10 +1,43 @@
 from unittest.mock import MagicMock
 
 import pytest
+from google.api_core.exceptions import NotFound, ServiceUnavailable
 from langchain_core.documents import Document
 
 from langchain_google_vertexai.vectorstores._utils import to_data_points
+from langchain_google_vertexai.vectorstores.document_storage import GCSDocumentStorage
 from langchain_google_vertexai.vectorstores.vectorstores import _BaseVertexAIVectorStore
+
+
+def test_gcs_document_storage_mdelete_falls_back_after_batch_unavailable() -> None:
+    bucket = MagicMock()
+    blob = MagicMock()
+    bucket.blob.return_value = blob
+    batch_context = MagicMock()
+    batch_context.__exit__.side_effect = ServiceUnavailable("try again")
+    bucket.client.batch.return_value = batch_context
+    storage = GCSDocumentStorage(bucket=bucket, prefix="test")
+
+    storage.mdelete(["key"])
+
+    bucket.client.batch.assert_called_once()
+    bucket.blob.assert_any_call("test/key")
+    assert blob.delete.call_count == 2
+
+
+def test_gcs_document_storage_mdelete_ignores_missing_fallback_blob() -> None:
+    bucket = MagicMock()
+    blob = MagicMock()
+    blob.delete.side_effect = [None, NotFound("missing")]
+    bucket.blob.return_value = blob
+    batch_context = MagicMock()
+    batch_context.__exit__.side_effect = ServiceUnavailable("try again")
+    bucket.client.batch.return_value = batch_context
+    storage = GCSDocumentStorage(bucket=bucket, prefix="test")
+
+    storage.mdelete(["key"])
+
+    assert blob.delete.call_count == 2
 
 
 def test_to_data_points() -> None:

@@ -8,9 +8,10 @@ from google.genai.types import (
 )
 from pydantic import SecretStr
 
+from langchain_google_genai import __version__
 from langchain_google_genai.llms import GoogleGenerativeAI
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 
 def test_tracing_params() -> None:
@@ -23,6 +24,8 @@ def test_tracing_params() -> None:
         "ls_model_name": MODEL_NAME,
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     llm = GoogleGenerativeAI(
         model=MODEL_NAME,
@@ -55,6 +58,28 @@ def test_tracing_params() -> None:
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
         assert "Did you mean: 'safety_settings'?" in call_args
+
+
+def test_generation_config_fields_are_passed_to_internal_chat_model() -> None:
+    """Test generation config fields propagate to the internal chat model client."""
+    llm = GoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="foo",
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+        candidate_count=2,
+    )
+
+    assert llm.n == 2
+    assert llm.client.frequency_penalty == 0.2
+    assert llm.client.presence_penalty == 0.1
+    assert llm.client.n == 2
+
+    request = llm.client._prepare_request([])
+    config = request["config"]
+    assert config.frequency_penalty == 0.2
+    assert config.presence_penalty == 0.1
+    assert config.candidate_count == 2
 
 
 def test_base_url_support() -> None:

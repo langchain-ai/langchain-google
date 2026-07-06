@@ -14,7 +14,7 @@ from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
 )
 def test_llm_invoke(model_name: str) -> None:
     vb = VertexAICallbackHandler()
-    llm = VertexAI(model_name=model_name, temperature=0.0, callbacks=[vb])
+    llm = VertexAI(model=model_name, temperature=0.0, callbacks=[vb])
     _ = llm.invoke("2+2")
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
@@ -34,7 +34,7 @@ def test_llm_invoke(model_name: str) -> None:
 )
 def test_chat_call(model_name: str) -> None:
     vb = VertexAICallbackHandler()
-    llm = ChatVertexAI(model_name=model_name, temperature=0.0, callbacks=[vb])
+    llm = ChatVertexAI(model=model_name, temperature=0.0, callbacks=[vb])
     message = HumanMessage(content="Hello")
     _ = llm.invoke([message])
     assert vb.successful_requests == 1
@@ -55,7 +55,7 @@ def test_chat_call(model_name: str) -> None:
 )
 def test_invoke_config(model_name: str) -> None:
     vb = VertexAICallbackHandler()
-    llm = VertexAI(model_name=model_name, temperature=0.0)
+    llm = VertexAI(model=model_name, temperature=0.0)
     llm.invoke("2+2", config={"callbacks": [vb]})
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
@@ -71,7 +71,7 @@ def test_invoke_config(model_name: str) -> None:
 @pytest.mark.release
 def test_llm_stream() -> None:
     vb = VertexAICallbackHandler()
-    llm = VertexAI(model_name=_DEFAULT_MODEL_NAME, temperature=0.0, callbacks=[vb])
+    llm = VertexAI(model=_DEFAULT_MODEL_NAME, temperature=0.0, callbacks=[vb])
     for _ in llm.stream("2+2"):
         pass
     assert vb.successful_requests == 1
