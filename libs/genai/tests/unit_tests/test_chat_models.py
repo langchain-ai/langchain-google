@@ -120,7 +120,7 @@ def test_integration_initialization() -> None:
         "ls_provider": "google_genai",
         "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
-        "ls_temperature": 1.0,
+        "ls_temperature": None,
         "ls_max_tokens": 10,
     }
 
@@ -128,7 +128,7 @@ def test_integration_initialization() -> None:
     msg = HumanMessage(content="test")
     request = llm._prepare_request([msg])
     config = request["config"]
-    assert config.temperature == 1.0
+    assert getattr(config, "temperature", None) is None
     assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
