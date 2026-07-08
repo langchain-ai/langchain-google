@@ -58,6 +58,7 @@ from langchain_google_genai import (
     Modality,
     __version__,
 )
+from langchain_google_genai._common import _is_gemini_3_or_later
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
@@ -68,7 +69,6 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
-    _is_gemini_3_or_later,
     _is_gemini_25_model,
     _merge_http_options,
     _parse_chat_history,
@@ -1442,6 +1442,24 @@ def test_temperature_range_model_validation() -> None:
 
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
+
+
+def test_temperature_default_by_model_version() -> None:
+    """Test that legacy models get 0.7 temperature by default.
+
+    Also ensures Gemini 3 models get None.
+    """
+    llm_gemini_3 = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_3.temperature is None
+
+    llm_gemini_2_5 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_2_5.temperature == 0.7
 
 
 @patch("langchain_google_genai.chat_models.Client")

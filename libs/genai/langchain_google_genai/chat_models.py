@@ -111,6 +111,7 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
+    _is_gemini_3_or_later,
     get_user_agent,
 )
 from langchain_google_genai._compat import (
@@ -225,14 +226,6 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     Raised when there are specific issues related to the Google GenAI API usage in the
     `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
     """
-
-
-def _is_gemini_3_or_later(model_name: str) -> bool:
-    """Checks if the model is Gemini 3 or later."""
-    if not model_name:
-        return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-3" in model_name
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
