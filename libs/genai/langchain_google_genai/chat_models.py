@@ -111,7 +111,6 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
-    _is_gemini_3_or_later,
     get_user_agent,
 )
 from langchain_google_genai._compat import (
@@ -226,6 +225,14 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     Raised when there are specific issues related to the Google GenAI API usage in the
     `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
     """
+
+
+def _is_gemini_3_or_later(model_name: str) -> bool:
+    """Checks if the model is Gemini 3 or later."""
+    if not model_name:
+        return False
+    model_name = model_name.lower().replace("models/", "")
+    return "gemini-3" in model_name
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
@@ -2499,6 +2506,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and builds client."""
+        if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
+            self.model
+        ):
+            self.temperature = None
+
         if self.temperature is not None and not 0 <= self.temperature <= 2.0:
             msg = "temperature must be in the range [0.0, 2.0]"
             raise ValueError(msg)

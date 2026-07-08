@@ -17,14 +17,6 @@ _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
 
-def _is_gemini_3_or_later(model_name: str) -> bool:
-    """Checks if the model is Gemini 3 or later."""
-    if not model_name:
-        return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-3" in model_name
-
-
 # Cache package version at module import time to avoid blocking I/O in async contexts
 try:
     LC_GOOGLE_GENAI_VERSION = metadata.version("langchain-google-genai")
@@ -335,7 +327,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     model: str = Field(...)
     """Model name to use."""
 
-    temperature: float | None = None
+    temperature: float | None = 0.7
     """Run inference with this temperature.
 
     Must be within `[0.0, 2.0]`.
@@ -550,13 +542,6 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     See: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
     """
-
-    @model_validator(mode="after")
-    def _default_temperature_by_model(self) -> Self:
-        """Set fallback default temperature (0.7) for non-Gemini 3 models if unset."""
-        if self.temperature is None and not _is_gemini_3_or_later(self.model or ""):
-            self.temperature = 0.7
-        return self
 
     @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:

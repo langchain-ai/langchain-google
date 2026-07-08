@@ -58,7 +58,6 @@ from langchain_google_genai import (
     Modality,
     __version__,
 )
-from langchain_google_genai._common import _is_gemini_3_or_later
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
@@ -69,6 +68,7 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _is_gemini_3_or_later,
     _is_gemini_25_model,
     _merge_http_options,
     _parse_chat_history,
