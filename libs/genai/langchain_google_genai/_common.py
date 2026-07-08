@@ -331,6 +331,13 @@ class _BaseGoogleGenerativeAI(BaseModel):
     """Run inference with this temperature.
 
     Must be within `[0.0, 2.0]`.
+
+    !!! note "Automatic override for Gemini 3.0+ models"
+
+        If `temperature` is not explicitly set and the model is Gemini 3.0 or later,
+        it will be automatically set to `None` instead of the default `0.7` per the
+        Google GenAI API best practices, as it can cause infinite loops, degraded
+        reasoning performance, and failure on complex tasks.
     """
 
     frequency_penalty: float | None = None
