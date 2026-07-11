@@ -358,14 +358,12 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
         }
     if "url" in block:
         url = block["url"]
-        if url.startswith("data:"):
-            return {
-                "type": "image",
-                "source": _format_image(url, project),
-            }
+        # Claude on Vertex AI rejects url-type image sources (unlike Anthropic's
+        # direct API). Download and inline as base64 via _format_image, which
+        # already handles data:, http(s), and gs:// URLs. (#1088)
         return {
             "type": "image",
-            "source": {"type": "url", "url": url},
+            "source": _format_image(url, project),
         }
     if "file_id" in block:
         return {
