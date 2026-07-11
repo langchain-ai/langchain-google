@@ -1709,12 +1709,14 @@ def test_format_messages_anthropic_threads_media_fetch_timeout(
     bounds media fetches on the Claude-on-Vertex path, so a stalled URL can
     hang request preparation indefinitely (mirrors the genai fix in #1693).
     """
+    from langchain_core.messages import BaseMessage
+
     response = Mock()
     response.ok = True
     response.content = b"image-bytes"
     mock_get.return_value = response
 
-    messages = [
+    messages: list[BaseMessage] = [
         HumanMessage(
             content=[
                 {
@@ -1736,12 +1738,14 @@ def test_format_messages_anthropic_no_media_timeout_by_default(
 ) -> None:
     """When no ``timeout`` is supplied the remote fetch stays backwards
     compatible: ``requests.get`` is called without a ``timeout`` kwarg."""
+    from langchain_core.messages import BaseMessage
+
     response = Mock()
     response.ok = True
     response.content = b"image-bytes"
     mock_get.return_value = response
 
-    messages = [
+    messages: list[BaseMessage] = [
         HumanMessage(
             content=[
                 {
