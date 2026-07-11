@@ -1582,6 +1582,34 @@ def test_format_image(image_url: str, expected_media_type: str) -> None:
         mock_loader_instance.load_bytes.assert_called_once_with(image_url)
 
 
+@pytest.mark.parametrize(
+    ("magic_bytes", "expected_media_type"),
+    [
+        (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR", "image/png"),
+        (b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01", "image/jpeg"),
+        (b"GIF89a\x01\x00\x01\x00", "image/gif"),
+        (b"RIFF\x24\x00\x00\x00WEBPVP8 ", "image/webp"),
+    ],
+)
+def test_format_image_url_without_extension_sniffs_media_type(
+    magic_bytes: bytes, expected_media_type: str
+) -> None:
+    """URLs without a file extension must not yield a malformed media type.
+
+    CDN / signed image URLs frequently have no extension; the old code
+    produced media types like ``image//images/abc`` from the URL path.
+    The byte signature is used as a fallback instead.
+    """
+    with patch(
+        "langchain_google_vertexai._anthropic_utils.ImageBytesLoader"
+    ) as MockLoader:
+        MockLoader.return_value.load_bytes.return_value = magic_bytes
+        result = _format_image("https://cdn.example.com/images/abc123", "test-project")
+
+    assert result["type"] == "base64"
+    assert result["media_type"] == expected_media_type
+
+
 def test_format_messages_anthropic_system_not_first() -> None:
     """Test that system messages are accepted when not at position 0.
 
