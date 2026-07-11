@@ -784,6 +784,33 @@ def test_parse_history_gemini_function_empty_list() -> None:
     )
 
 
+def test_parse_history_gemini_tool_message_first() -> None:
+    """A ToolMessage with no preceding content must not raise IndexError.
+
+    Mirrors the FunctionMessage branch, which already guards the empty case.
+    """
+    loader = ImageBytesLoader()
+
+    # ToolMessage as the very first message.
+    _, history = _parse_chat_history_gemini(
+        [ToolMessage(content="result", tool_call_id="1", name="get_weather")], loader
+    )
+    assert len(history) == 1
+    assert history[0].role == "user"
+
+    # A leading SystemMessage does not append to history, so a following
+    # ToolMessage still sees an empty vertex_messages.
+    _, history2 = _parse_chat_history_gemini(
+        [
+            SystemMessage(content="sys"),
+            ToolMessage(content="result", tool_call_id="1", name="get_weather"),
+        ],
+        loader,
+    )
+    assert len(history2) == 1
+    assert history2[0].role == "user"
+
+
 def test_parse_history_gemini_function() -> None:
     """Test parsing of chat history with multiple tool calls and responses."""
     system_input = "You're supposed to answer math questions."
