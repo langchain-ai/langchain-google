@@ -415,6 +415,9 @@ def _format_to_genai_function_declaration(
             function = convert_to_openai_tool(cast("dict", tool))["function"]
         else:
             function = cast("dict", tool)
+        # Copy so we don't mutate the caller's tool dict when normalizing
+        # `parameters` below (several branches above alias the input dict).
+        function = dict(function)
         function["parameters"] = function.get("parameters") or {}
         # Empty 'properties' field not supported.
         if not function["parameters"].get("properties"):

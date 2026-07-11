@@ -142,6 +142,34 @@ def test_tool_with_anyof_nullable_param() -> None:
     assert a_property.get("nullable") is True, "Expected 'a' to be marked as nullable."
 
 
+def test_convert_to_genai_function_declarations_does_not_mutate_input() -> None:
+    """Converting tool dicts must not mutate the caller's objects."""
+    import copy
+
+    # OpenAI-format tool whose `parameters` lack `properties` (would be wiped).
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "search",
+            "description": "d",
+            "parameters": {
+                "type": "object",
+                "required": ["q"],
+                "additionalProperties": True,
+            },
+        },
+    }
+    before = copy.deepcopy(tool)
+    convert_to_genai_function_declarations([tool])
+    assert tool == before
+
+    # Parameterless {name, description} dict (would get a `parameters` key added).
+    tool2 = {"name": "foo", "description": "bar"}
+    before2 = copy.deepcopy(tool2)
+    convert_to_genai_function_declarations([tool2])
+    assert tool2 == before2
+
+
 def test_tool_with_array_anyof_nullable_param() -> None:
     """Checks an array parameter marked as optional.
 
