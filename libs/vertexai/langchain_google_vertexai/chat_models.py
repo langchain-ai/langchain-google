@@ -1981,7 +1981,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     @cached_property
     def _image_bytes_loader_client(self):
-        return ImageBytesLoader(project=self.project)
+        return ImageBytesLoader(project=self.project, timeout=self.timeout)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:

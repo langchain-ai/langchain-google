@@ -305,7 +305,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         **kwargs: Any,
     ) -> dict[str, Any]:
         system_message, formatted_messages = _format_messages_anthropic(
-            messages, self.project
+            messages, self.project, self.timeout
         )
         params = self._default_params
         params.update(kwargs)
