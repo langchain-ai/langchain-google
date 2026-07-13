@@ -2517,20 +2517,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and builds client.
-
-        We override `temperature` to `1.0` for Gemini 3+ models if not explicitly set.
-        This is to prevent infinite loops and degraded performance that can occur with
-        `temperature < 1.0` on these models.
-        """
-        if self.temperature is not None and not 0 <= self.temperature <= 2.0:
-            msg = "temperature must be in the range [0.0, 2.0]"
-            raise ValueError(msg)
-
+        """Validates params and builds client."""
         if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
             self.model
         ):
-            self.temperature = 1.0
+            self.temperature = None
+
+        if self.temperature is not None and not 0 <= self.temperature <= 2.0:
+            msg = "temperature must be in the range [0.0, 2.0]"
+            raise ValueError(msg)
 
         if self.top_p is not None and not 0 <= self.top_p <= 1:
             msg = "top_p must be in the range [0.0, 1.0]"

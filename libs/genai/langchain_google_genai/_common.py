@@ -16,6 +16,7 @@ from langchain_google_genai._enums import (
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
+
 # Cache package version at module import time to avoid blocking I/O in async contexts
 try:
     LC_GOOGLE_GENAI_VERSION = metadata.version("langchain-google-genai")
@@ -326,7 +327,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     model: str = Field(...)
     """Model name to use."""
 
-    temperature: float = 0.7
+    temperature: float | None = 0.7
     """Run inference with this temperature.
 
     Must be within `[0.0, 2.0]`.
@@ -334,10 +335,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
     !!! note "Automatic override for Gemini 3.0+ models"
 
         If `temperature` is not explicitly set and the model is Gemini 3.0 or later,
-        it will be automatically set to `1.0` instead of the default `0.7` per the
+        it will be automatically set to `None` instead of the default `0.7` per the
         Google GenAI API best practices, as it can cause infinite loops, degraded
         reasoning performance, and failure on complex tasks.
-
     """
 
     frequency_penalty: float | None = None

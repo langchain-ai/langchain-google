@@ -120,7 +120,7 @@ def test_integration_initialization() -> None:
         "ls_provider": "google_genai",
         "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
-        "ls_temperature": 1.0,
+        "ls_temperature": None,
         "ls_max_tokens": 10,
     }
 
@@ -128,7 +128,7 @@ def test_integration_initialization() -> None:
     msg = HumanMessage(content="test")
     request = llm._prepare_request([msg])
     config = request["config"]
-    assert config.temperature == 1.0
+    assert getattr(config, "temperature", None) is None
     assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
@@ -1555,6 +1555,24 @@ def test_temperature_range_model_validation() -> None:
 
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
+
+
+def test_temperature_default_by_model_version() -> None:
+    """Test that legacy models get 0.7 temperature by default.
+
+    Also ensures Gemini 3 models get None.
+    """
+    llm_gemini_3 = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_3.temperature is None
+
+    llm_gemini_2_5 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_2_5.temperature == 0.7
 
 
 @patch("langchain_google_genai.chat_models.Client")
