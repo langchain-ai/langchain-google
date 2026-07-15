@@ -6,9 +6,12 @@ from pydantic import BaseModel
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-pytestmark = pytest.mark.skipif(
-    not os.getenv("GOOGLE_API_KEY"), reason="GOOGLE_API_KEY not set"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not os.getenv("GOOGLE_API_KEY"), reason="GOOGLE_API_KEY not set"
+    ),
+    pytest.mark.flaky(retries=3, delay=1),
+]
 
 MODEL_NAME = "gemini-3.5-flash"
 
