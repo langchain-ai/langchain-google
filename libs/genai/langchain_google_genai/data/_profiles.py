@@ -240,7 +240,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -271,7 +271,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -304,7 +304,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -335,7 +335,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -367,7 +367,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -400,7 +400,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -432,7 +432,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -464,7 +464,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",
@@ -496,7 +496,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_tool_message": True,
         "tool_choice": True,
         "reasoning_effort_levels": [
-            "none",
+            "minimal",
             "low",
             "medium",
             "high",

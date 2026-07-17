@@ -2394,6 +2394,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     """Indicates the thinking level.
 
     Supported values:
+        * `'minimal'`: Lowest available reasoning depth.
         * `'low'`: Minimizes latency and cost.
         * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
@@ -2405,6 +2406,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         If left unspecified, the model's default thinking level is used. For Gemini 3+,
         this defaults to `'high'`.
+
+    !!! note "Cross-provider alias"
+
+        Also accepts `reasoning_effort` as a constructor or call-time keyword for
+        consistency with other chat model integrations. Both names set the same
+        value; use `thinking_level` to read it back.
     """
 
     thinking_config: dict[str, Any] | ThinkingConfig | None = Field(
@@ -2422,26 +2429,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         `thinking_level` takes precedence over `thinking_budget` for Gemini 3+ models.
     """
 
-    reasoning_effort: Literal["none", "low", "medium", "high"] | None = Field(
-        default=None,
-    )
-    """Cross-provider reasoning effort setting for Gemini 3+ models.
-
-    Provides a standard `reasoning_effort` parameter consistent with other chat
-    model integrations (e.g. `ChatOpenAI`, `ChatAnthropic`).
-
-    Supported values:
-        * `'none'`: Disables thinking.
-        * `'low'`: Minimizes latency and cost.
-        * `'medium'`: Balances latency/cost with reasoning depth.
-        * `'high'`: Maximizes reasoning depth.
-
-    `reasoning_effort` is translated to Gemini's native thinking settings. Native
-    fields (`thinking_level`, `thinking_budget`, `thinking_config`) take precedence
-    if explicitly set. `'xhigh'`/`'max'` are intentionally unsupported since Gemini
-    has no equivalent.
-"""
-
     cached_content: str | None = None
     """The name of the cached content used as context to serve the prediction.
 
@@ -2454,6 +2441,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def __init__(self, **kwargs: Any) -> None:
         """Needed for arg validation."""
+        # `reasoning_effort` is a cross-provider-compatible alias for
+        # `thinking_level` (see that field's docstring). Resolved here, ahead of
+        # `model_fields`-based validation below and the `build_extra` validator
+        # (which only recognizes `Field(alias=...)`, not this manual alias), so
+        # neither ever sees the `reasoning_effort` key.
+        if "reasoning_effort" in kwargs:
+            reasoning_effort = kwargs.pop("reasoning_effort")
+            kwargs.setdefault("thinking_level", reasoning_effort)
+
         # Get all valid field names, including aliases
         valid_fields = set()
         for field_name, field_info in self.__class__.model_fields.items():
@@ -2866,18 +2862,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _build_thinking_config(self, **kwargs: Any) -> ThinkingConfig | None:
         """Build thinking configuration if supported by the model."""
         raw_thinking_config = kwargs.get("thinking_config", self.thinking_config)
-        thinking_level = kwargs.get("thinking_level", self.thinking_level)
+        # `reasoning_effort` is a cross-provider alias for `thinking_level`.
+        # Resolve it before validation so `reasoning_effort` never reaches
+        # `build_extra` or field validation.
+        thinking_level = kwargs.get(
+            "thinking_level", kwargs.get("reasoning_effort", self.thinking_level)
+        )
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
-        reasoning_effort = kwargs.get("reasoning_effort", self.reasoning_effort)
 
-        has_native_thinking_params = (
+        has_thinking_params = (
             raw_thinking_config is not None
             or thinking_level is not None
             or thinking_budget is not None
             or include_thoughts is not None
         )
-        if not has_native_thinking_params and reasoning_effort is None:
+        if not has_thinking_params:
             return None
 
         config: dict[str, Any] = {}
@@ -2894,15 +2894,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             config["thinking_budget"] = thinking_budget
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
-
-        # `reasoning_effort` is a cross-provider convenience field. Native thinking
-        # params (checked above) take precedence if explicitly set. This is not gated
-        # on `_supports_thinking()`, matching the existing `thinking_*` behavior.
-        if reasoning_effort is not None and not has_native_thinking_params:
-            if reasoning_effort == "none":
-                config["thinking_budget"] = 0
-            else:
-                config["thinking_level"] = reasoning_effort
 
         # thinking_level takes precedence over thinking_budget for Gemini 3+ models
         if "thinking_level" in config and "thinking_budget" in config:
