@@ -4703,6 +4703,164 @@ def test_thinking_config_object_is_propagated() -> None:
     assert config.thinking_config.thinking_budget == 512
 
 
+def test_reasoning_effort_none_maps_to_thinking_budget_zero() -> None:
+    """Test `reasoning_effort='none'` disables thinking via `thinking_budget=0`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="none",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 0
+    assert config.thinking_config.thinking_level is None
+
+
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_level"),
+    [
+        ("low", ThinkingLevel.LOW),
+        ("medium", ThinkingLevel.MEDIUM),
+        ("high", ThinkingLevel.HIGH),
+    ],
+)
+def test_reasoning_effort_maps_to_thinking_level(
+    reasoning_effort: str, expected_level: ThinkingLevel
+) -> None:
+    """Test `reasoning_effort` translates into the matching `thinking_level`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == expected_level
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_reasoning_effort_ignored_when_thinking_level_set() -> None:
+    """Test the native `thinking_level` wins over `reasoning_effort`, no warning."""
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            reasoning_effort="low",
+            thinking_level="high",
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 0
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+        assert config.thinking_config.thinking_budget is None
+
+
+def test_reasoning_effort_ignored_when_thinking_budget_set() -> None:
+    """Test the native `thinking_budget` wins over `reasoning_effort`, no warning."""
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            reasoning_effort="none",
+            thinking_budget=128,
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 0
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == 128
+        assert config.thinking_config.thinking_level is None
+
+
+def test_reasoning_effort_ignored_when_thinking_config_set() -> None:
+    """Test raw `thinking_config` wins over `reasoning_effort`, no warning."""
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            reasoning_effort="high",
+            thinking_config={"thinking_budget": 64},
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 0
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == 64
+        assert config.thinking_config.thinking_level is None
+
+
+def test_reasoning_effort_call_time_kwarg_override() -> None:
+    """Test a call-time `reasoning_effort` kwarg overrides the constructor value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_reasoning_effort_not_leaked_as_unrecognized_kwarg() -> None:
+    """Test `reasoning_effort` doesn't leak through as a stray request kwarg."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    assert "reasoning_effort" not in request
+
+
+def test_reasoning_effort_profile_fields() -> None:
+    """Test `reasoning_effort_levels`/`reasoning_effort_default` load from profile."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.profile is not None
+    assert llm.profile.get("reasoning_effort_levels") == [
+        "none",
+        "low",
+        "medium",
+        "high",
+    ]
+    assert llm.profile.get("reasoning_effort_default") == "high"
+
+    legacy_llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-pro",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert legacy_llm.profile is not None
+    assert legacy_llm.profile.get("reasoning_effort_levels") is None
+
+
 def test_kwargs_override_max_output_tokens() -> None:
     """Test that max_output_tokens can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
