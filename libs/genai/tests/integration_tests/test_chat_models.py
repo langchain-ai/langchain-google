@@ -353,6 +353,53 @@ def test_chat_google_genai_invoke_thinking(
         assert result.usage_metadata["output_token_details"]["reasoning"] > 0
 
 
+@pytest.mark.parametrize("reasoning_effort", ["minimal", "low", "medium", "high"])
+def test_chat_google_genai_invoke_reasoning_effort(
+    reasoning_effort: str, backend_config: dict
+) -> None:
+    """Test invoke with `reasoning_effort`, the alias for `thinking_level`."""
+    llm = ChatGoogleGenerativeAI(
+        model=_THINKING_MODEL,
+        reasoning_effort=reasoning_effort,
+        **backend_config,
+    )
+    assert llm.thinking_level == reasoning_effort
+
+    result = llm.invoke(
+        "How many O's are in Google? Please tell me how you double checked the result",
+    )
+
+    assert isinstance(result, AIMessage)
+    if isinstance(result.content, list):
+        text_content = "".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+        assert len(text_content) > 0
+    else:
+        assert isinstance(result.content, str)
+
+    _check_usage_metadata(result)
+    assert result.usage_metadata is not None
+
+
+def test_chat_google_genai_invoke_reasoning_effort_call_time_kwarg(
+    backend_config: dict,
+) -> None:
+    """Test `reasoning_effort` also works as a call-time kwarg, not just constructor."""
+    llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, **backend_config)
+
+    result = llm.invoke(
+        "How many O's are in Google?",
+        reasoning_effort="low",
+    )
+
+    assert isinstance(result, AIMessage)
+    _check_usage_metadata(result)
+    assert result.usage_metadata is not None
+
+
 def _check_thinking_output(content: list, output_version: str) -> None:
     """Check thinking output format, handling both structured and simple responses."""
     if output_version == "v0":
