@@ -370,15 +370,10 @@ def test_chat_google_genai_invoke_reasoning_effort(
     )
 
     assert isinstance(result, AIMessage)
-    if isinstance(result.content, list):
-        text_content = "".join(
-            block.get("text", "")
-            for block in result.content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-        assert len(text_content) > 0
-    else:
-        assert isinstance(result.content, str)
+    content_blocks = result.content_blocks
+    text_blocks = [block for block in content_blocks if block.get("type") == "text"]
+    assert text_blocks
+    assert any(block.get("text") for block in text_blocks)
 
     _check_usage_metadata(result)
     assert result.usage_metadata is not None
