@@ -357,12 +357,13 @@ def test_chat_google_genai_invoke_thinking(
 def test_chat_google_genai_invoke_reasoning_effort(
     reasoning_effort: str, backend_config: dict
 ) -> None:
-    """Test invoke with `reasoning_effort`, the alias for `thinking_level`."""
+    """Test invoke with `reasoning_effort` (`thinking_level` is its native alias)."""
     llm = ChatGoogleGenerativeAI(
         model=_THINKING_MODEL,
         reasoning_effort=reasoning_effort,
         **backend_config,
     )
+    assert llm.reasoning_effort == reasoning_effort
     assert llm.thinking_level == reasoning_effort
 
     result = llm.invoke(

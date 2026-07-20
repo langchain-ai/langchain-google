@@ -4732,7 +4732,13 @@ def test_reasoning_effort_is_alias_for_thinking_level(
 
 
 def test_thinking_level_wins_when_both_constructor_kwargs_given() -> None:
-    """Test `thinking_level` takes precedence when both aliases are passed."""
+    """Test `thinking_level` takes precedence when both are passed.
+
+    `reasoning_effort` is now the canonical field (`Field(alias="thinking_level")`),
+    but `thinking_level` -- Gemini's native name -- is the alias, and Pydantic's
+    alias-resolution precedence has the alias win over the field's own name when
+    both are supplied.
+    """
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -4775,7 +4781,10 @@ def test_reasoning_effort_call_time_kwarg_override() -> None:
 
 
 def test_reasoning_effort_call_time_kwarg_yields_to_thinking_level_kwarg() -> None:
-    """Test a call-time `thinking_level` kwarg wins over `reasoning_effort`."""
+    """Test a call-time `thinking_level` kwarg wins over `reasoning_effort`.
+
+    Mirrors the construction-time alias-resolution precedence.
+    """
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
