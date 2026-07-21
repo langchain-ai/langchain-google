@@ -1,5 +1,6 @@
 from unittest.mock import ANY, Mock, patch
 
+import pytest
 from google.genai.types import (
     Candidate,
     Content,
@@ -92,7 +93,8 @@ def test_fixed_sampling_model_omits_sampling_parameters() -> None:
         top_p=0.8,
     )
 
-    request = llm.client._prepare_request([HumanMessage(content="test")])
+    with pytest.warns(UserWarning, match="will be ignored"):
+        request = llm.client._prepare_request([HumanMessage(content="test")])
     request_config = request["config"].model_dump(exclude_unset=True)
 
     assert {"temperature", "top_k", "top_p"}.isdisjoint(request_config)

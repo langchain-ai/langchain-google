@@ -5019,14 +5019,31 @@ def test_fixed_sampling_models_omit_custom_sampling_parameters(
         **constructor_kwargs,
     )
 
-    request = llm._prepare_request(
-        [HumanMessage(content="test")],
-        **request_kwargs,
-    )
+    # The warning firing for every source also proves the parameters actually
+    # reached the request before being stripped (a per-source positive control).
+    with pytest.warns(UserWarning, match="will be ignored"):
+        request = llm._prepare_request(
+            [HumanMessage(content="test")],
+            **request_kwargs,
+        )
     request_config = request["config"].model_dump(exclude_unset=True)
 
     assert {"temperature", "top_k", "top_p"}.isdisjoint(request_config)
     assert request_config["max_output_tokens"] == 100
+
+
+def test_fixed_sampling_model_without_sampling_parameters_does_not_warn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        llm._prepare_request([HumanMessage(content="test")])
+
+    assert not [w for w in caught if "will be ignored" in str(w.message)]
 
 
 def test_other_models_preserve_custom_sampling_parameters() -> None:
@@ -5038,9 +5055,12 @@ def test_other_models_preserve_custom_sampling_parameters() -> None:
         top_p=0.8,
     )
 
-    request = llm._prepare_request([HumanMessage(content="test")])
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
     request_config = request["config"].model_dump(exclude_unset=True)
 
+    assert not [w for w in caught if "will be ignored" in str(w.message)]
     assert request_config["temperature"] == 0.2
     assert request_config["top_k"] == 10
     assert request_config["top_p"] == 0.8

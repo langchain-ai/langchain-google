@@ -227,6 +227,13 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """
 
 
+# Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
+# custom sampling parameters and disallows prefilling model turns. Per Google's
+# docs these rules apply to "these models and all future Gemini model releases",
+# but Gemini version numbers are not monotonic across variants (e.g. plain
+# `gemini-3.5-flash` is *not* affected while `gemini-3.5-flash-lite` is), so the
+# affected models are tracked by an explicit allowlist. Add future GA models here
+# as they ship.
 _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
     {"gemini-3.5-flash-lite", "gemini-3.6-flash"}
 )
@@ -3299,9 +3306,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         request_params = params.model_dump(exclude_unset=True)
         if _uses_fixed_sampling_and_disallows_prefill(self.model):
-            for parameter in _CUSTOM_SAMPLING_PARAMETERS:
-                request_params.pop(parameter, None)
-                kwargs.pop(parameter, None)
+            # These models use fixed sampling defaults and ignore custom sampling
+            # parameters. Drop them from the request and warn so an explicitly-set
+            # value isn't silently discarded (consistent with how superseded
+            # thinking parameters are handled above).
+            ignored_parameters = [
+                parameter
+                for parameter in _CUSTOM_SAMPLING_PARAMETERS
+                if parameter in request_params
+            ]
+            if ignored_parameters:
+                warnings.warn(
+                    f"Model '{self.model}' uses fixed sampling defaults; the "
+                    f"sampling parameter(s) {', '.join(ignored_parameters)} "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                for parameter in ignored_parameters:
+                    request_params.pop(parameter, None)
 
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
