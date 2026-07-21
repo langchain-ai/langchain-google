@@ -61,13 +61,6 @@ test_integration = [
 [tool.uv]
 constraint-dependencies = ["urllib3>=2.6.3"]
 
-[tool.uv.sources]
-# Temporary: pin to the langchain PR branch that adds reasoning_effort_levels/
-# reasoning_effort_default to ModelProfile (langchain-ai/langchain#38887), since
-# that hasn't released yet. Switch to a real langchain-core version pin once it
-# does.
-langchain-core = { git = "https://github.com/langchain-ai/langchain", branch = "nm/reasoning-effort", subdirectory = "libs/core" }
-
 [tool.ruff]
 fix = true
 
