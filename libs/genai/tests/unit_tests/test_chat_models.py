@@ -4887,27 +4887,48 @@ def test_reasoning_effort_constructor_kwarg_does_not_warn() -> None:
     mock_warning.assert_not_called()
 
 
-def test_reasoning_effort_profile_fields() -> None:
-    """Test `reasoning_effort_levels`/`reasoning_effort_default` load from profile."""
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview",
-        google_api_key=SecretStr(FAKE_API_KEY),
-    )
-    assert llm.profile is not None
-    assert llm.profile.get("reasoning_effort_levels") == [
-        "minimal",
-        "low",
-        "medium",
-        "high",
-    ]
-    assert llm.profile.get("reasoning_effort_default") == "high"
+_ALL_REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high"]
 
-    legacy_llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_levels", "expected_default"),
+    [
+        ("gemini-3-flash-preview", _ALL_REASONING_EFFORT_LEVELS, "high"),
+        ("gemini-3-pro-image-preview", None, None),
+        ("gemini-3-pro-preview", ["low", "high"], "high"),
+        ("gemini-3.1-flash-image-preview", ["minimal", "high"], "minimal"),
+        ("gemini-3.1-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
+        (
+            "gemini-3.1-flash-lite-preview",
+            _ALL_REASONING_EFFORT_LEVELS,
+            "minimal",
+        ),
+        ("gemini-3.1-pro-preview", ["low", "medium", "high"], "high"),
+        (
+            "gemini-3.1-pro-preview-customtools",
+            ["low", "medium", "high"],
+            "high",
+        ),
+        ("gemini-3.5-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-3.5-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
+        ("gemini-3.6-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-2.5-pro", None, None),
+    ],
+)
+def test_reasoning_effort_profile_fields(
+    model_name: str,
+    expected_levels: list[str] | None,
+    expected_default: str | None,
+) -> None:
+    """Test reasoning effort profile fields match the supported model settings."""
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
-    assert legacy_llm.profile is not None
-    assert legacy_llm.profile.get("reasoning_effort_levels") is None
+
+    assert llm.profile is not None
+    assert llm.profile.get("reasoning_effort_levels") == expected_levels
+    assert llm.profile.get("reasoning_effort_default") == expected_default
 
 
 def test_kwargs_override_max_output_tokens() -> None:

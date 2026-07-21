@@ -10,34 +10,38 @@ tool_choice = true
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "high"
 
-[overrides."gemini-3-pro-image-preview"]
-reasoning_effort_levels = ["minimal", "low", "medium", "high"]
-reasoning_effort_default = "high"
-
 [overrides."gemini-3-pro-preview"]
-reasoning_effort_levels = ["minimal", "low", "medium", "high"]
+reasoning_effort_levels = ["low", "high"]
 reasoning_effort_default = "high"
 
 [overrides."gemini-3.1-flash-image-preview"]
-reasoning_effort_levels = ["minimal", "low", "medium", "high"]
-reasoning_effort_default = "high"
+reasoning_effort_levels = ["minimal", "high"]
+reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.1-flash-lite"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
-reasoning_effort_default = "high"
+reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.1-flash-lite-preview"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
-reasoning_effort_default = "high"
+reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.1-pro-preview"]
-reasoning_effort_levels = ["minimal", "low", "medium", "high"]
+reasoning_effort_levels = ["low", "medium", "high"]
 reasoning_effort_default = "high"
 
 [overrides."gemini-3.1-pro-preview-customtools"]
-reasoning_effort_levels = ["minimal", "low", "medium", "high"]
+reasoning_effort_levels = ["low", "medium", "high"]
 reasoning_effort_default = "high"
 
 [overrides."gemini-3.5-flash"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
-reasoning_effort_default = "high"
+reasoning_effort_default = "medium"
+
+[overrides."gemini-3.5-flash-lite"]
+reasoning_effort_levels = ["minimal", "low", "medium", "high"]
+reasoning_effort_default = "minimal"
+
+[overrides."gemini-3.6-flash"]
+reasoning_effort_levels = ["minimal", "low", "medium", "high"]
+reasoning_effort_default = "medium"

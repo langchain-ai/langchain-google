@@ -2030,8 +2030,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         Gemini 3+ models use [`thinking_level`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_level]
-        (`'low'`, `'medium'`, or `'high'`) to control reasoning depth. If not specified,
-        defaults to `'high'`.
+        to control reasoning depth. Supported levels and defaults vary by model.
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -2427,8 +2426,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
         provided, this field takes precedence.
 
-        If left unspecified, the model's default thinking level is used. For Gemini 3+,
-        this defaults to `'high'`.
+        If left unspecified, the model's default thinking level is used. Supported
+        levels and defaults vary by model.
 
     !!! note "`thinking_level` alias"
 
