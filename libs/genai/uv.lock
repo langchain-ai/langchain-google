@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "langchain-google-genai"
-version = "4.2.7"
+version = "4.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "filetype" },
