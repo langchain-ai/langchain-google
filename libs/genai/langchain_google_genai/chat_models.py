@@ -2403,12 +2403,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
+        alias="thinking_level",
     )
     """Indicates the thinking level.
 
     Supported values:
+        * `'minimal'`: Lowest available reasoning depth.
         * `'low'`: Minimizes latency and cost.
         * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
@@ -2416,10 +2418,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     !!! note "Replaces `thinking_budget`"
 
         `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
-        provided, `thinking_level` takes precedence.
+        provided, this field takes precedence.
 
         If left unspecified, the model's default thinking level is used. For Gemini 3+,
         this defaults to `'high'`.
+
+    !!! note "`thinking_level` alias"
+
+        `thinking_level` -- Gemini's own native name for this setting -- is also
+        accepted as an alias for this field, at both construction and call time.
+        If both `thinking_level` and `reasoning_effort` are set, `thinking_level`
+        wins (Pydantic's alias-resolution precedence). Use `reasoning_effort` or
+        `thinking_level` interchangeably to read the value back.
     """
 
     thinking_config: dict[str, Any] | ThinkingConfig | None = Field(
@@ -2476,6 +2486,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "chat-google-generative-ai"
+
+    @property
+    def thinking_level(self) -> Literal["minimal", "low", "medium", "high"] | None:
+        """Alias for `reasoning_effort` (Gemini's native name for this setting)."""
+        return self.reasoning_effort
 
     @property
     def _supports_code_execution(self) -> bool:
@@ -2731,7 +2746,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
-            "thinking_level": self.thinking_level,
+            "thinking_level": self.reasoning_effort,
             "thinking_config": self.thinking_config,
             "image_config": self.image_config,
         }
@@ -2861,7 +2876,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _build_thinking_config(self, **kwargs: Any) -> ThinkingConfig | None:
         """Build thinking configuration if supported by the model."""
         raw_thinking_config = kwargs.get("thinking_config", self.thinking_config)
-        thinking_level = kwargs.get("thinking_level", self.thinking_level)
+        # `thinking_level` is Gemini's native alias for `reasoning_effort`
+        # (`Field(alias="thinking_level")`). Pydantic aliases don't apply to
+        # call-time kwargs, so it's resolved here too. `thinking_level` wins if
+        # both are set, matching the construction-time alias-resolution
+        # precedence.
+        thinking_level = kwargs.get(
+            "thinking_level", kwargs.get("reasoning_effort", self.reasoning_effort)
+        )
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
 
@@ -3069,6 +3091,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget",
             "thinking_level",
             "include_thoughts",
+            "reasoning_effort",
             "response_schema",
             "response_json_schema",
             "response_mime_type",

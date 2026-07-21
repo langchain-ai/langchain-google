@@ -239,6 +239,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3-pro-image-preview": {
         "name": "Nano Banana Pro",
@@ -263,6 +270,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3-pro-preview": {
         "name": "Gemini 3 Pro Preview",
@@ -289,6 +303,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3.1-flash-image-preview": {
         "name": "Nano Banana 2",
@@ -313,6 +334,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3.1-flash-lite": {
         "name": "Gemini 3.1 Flash Lite",
@@ -338,6 +366,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3.1-flash-lite-preview": {
         "name": "Gemini 3.1 Flash Lite Preview",
@@ -364,6 +399,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3.1-pro-preview": {
         "name": "Gemini 3.1 Pro Preview",
@@ -389,6 +431,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3.1-pro-preview-customtools": {
         "name": "Gemini 3.1 Pro Preview Custom Tools",
@@ -414,6 +463,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-3.5-flash": {
         "name": "Gemini 3.5 Flash",
@@ -439,6 +495,13 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
+        "reasoning_effort_default": "high",
     },
     "gemini-embedding-001": {
         "name": "Gemini Embedding 001",

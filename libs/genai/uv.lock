@@ -500,8 +500,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.4.7"
-source = { registry = "https://pypi.org/simple" }
+version = "1.4.9"
+source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=nm%2Freasoning-effort#1f618aec1c9965028dfd4c0cc995bd57123b60a1" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langchain-protocol" },
@@ -512,10 +512,6 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/2b/fffaff399d20a56d40b9562fa19701e91abd72d8c9d9bc8c2673077b56b6/langchain_core-1.4.7.tar.gz", hash = "sha256:7a825d77de0a3f39adbd9d09612a75e85527e14a52c1601089bcc062972d9f2b", size = 952522, upload-time = "2026-06-12T19:23:57.588Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/3e/dcdffa60078ae7b3a00ebb4cbbf1a204a14c3609983c604886523a7d4418/langchain_core-1.4.7-py3-none-any.whl", hash = "sha256:bcadd51951140ecdcba98311dbd931ba5de02a5ba8a2288dad5069c1eea2a13d", size = 554941, upload-time = "2026-06-12T19:23:55.826Z" },
 ]
 
 [[package]]
@@ -565,7 +561,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-genai", specifier = ">=1.65.0,<3.0.0" },
-    { name = "langchain-core", specifier = ">=1.4.7,<2.0.0" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=nm%2Freasoning-effort" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
 ]
 
@@ -598,14 +594,14 @@ typing = [
 
 [[package]]
 name = "langchain-protocol"
-version = "0.0.15"
+version = "0.0.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/24/9777489d6fbbee64af0c8f96d4f840239c408cf694f3394672807dafc490/langchain_protocol-0.0.15.tar.gz", hash = "sha256:9ab2d11ee73944754f10e037e717098d3a6796f0e58afa9cadda6154e7655ade", size = 5862, upload-time = "2026-05-01T22:30:04.748Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/59/b5959aea96faa9146e2e49a7a22882b3528c62efafe9a6a95beab30c2305/langchain_protocol-0.0.18.tar.gz", hash = "sha256:ec3e11782f1ed0c9db38e5a9ed01b0e7a0d3fba406faa8aef6594b73c56a63e6", size = 6150, upload-time = "2026-06-18T17:08:26.959Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/7a/9c97a7b9cbe4c5dc6a44cdb1545450c28f0c8ce89b9c1f0ee7fbad896263/langchain_protocol-0.0.15-py3-none-any.whl", hash = "sha256:461eb794358f83d5e42635a5797799ffec7b4702314e34edf73ac21e75d3ef79", size = 6982, upload-time = "2026-05-01T22:30:03.877Z" },
+    { url = "https://files.pythonhosted.org/packages/99/2e/d82db9eec13ad0f72e7aaad5c4bc730ab111934fdc83c85523206eb9b0a0/langchain_protocol-0.0.18-py3-none-any.whl", hash = "sha256:70b53a86fbf9cedc863555effe44da192ab02d556ddbf2cf95b8873adcf41b5a", size = 7221, upload-time = "2026-06-18T17:08:25.996Z" },
 ]
 
 [[package]]

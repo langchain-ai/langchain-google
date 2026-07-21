@@ -4770,6 +4770,146 @@ def test_thinking_config_object_is_propagated() -> None:
     assert config.thinking_config.thinking_budget == 512
 
 
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_level"),
+    [
+        ("minimal", ThinkingLevel.MINIMAL),
+        ("low", ThinkingLevel.LOW),
+        ("medium", ThinkingLevel.MEDIUM),
+        ("high", ThinkingLevel.HIGH),
+    ],
+)
+def test_reasoning_effort_is_alias_for_thinking_level(
+    reasoning_effort: str, expected_level: ThinkingLevel
+) -> None:
+    """Test `reasoning_effort` sets the same underlying `thinking_level` value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+    assert llm.thinking_level == reasoning_effort
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == expected_level
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_level_wins_when_both_constructor_kwargs_given() -> None:
+    """Test `thinking_level` takes precedence when both are passed.
+
+    `reasoning_effort` is now the canonical field (`Field(alias="thinking_level")`),
+    but `thinking_level` -- Gemini's native name -- is the alias, and Pydantic's
+    alias-resolution precedence has the alias win over the field's own name when
+    both are supplied.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+        reasoning_effort="high",
+    )
+    assert llm.thinking_level == "low"
+
+
+def test_reasoning_effort_composes_with_include_thoughts() -> None:
+    """Test `include_thoughts` composes with `reasoning_effort`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="high",
+        include_thoughts=True,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+    assert config.thinking_config.include_thoughts is True
+
+
+def test_reasoning_effort_call_time_kwarg_override() -> None:
+    """Test a call-time `reasoning_effort` kwarg overrides the constructor value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_reasoning_effort_call_time_kwarg_yields_to_thinking_level_kwarg() -> None:
+    """Test a call-time `thinking_level` kwarg wins over `reasoning_effort`.
+
+    Mirrors the construction-time alias-resolution precedence.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_level="low", reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+
+
+def test_reasoning_effort_not_leaked_as_unrecognized_kwarg() -> None:
+    """Test `reasoning_effort` doesn't leak through as a stray request kwarg."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    assert "reasoning_effort" not in request
+
+
+def test_reasoning_effort_constructor_kwarg_does_not_warn() -> None:
+    """Test `reasoning_effort` doesn't log an unexpected-argument warning."""
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            reasoning_effort="high",
+        )
+    mock_warning.assert_not_called()
+
+
+def test_reasoning_effort_profile_fields() -> None:
+    """Test `reasoning_effort_levels`/`reasoning_effort_default` load from profile."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-pro-preview",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.profile is not None
+    assert llm.profile.get("reasoning_effort_levels") == [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+    ]
+    assert llm.profile.get("reasoning_effort_default") == "high"
+
+    legacy_llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-pro",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert legacy_llm.profile is not None
+    assert legacy_llm.profile.get("reasoning_effort_levels") is None
+
+
 def test_kwargs_override_max_output_tokens() -> None:
     """Test that max_output_tokens can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
