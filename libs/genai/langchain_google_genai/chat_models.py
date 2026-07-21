@@ -2424,7 +2424,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         * `'high'`: Maximizes reasoning depth.
 
     Check the model profile's `reasoning_effort_levels` and
-    `reasoning_effort_default` fields, then confirm current support in the upstream
+    `reasoning_effort_default` fields for model-specific support. If those fields are
+    unavailable, consult the upstream
     [Gemini API docs](https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels-gemini-3).
 
     !!! note "Replaces `thinking_budget`"
