@@ -366,13 +366,13 @@ def test_init_client_with_custom_model_kwargs() -> None:
     [
         ("claude-sonnet-4-5", 64000),
         ("claude-sonnet-4-5-20250929", 64000),
-        ("claude-opus-4-0", 32000),
+        ("claude-opus-4-1", 32000),
         ("claude-opus-4-5", 64000),
         ("claude-opus-4-6", 128000),
-        ("claude-3-5-sonnet-20241022", 8192),
-        ("claude-3-7-sonnet-20250219", 64000),
+        ("claude-sonnet-4-6", 128000),
+        ("claude-opus-4-8", 128000),
         ("claude-haiku-4-5", 64000),
-        ("claude-3-opus-20240229", 4096),
+        ("claude-opus-4-1-20250805", 32000),
     ],
 )
 def test_anthropic_vertex_model_aware_max_tokens(
