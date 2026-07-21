@@ -227,6 +227,21 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """
 
 
+_FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
+    {"gemini-3.5-flash-lite", "gemini-3.6-flash"}
+)
+_CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
+
+
+def _uses_fixed_sampling_and_disallows_prefill(model_name: str) -> bool:
+    """Check whether a model uses fixed sampling and rejects model prefills."""
+    if not model_name:
+        return False
+    normalized_model = model_name.lower().rsplit("/", 1)[-1]
+    normalized_model = re.sub(r"-\d{3}$", "", normalized_model)
+    return normalized_model in _FIXED_SAMPLING_AND_NO_PREFILL_MODELS
+
+
 def _is_gemini_3_or_later(model_name: str) -> bool:
     """Checks if the model is Gemini 3 or later."""
     if not model_name:
@@ -2989,6 +3004,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             convert_system_message_to_human=self.convert_system_message_to_human,
             model=self.model,
         )
+        if (
+            _uses_fixed_sampling_and_disallows_prefill(self.model)
+            and history
+            and history[-1].role == "model"
+        ):
+            msg = (
+                f"Model '{self.model}' does not support model prefilling. The final "
+                "request turn must be a user message or a function response."
+            )
+            raise ValueError(msg)
 
         # Process tool configuration
         formatted_tool_config = self._process_tool_config(
@@ -3249,6 +3274,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if image_config_dict is not None:
             image_config_obj = ImageConfig(**image_config_dict)
 
+        request_params = params.model_dump(exclude_unset=True)
+        if _uses_fixed_sampling_and_disallows_prefill(self.model):
+            for parameter in _CUSTOM_SAMPLING_PARAMETERS:
+                request_params.pop(parameter, None)
+                kwargs.pop(parameter, None)
+
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
@@ -3258,7 +3289,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options=http_options,
             image_config=image_config_obj,
             labels=labels,
-            **params.model_dump(exclude_unset=True),
+            **request_params,
             **kwargs,
         )
 

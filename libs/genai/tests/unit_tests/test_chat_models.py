@@ -74,6 +74,7 @@ from langchain_google_genai.chat_models import (
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
+    _uses_fixed_sampling_and_disallows_prefill,
     _validate_video_metadata,
 )
 
@@ -442,6 +443,52 @@ def test_parse_history() -> None:
         assert system_instruction is None
     else:
         assert system_instruction == Content(parts=[Part(text=system_input)])
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+def test_fixed_sampling_models_reject_model_prefill(model: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    with pytest.raises(ValueError, match="does not support model prefilling"):
+        llm._prepare_request(
+            [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+        )
+
+
+def test_fixed_sampling_model_accepts_tool_response_as_final_turn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        HumanMessage(content="Look this up"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+        ),
+        ToolMessage(content="result", tool_call_id="call-1"),
+    ]
+
+    request = llm._prepare_request(messages)
+
+    assert request["contents"][-1].role == "user"
+    assert request["contents"][-1].parts[0].function_response is not None
+
+
+def test_other_models_preserve_model_prefill() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    request = llm._prepare_request(
+        [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+    )
+
+    assert request["contents"][-1].role == "model"
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
@@ -4434,6 +4481,26 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         assert config.thinking_config.include_thoughts is False, msg
 
 
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gemini-3.5-flash-lite", True),
+        ("gemini-3.6-flash", True),
+        ("models/gemini-3.6-flash", True),
+        ("publishers/google/models/gemini-3.5-flash-lite-001", True),
+        ("GEMINI-3.6-FLASH", True),
+        ("gemini-3.5-flash", False),
+        ("gemini-3.1-flash-lite", False),
+        ("gemini-3.6-flash-preview", False),
+        ("", False),
+    ],
+)
+def test_uses_fixed_sampling_and_disallows_prefill(
+    model: str, *, expected: bool
+) -> None:
+    assert _uses_fixed_sampling_and_disallows_prefill(model) is expected
+
+
 def test_is_new_gemini_model() -> None:
     assert _is_gemini_3_or_later("gemini-3.0-pro") is True
     assert _is_gemini_3_or_later("gemini-2.5-pro") is False
@@ -4780,6 +4847,63 @@ def test_generation_config_constructor_defaults_are_preserved() -> None:
     config = request["config"]
     assert config.presence_penalty is None
     assert config.frequency_penalty is None
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+@pytest.mark.parametrize(
+    ("constructor_kwargs", "request_kwargs"),
+    [
+        ({"temperature": 0.2, "top_k": 10, "top_p": 0.8}, {}),
+        ({}, {"temperature": 0.2, "top_k": 10, "top_p": 0.8}),
+        (
+            {},
+            {
+                "generation_config": {
+                    "temperature": 0.2,
+                    "top_k": 10,
+                    "top_p": 0.8,
+                }
+            },
+        ),
+    ],
+)
+def test_fixed_sampling_models_omit_custom_sampling_parameters(
+    model: str,
+    constructor_kwargs: dict[str, Any],
+    request_kwargs: dict[str, Any],
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+        **constructor_kwargs,
+    )
+
+    request = llm._prepare_request(
+        [HumanMessage(content="test")],
+        **request_kwargs,
+    )
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert {"temperature", "top_k", "top_p"}.isdisjoint(request_config)
+    assert request_config["max_output_tokens"] == 100
+
+
+def test_other_models_preserve_custom_sampling_parameters() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        temperature=0.2,
+        top_k=10,
+        top_p=0.8,
+    )
+
+    request = llm._prepare_request([HumanMessage(content="test")])
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert request_config["temperature"] == 0.2
+    assert request_config["top_k"] == 10
+    assert request_config["top_p"] == 0.8
 
 
 def test_n_constructor_field_sets_candidate_count() -> None:
