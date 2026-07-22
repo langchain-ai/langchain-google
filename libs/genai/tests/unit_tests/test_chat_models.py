@@ -26,6 +26,7 @@ from google.genai.types import (
     Part,
     ThinkingConfig,
     ThinkingLevel,
+    TrafficType,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -1356,6 +1357,145 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     assert full.response_metadata["model_name"].count("gemini") == 1, (
         "model_name should not be duplicated"
     )
+
+
+@pytest.mark.parametrize(
+    "traffic_type",
+    [TrafficType.ON_DEMAND_PRIORITY, TrafficType.ON_DEMAND],
+)
+def test_response_to_result_traffic_type(traffic_type: TrafficType) -> None:
+    """Vertex `traffic_type` is surfaced as a string on both info and metadata."""
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate.model_validate(
+                {
+                    "content": {"parts": [{"text": "Hello"}]},
+                    "finish_reason": "STOP",
+                    "safety_ratings": [],
+                }
+            )
+        ],
+        model_version=MODEL_NAME,
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+            traffic_type=traffic_type,
+        ),
+    )
+
+    result = _response_to_result(response, stream=False)
+
+    generation = result.generations[0]
+    assert generation.generation_info is not None
+    assert generation.generation_info["traffic_type"] == traffic_type.value
+    assert generation.message.response_metadata["traffic_type"] == traffic_type.value
+
+
+def test_response_to_result_traffic_type_absent() -> None:
+    """When `traffic_type` is absent (Gemini Developer API), no key is added."""
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate.model_validate(
+                {
+                    "content": {"parts": [{"text": "Hello"}]},
+                    "finish_reason": "STOP",
+                    "safety_ratings": [],
+                }
+            )
+        ],
+        model_version=MODEL_NAME,
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
+    )
+
+    result = _response_to_result(response, stream=False)
+
+    generation = result.generations[0]
+    assert generation.generation_info is not None
+    assert "traffic_type" not in generation.generation_info
+    assert "traffic_type" not in generation.message.response_metadata
+
+
+def test_response_to_result_traffic_type_no_usage_metadata() -> None:
+    """A missing `usage_metadata` does not crash and omits `traffic_type`."""
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate.model_validate(
+                {
+                    "content": {"parts": [{"text": "Hello"}]},
+                    "finish_reason": "STOP",
+                    "safety_ratings": [],
+                }
+            )
+        ],
+        model_version=MODEL_NAME,
+    )
+
+    result = _response_to_result(response, stream=False)
+
+    generation = result.generations[0]
+    assert "traffic_type" not in generation.message.response_metadata
+
+
+def test_streaming_traffic_type_only_on_final_chunk() -> None:
+    """`traffic_type` is attached only on the final chunk, so `+=` stays clean."""
+    usage_metadata = GenerateContentResponseUsageMetadata(
+        prompt_token_count=10,
+        candidates_token_count=5,
+        total_token_count=15,
+        traffic_type=TrafficType.ON_DEMAND_PRIORITY,
+    )
+
+    response1 = GenerateContentResponse(
+        candidates=[
+            Candidate.model_validate(
+                {"content": {"parts": [{"text": "Hello"}]}, "safety_ratings": []}
+            )
+        ],
+        model_version=MODEL_NAME,
+        usage_metadata=usage_metadata,
+    )
+    response2 = GenerateContentResponse(
+        candidates=[
+            Candidate.model_validate(
+                {"content": {"parts": [{"text": " world"}]}, "safety_ratings": []}
+            )
+        ],
+        model_version=MODEL_NAME,
+        usage_metadata=usage_metadata,
+    )
+    response3 = GenerateContentResponse(
+        candidates=[
+            Candidate.model_validate(
+                {
+                    "content": {"parts": [{"text": "!"}]},
+                    "finish_reason": "STOP",
+                    "safety_ratings": [],
+                }
+            )
+        ],
+        model_version=MODEL_NAME,
+        usage_metadata=usage_metadata,
+    )
+
+    result1 = _response_to_result(response1, stream=True)
+    result2 = _response_to_result(response2, stream=True)
+    result3 = _response_to_result(response3, stream=True)
+
+    msg1 = cast("AIMessageChunk", result1.generations[0].message)
+    msg2 = cast("AIMessageChunk", result2.generations[0].message)
+    msg3 = cast("AIMessageChunk", result3.generations[0].message)
+
+    assert "traffic_type" not in msg1.response_metadata
+    assert "traffic_type" not in msg2.response_metadata
+    assert msg3.response_metadata["traffic_type"] == "ON_DEMAND_PRIORITY"
+
+    full = msg1 + msg2 + msg3
+    assert full.response_metadata["traffic_type"] == "ON_DEMAND_PRIORITY"
 
 
 def test_serialize() -> None:
