@@ -90,6 +90,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
+from langchain_core.utils._gateway import _apply_gateway_config
 from langchain_core.utils.function_calling import (
     convert_to_json_schema,
     convert_to_openai_tool,
@@ -1456,6 +1457,27 @@ def _response_to_result(
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
+def _will_use_vertexai(values: dict[str, Any]) -> bool:
+    """Predict whether construction will select the Vertex AI backend.
+
+    Mirrors the priority in `_BaseGoogleGenerativeAI._determine_backend`, but
+    runs at "before" validation time (before ``_use_vertexai`` is set) so the
+    LangSmith gateway can be applied to the Gemini Developer API backend only —
+    the gateway proxies that API, not Vertex AI.
+    """
+    vertexai = values.get("vertexai")
+    if vertexai is not None:
+        return bool(vertexai)
+    env_var = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+    if env_var in ("true", "1", "yes"):
+        return True
+    if env_var in ("false", "0", "no"):
+        return False
+    if values.get("credentials") is not None:
+        return True
+    return values.get("project") is not None
+
+
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     r"""Google GenAI chat model integration.
 
@@ -2538,6 +2560,28 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         all_required_field_names = get_pydantic_field_names(cls)
         return _build_model_kwargs(values, all_required_field_names)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _resolve_gateway(cls, values: Any) -> Any:
+        """Resolve base URL and API key from LangSmith gateway settings.
+
+        Only applies to the Gemini Developer API backend (the gateway proxies the
+        Developer API, not Vertex AI). An explicit ``base_url``/``api_key`` always
+        wins. Otherwise, when ``LANGSMITH_GATEWAY`` is set, the base URL points at
+        the gateway and ``LANGSMITH_GATEWAY_API_KEY`` is preferred; for any other
+        endpoint the provider key (``GOOGLE_API_KEY``/``GEMINI_API_KEY``) wins.
+        """
+        if isinstance(values, dict) and not _will_use_vertexai(values):
+            _apply_gateway_config(
+                values,
+                cls,
+                base_url_field="base_url",
+                api_key_field="google_api_key",
+                provider_path="gemini",
+                api_key_env=["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+            )
+        return values
 
     @model_validator(mode="after")
     def _set_langchain_google_genai_version(self) -> Self:
