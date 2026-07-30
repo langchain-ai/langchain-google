@@ -364,15 +364,13 @@ def test_init_client_with_custom_model_kwargs() -> None:
 @pytest.mark.parametrize(
     ("model_name", "expected_max_tokens"),
     [
-        ("claude-sonnet-4-5", 64000),
-        ("claude-sonnet-4-5-20250929", 64000),
-        ("claude-opus-4-1", 32000),
-        ("claude-opus-4-5", 64000),
-        ("claude-opus-4-6", 128000),
-        ("claude-sonnet-4-6", 128000),
-        ("claude-opus-4-8", 128000),
-        ("claude-haiku-4-5", 64000),
-        ("claude-opus-4-1-20250805", 32000),
+        ("claude-sonnet-4-5@20250929", 64000),
+        ("claude-opus-4-1@20250805", 32000),
+        ("claude-opus-4-5@20251101", 64000),
+        ("claude-opus-4-6@default", 128000),
+        ("claude-sonnet-4-6@default", 128000),
+        ("claude-opus-4-8@default", 128000),
+        ("claude-haiku-4-5@20251001", 64000),
     ],
 )
 def test_anthropic_vertex_model_aware_max_tokens(
@@ -401,7 +399,7 @@ def test_anthropic_vertex_unknown_model_fallback() -> None:
 def test_anthropic_vertex_explicit_max_tokens_override() -> None:
     """Test that explicitly set max_output_tokens is not overridden."""
     llm = ChatAnthropicVertex(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
         max_output_tokens=2048,
@@ -412,7 +410,7 @@ def test_anthropic_vertex_explicit_max_tokens_override() -> None:
 def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
     """Test that max_tokens alias also prevents override."""
     llm = ChatAnthropicVertex(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
         max_tokens=512,
@@ -432,19 +430,19 @@ def test_anthropic_vertex_no_model_falls_back() -> None:
 def test_anthropic_vertex_model_alias_resolves_profile() -> None:
     """`model=` alias should resolve the same profile as `model_name=`."""
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
     )
     assert llm.max_output_tokens == 64000
 
 
-def test_anthropic_profiles_smoke() -> None:
-    """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
-    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+def test_anthropic_vertex_profiles_smoke() -> None:
+    """Auto-generated Vertex `_PROFILES` includes Anthropic model metadata."""
+    from langchain_google_vertexai.data._profiles import _PROFILES
 
     assert _PROFILES
-    sample = next(iter(_PROFILES.values()))
+    sample = _PROFILES["claude-haiku-4-5@20251001"]
     assert "max_output_tokens" in sample
 
 
@@ -455,7 +453,7 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
     from langchain_google_vertexai import model_garden
 
     monkeypatch.setitem(
-        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        model_garden._VERTEX_PROFILES,  # noqa: SLF001
         "claude-test-no-output-key",
         {"name": "Test"},
     )

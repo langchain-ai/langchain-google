@@ -61,9 +61,7 @@ from langchain_google_vertexai._base import (
     _VertexAICommon,
 )
 from langchain_google_vertexai._retry import create_base_retry_decorator
-from langchain_google_vertexai.data.anthropic._profiles import (
-    _PROFILES as _ANTHROPIC_PROFILES,
-)
+from langchain_google_vertexai.data._profiles import _PROFILES as _VERTEX_PROFILES
 
 
 def _move_betas_to_extra_body(params: dict[str, Any]) -> bool:
@@ -188,7 +186,7 @@ def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
     `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, has no profile
     entry, or whose profile lacks a `max_output_tokens` key.
     """
-    profile = _ANTHROPIC_PROFILES.get(model_name) if model_name else None
+    profile = _VERTEX_PROFILES.get(model_name) if model_name else None
     return (profile or {}).get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
 
 
