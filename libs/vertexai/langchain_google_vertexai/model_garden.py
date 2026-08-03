@@ -183,16 +183,18 @@ def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
     """Look up the max output tokens for an Anthropic model from its profile.
 
     Returns the profile's `max_output_tokens` when known. Falls back to
-    `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, has no profile
-    entry, or whose profile lacks a `max_output_tokens` key.
+    `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, is not an
+    Anthropic model, has no profile entry, has an ambiguous bare-name match, or
+    whose profile lacks a `max_output_tokens` key.
 
-    Vertex profile keys are `@`-versioned (e.g. `claude-sonnet-4-6@default`),
-    but callers may pass a bare base name (`claude-sonnet-4-6`). When the exact
-    key misses, resolve a unique `{model_name}@...` entry so bare names get the
-    same profile instead of silently degrading to the fallback. Bare bases are
-    unique across the registry, so at most one entry can match.
+    Anthropic profiles in the shared Vertex registry use `@`-suffixed model IDs
+    (e.g. `claude-sonnet-4-6@default`), but callers may pass a bare base name
+    (`claude-sonnet-4-6`). When the exact key misses, resolve a unique
+    `{model_name}@...` entry so bare names get the same profile. If the registry
+    contains zero or multiple matching entries, use the fallback rather than
+    selecting an arbitrary profile.
     """
-    if not model_name:
+    if not model_name or not model_name.startswith("claude-"):
         return _FALLBACK_MAX_OUTPUT_TOKENS
     profile = _VERTEX_PROFILES.get(model_name)
     if profile is None:

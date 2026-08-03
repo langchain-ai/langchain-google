@@ -374,6 +374,8 @@ def test_init_client_with_custom_model_kwargs() -> None:
         # Bare base names resolve to the unique `@`-versioned profile.
         ("claude-sonnet-4-5", 64000),
         ("claude-sonnet-4-6", 128000),
+        ("claude-opus-4-6", 128000),
+        ("claude-opus-4-7", 128000),
         ("claude-opus-4-8", 128000),
         ("claude-haiku-4-5", 64000),
     ],
@@ -395,6 +397,26 @@ def test_anthropic_vertex_unknown_model_fallback() -> None:
     """Test that unknown model names fall back to 4096."""
     llm = ChatAnthropicVertex(
         model_name="claude-unknown-future-model",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_legacy_dash_version_fallback() -> None:
+    """Legacy dash-versioned model IDs fall back because Vertex uses `@` IDs."""
+    llm = ChatAnthropicVertex(
+        model_name="claude-sonnet-4-5-20250929",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_non_anthropic_model_fallback() -> None:
+    """Non-Anthropic entries in the shared registry do not affect this client."""
+    llm = ChatAnthropicVertex(
+        model_name="gemini-embedding-001",
         project="test-project",
         location="test-location",
     )
@@ -466,6 +488,30 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
     )
     llm = ChatAnthropicVertex(
         model_name="claude-test-no-output-key",
+        project="test-project",
+        location="test-location",
+    )
+    assert llm.max_output_tokens == 4096
+
+
+def test_anthropic_vertex_ambiguous_bare_model_profile_fallback(
+    monkeypatch: Any,
+) -> None:
+    """Ambiguous bare Anthropic model names do not select an arbitrary profile."""
+    from langchain_google_vertexai import model_garden
+
+    monkeypatch.setitem(
+        model_garden._VERTEX_PROFILES,  # noqa: SLF001
+        "claude-test-ambiguous@20260101",
+        {"max_output_tokens": 8192},
+    )
+    monkeypatch.setitem(
+        model_garden._VERTEX_PROFILES,  # noqa: SLF001
+        "claude-test-ambiguous@20260201",
+        {"max_output_tokens": 16384},
+    )
+    llm = ChatAnthropicVertex(
+        model_name="claude-test-ambiguous",
         project="test-project",
         location="test-location",
     )
