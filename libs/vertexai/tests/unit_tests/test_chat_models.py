@@ -371,6 +371,11 @@ def test_init_client_with_custom_model_kwargs() -> None:
         ("claude-sonnet-4-6@default", 128000),
         ("claude-opus-4-8@default", 128000),
         ("claude-haiku-4-5@20251001", 64000),
+        # Bare base names resolve to the unique `@`-versioned profile.
+        ("claude-sonnet-4-5", 64000),
+        ("claude-sonnet-4-6", 128000),
+        ("claude-opus-4-8", 128000),
+        ("claude-haiku-4-5", 64000),
     ],
 )
 def test_anthropic_vertex_model_aware_max_tokens(
@@ -442,7 +447,9 @@ def test_anthropic_vertex_profiles_smoke() -> None:
     from langchain_google_vertexai.data._profiles import _PROFILES
 
     assert _PROFILES
-    sample = _PROFILES["claude-haiku-4-5@20251001"]
+    claude_profiles = [v for k, v in _PROFILES.items() if k.startswith("claude-")]
+    assert claude_profiles
+    sample = claude_profiles[0]
     assert "max_output_tokens" in sample
 
 
