@@ -3,6 +3,7 @@ from importlib import metadata
 from typing import Any
 
 from langchain_core.utils import from_env, secret_from_env
+from langchain_core.utils._gateway import _apply_gateway_config
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
 
@@ -29,6 +30,27 @@ class GoogleGenerativeAIError(Exception):
 
 
 SafetySettingDict = dict[HarmCategory, HarmBlockThreshold]
+
+
+def _will_use_vertexai(values: dict[str, Any]) -> bool:
+    """Predict whether construction will select the Vertex AI backend.
+
+    Mirrors the priority in `_BaseGoogleGenerativeAI._determine_backend`, but
+    runs at "before" validation time (before ``_use_vertexai`` is set) so the
+    LangSmith gateway can be applied to the Gemini Developer API backend only —
+    the gateway proxies that API, not Vertex AI.
+    """
+    vertexai = values.get("vertexai")
+    if vertexai is not None:
+        return bool(vertexai)
+    env_var = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+    if env_var in ("true", "1", "yes"):
+        return True
+    if env_var in ("false", "0", "no"):
+        return False
+    if values.get("credentials") is not None:
+        return True
+    return values.get("project") is not None
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -549,6 +571,32 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     See: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _resolve_gateway(cls, values: Any) -> Any:
+        """Resolve base URL and API key from LangSmith gateway settings.
+
+        Only applies to the Gemini Developer API backend (the gateway proxies the
+        Developer API, not Vertex AI). An explicit ``base_url``/``api_key`` always
+        wins. Otherwise, when ``LANGSMITH_GATEWAY`` is set, the base URL points at
+        the gateway and ``LANGSMITH_GATEWAY_API_KEY`` is preferred; for any other
+        endpoint the provider key (``GOOGLE_API_KEY``/``GEMINI_API_KEY``) wins.
+
+        Defined on the shared base so both `ChatGoogleGenerativeAI` and the legacy
+        `GoogleGenerativeAI` LLM resolve the gateway before their provider key is
+        used (the LLM forwards its resolved key into the chat model).
+        """
+        if isinstance(values, dict) and not _will_use_vertexai(values):
+            _apply_gateway_config(
+                values,
+                cls,
+                base_url_field="base_url",
+                api_key_field="google_api_key",
+                provider_path="gemini",
+                api_key_env=["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+            )
+        return values
 
     @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:
