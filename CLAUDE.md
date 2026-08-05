@@ -8,7 +8,7 @@ This document provides context to understand the LangChain Python project and as
 
 This is a Python monorepo with multiple independently versioned packages that use `uv`.
 
-### Development tools & commands**
+### Development tools & commands
 
 - `uv` – Fast Python package installer and resolver (replaces pip/poetry)
 - `make` – Task runner for common development commands. Feel free to look at the `Makefile` for available commands and usage patterns.
