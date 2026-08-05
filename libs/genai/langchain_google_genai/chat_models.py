@@ -2857,6 +2857,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 "response_modalities", self.response_modalities
             ),
             "seed": kwargs.get("seed", self.seed),
+            "media_resolution": kwargs.get("media_resolution", self.media_resolution),
         }
 
         # Convert response modalities

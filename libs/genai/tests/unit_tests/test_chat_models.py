@@ -23,6 +23,7 @@ from google.genai.types import (
     HttpOptions,
     HttpRetryOptions,
     Language,
+    MediaResolution,
     Part,
     ThinkingConfig,
     ThinkingLevel,
@@ -4611,6 +4612,41 @@ def test_per_part_media_resolution_warning_gemini_25_data_block() -> None:
             "Setting per-part media resolution requests to Gemini 2.5 models and older "
             "is not supported" in str(w[0].message)
         )
+
+
+def test_model_level_media_resolution_propagated_to_request() -> None:
+    """A `media_resolution` set on the model is propagated to the request config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW,
+    )
+    request = llm._prepare_request([HumanMessage(content="test")])
+    assert request["config"].media_resolution == MediaResolution.MEDIA_RESOLUTION_LOW
+
+
+def test_call_level_media_resolution_overrides_model_level() -> None:
+    """A per-call `media_resolution` overrides the model-level value in the request."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW,
+    )
+    request = llm._prepare_request(
+        [HumanMessage(content="test")],
+        media_resolution=MediaResolution.MEDIA_RESOLUTION_HIGH,
+    )
+    assert request["config"].media_resolution == MediaResolution.MEDIA_RESOLUTION_HIGH
+
+
+def test_media_resolution_absent_when_unset() -> None:
+    """`media_resolution` is omitted from the request config when not configured."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    request = llm._prepare_request([HumanMessage(content="test")])
+    assert request["config"].media_resolution is None
 
 
 def test_thinking_level_parameter() -> None:
