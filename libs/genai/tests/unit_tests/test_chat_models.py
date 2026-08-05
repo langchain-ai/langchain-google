@@ -4,7 +4,7 @@ import base64
 import json
 import os
 import warnings
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
@@ -6271,6 +6271,75 @@ def test_context_overflow_error_stream_sync() -> None:
             match="exceeds the maximum number of tokens allowed",
         ):
             list(chat.stream("test"))
+
+
+def _overflow_client_error() -> ClientError:
+    return ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+
+
+def test_context_overflow_error_stream_sync_raised_during_iteration() -> None:
+    """Token overflow raised while iterating the stream is still converted."""
+    mock_client = Mock()
+    mock_models = Mock()
+
+    def raising_stream() -> Iterator[Any]:
+        raise _overflow_client_error()
+        yield  # pragma: no cover
+
+    mock_models.generate_content_stream = Mock(return_value=raising_stream())
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            list(chat.stream("test"))
+
+
+async def test_context_overflow_error_stream_async_raised_during_iteration() -> None:
+    """Token overflow raised while iterating the async stream is converted."""
+    mock_client = Mock()
+    mock_aio_models = Mock()
+
+    async def raising_stream() -> AsyncIterator[Any]:
+        raise _overflow_client_error()
+        yield  # pragma: no cover
+
+    mock_aio_models.generate_content_stream = AsyncMock(return_value=raising_stream())
+    mock_client.return_value.aio.models = mock_aio_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            async for _ in chat.astream("test"):
+                pass
 
 
 def test_context_overflow_error_backwards_compatibility() -> None:
