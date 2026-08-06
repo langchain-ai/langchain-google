@@ -1293,6 +1293,8 @@ def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: UsageMetadata | None = None,
+    *,
+    provider_response_id: str | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
     llm_output = (
@@ -1300,6 +1302,7 @@ def _response_to_result(
         if response.prompt_feedback
         else {}
     )
+    response_id = getattr(response, "response_id", None)
 
     # Get usage metadata
     try:
@@ -1384,6 +1387,10 @@ def _response_to_result(
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
+        if response_id and not stream:
+            message.response_metadata["id"] = response_id
+        if provider_response_id and stream and candidate.finish_reason:
+            message.response_metadata["id"] = provider_response_id
 
         try:
             if candidate.grounding_metadata:
@@ -1437,11 +1444,13 @@ def _response_to_result(
             f"Feedback: {response.prompt_feedback}"
         )
         if stream:
-            response_metadata = (
+            response_metadata: dict[str, Any] = (
                 {"prompt_feedback": response.prompt_feedback.model_dump()}
                 if response.prompt_feedback
                 else {}
             )
+            if provider_response_id:
+                response_metadata["id"] = provider_response_id
             generations = [
                 ChatGenerationChunk(
                     message=AIMessageChunk(
@@ -1452,7 +1461,10 @@ def _response_to_result(
                 )
             ]
         else:
-            generations = [ChatGeneration(message=AIMessage(""), generation_info={})]
+            message = AIMessage("")
+            if response_id:
+                message.response_metadata["id"] = response_id
+            generations = [ChatGeneration(message=message, generation_info={})]
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
@@ -3467,12 +3479,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             _handle_client_error(e, request)
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
+        provider_response_id: str | None = None
         index = -1
         index_type = ""
         for chunk in response:
             if chunk:
+                provider_response_id = provider_response_id or getattr(
+                    chunk, "response_id", None
+                )
                 _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    provider_response_id=provider_response_id,
                 )
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
@@ -3529,6 +3548,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
+        provider_response_id: str | None = None
         index = -1
         index_type = ""
         try:
@@ -3539,8 +3559,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             _handle_client_error(e, request)
 
         async for chunk in stream:
+            provider_response_id = provider_response_id or getattr(
+                chunk, "response_id", None
+            )
             _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                provider_response_id=provider_response_id,
             )
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)

@@ -760,6 +760,35 @@ def _collapse_text_content(content: list[Any]) -> str | list[Any]:
     return content
 
 
+def _get_generation_response_id(response: Any) -> str | None:
+    """Extract the provider response ID from Vertex generation responses."""
+
+    def _get_id_from_source(source: Any) -> str | None:
+        response_id = getattr(source, "response_id", None)
+        if response_id:
+            return str(response_id)
+        if isinstance(source, Mapping):
+            response_id = source.get("response_id") or source.get("responseId")
+            if response_id:
+                return str(response_id)
+        try:
+            response_dict = proto.Message.to_dict(source)
+        except Exception:
+            return None
+        response_id = response_dict.get("response_id") or response_dict.get(
+            "responseId"
+        )
+        return str(response_id) if response_id else None
+
+    if response_id := _get_id_from_source(response):
+        return response_id
+    for attr in ("_raw_response", "raw_response", "_prediction_response"):
+        source = getattr(response, attr, None)
+        if source is not None and (response_id := _get_id_from_source(source)):
+            return response_id
+    return None
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: Candidate | VertexCandidate,
@@ -2617,9 +2646,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
         total_lc_usage = None
+        provider_response_id: str | None = None
         for response_chunk in response_iter:
+            provider_response_id = provider_response_id or _get_generation_response_id(
+                response_chunk
+            )
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
-                response_chunk, prev_total_usage=total_lc_usage
+                response_chunk,
+                prev_total_usage=total_lc_usage,
+                provider_response_id=provider_response_id,
             )
             if run_manager and isinstance(chunk.message.content, str):
                 run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
@@ -2647,9 +2682,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
         total_lc_usage = None
+        provider_response_id: str | None = None
         async for response_chunk in await response_iter:
+            provider_response_id = provider_response_id or _get_generation_response_id(
+                response_chunk
+            )
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
-                response_chunk, prev_total_usage=total_lc_usage
+                response_chunk,
+                prev_total_usage=total_lc_usage,
+                provider_response_id=provider_response_id,
             )
             if run_manager and isinstance(chunk.message.content, str):
                 await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
@@ -2948,6 +2989,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self, response: GenerationResponse
     ) -> ChatResult:
         generations = []
+        response_id = _get_generation_response_id(response)
         usage = proto.Message.to_dict(
             response.usage_metadata, use_integers_for_enums=False
         )
@@ -2960,6 +3002,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message = _parse_response_candidate(candidate)
             message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
+            if response_id:
+                message.response_metadata["id"] = response_id
             if "grounding_metadata" in info:
                 message.response_metadata["grounding_metadata"] = info.pop(
                     "grounding_metadata"
@@ -2971,6 +3015,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message = AIMessage(content="")
             message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
+            if response_id:
+                message.response_metadata["id"] = response_id
             if usage:
                 generation_info = {"usage_metadata": usage}
                 message.usage_metadata = lc_usage
@@ -2985,6 +3031,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self,
         response_chunk: GenerationResponse,
         prev_total_usage: UsageMetadata | None = None,
+        *,
+        provider_response_id: str | None = None,
     ) -> tuple[ChatGenerationChunk, UsageMetadata | None]:
         # return an empty completion message if there's no candidates
         usage_metadata = proto.Message.to_dict(
@@ -3024,6 +3072,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             finish_reason = generation_info.get("finish_reason")
             if finish_reason and finish_reason != "FINISH_REASON_UNSPECIFIED":
                 message.response_metadata["model_name"] = self.model_name
+                if provider_response_id:
+                    message.response_metadata["id"] = provider_response_id
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be merged
             generation_info.pop("is_blocked", None)
