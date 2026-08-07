@@ -3051,7 +3051,9 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
     if thought_tokens > 0:
         return UsageMetadata(
             input_tokens=input_tokens,
-            output_tokens=output_tokens,
+            # candidates_token_count excludes thinking tokens, but output_tokens
+            # must include them so that input_tokens + output_tokens == total_tokens
+            output_tokens=output_tokens + thought_tokens,
             total_tokens=total_tokens,
             input_token_details={"cache_read": cache_read_tokens},
             output_token_details={"reasoning": thought_tokens},
