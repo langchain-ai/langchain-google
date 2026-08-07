@@ -809,6 +809,53 @@ def test_api_version_forwarded_to_http_options_vertex() -> None:
         assert call_http_options.base_url == "https://gateway.example.com/api/gemini"
 
 
+def test_vertexai_express_mode_omits_project_and_location() -> None:
+    """Regression test for #1473.
+
+    When authenticating to Vertex AI purely via API key (Express Mode, no
+    `credentials`), `project`/`location` must NOT be forwarded to the
+    `Client` constructor. The underlying google-genai SDK gives an
+    explicitly-passed `project`/`location` precedence over an API key that
+    was only set via environment variable, silently discarding the API key
+    and falling back to Application Default Credentials -- which raises
+    `DefaultCredentialsError` at request time even though a valid API key
+    was supplied.
+    """
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            vertexai=True,
+            project="fake-project-id",
+            api_key=FAKE_API_KEY,
+        )
+        call_kwargs = mock_client.call_args_list[0].kwargs
+        assert "project" not in call_kwargs
+        assert "location" not in call_kwargs
+        assert call_kwargs["vertexai"] is True
+        assert call_kwargs["credentials"] is None
+
+
+def test_vertexai_credentials_mode_forwards_project_and_location() -> None:
+    """`project`/`location` are still forwarded when using credentials.
+
+    Ensures the fix for #1473 doesn't regress the ADC/service-account
+    credentials path, which legitimately needs `project`/`location`.
+    """
+    fake_credentials = Mock()
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            vertexai=True,
+            project="fake-project-id",
+            location="us-central1",
+            credentials=fake_credentials,
+        )
+        call_kwargs = mock_client.call_args_list[0].kwargs
+        assert call_kwargs["project"] == "fake-project-id"
+        assert call_kwargs["location"] == "us-central1"
+        assert call_kwargs["credentials"] is fake_credentials
+
+
 def test_async_client_property() -> None:
     """Test that async_client property exposes `client.aio`."""
     chat = ChatGoogleGenerativeAI(

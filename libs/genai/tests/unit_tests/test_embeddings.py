@@ -234,7 +234,35 @@ def test_vertexai_backend() -> None:
     mock_client.assert_called_once()
     call_kwargs = mock_client.call_args.kwargs
     assert call_kwargs["vertexai"] is True
+    # Regression test for #1473: when authenticating purely via API key
+    # (Vertex AI Express Mode, no `credentials`), `project`/`location` must
+    # NOT be forwarded to `Client`. The google-genai SDK gives an
+    # explicitly-passed `project` precedence over an API key that was only
+    # set via environment variable, which silently discards the API key
+    # and falls back to Application Default Credentials at request time.
+    assert "project" not in call_kwargs
+    assert "location" not in call_kwargs
+    assert call_kwargs["credentials"] is None
+
+
+def test_vertexai_backend_with_credentials_forwards_project() -> None:
+    """`project`/`location` are still forwarded when using credentials."""
+    fake_credentials = MagicMock()
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        _ = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            project="test-project",
+            location="us-central1",
+            credentials=fake_credentials,
+            vertexai=True,
+        )
+
+    mock_client.assert_called_once()
+    call_kwargs = mock_client.call_args.kwargs
+    assert call_kwargs["vertexai"] is True
     assert call_kwargs["project"] == "test-project"
+    assert call_kwargs["location"] == "us-central1"
+    assert call_kwargs["credentials"] is fake_credentials
 
 
 def test_vertexai_auto_detection_with_project() -> None:
