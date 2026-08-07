@@ -413,14 +413,46 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
-        embeddings: list[list[float]] = []
-        batch_start_index = 0
-
         # Use RETRIEVAL_DOCUMENT as default for documents
         effective_task_type = task_type or self.task_type or "RETRIEVAL_DOCUMENT"
 
         # Use instance default if no explicit value provided
         effective_dimensionality = output_dimensionality or self.output_dimensionality
+
+        is_gemini_embedding = "gemini-embedding" in self.model.lower()
+
+        if is_gemini_embedding:
+            from concurrent.futures import ThreadPoolExecutor
+
+            def _embed_single(text: str, title: str | None = None) -> list[float]:
+                config = self._build_config(
+                    task_type=effective_task_type,
+                    title=title,
+                    output_dimensionality=effective_dimensionality,
+                )
+                try:
+                    result = self.client.models.embed_content(
+                        model=self.model,
+                        contents=text,
+                        config=config,
+                    )
+                    return list(result.embeddings[0].values)
+                except ClientError as e:
+                    msg = f"Error embedding content ({e.status}): {e}"
+                    raise GoogleGenerativeAIError(msg) from e
+                except Exception as e:
+                    msg = f"Error embedding content: {e}"
+                    raise GoogleGenerativeAIError(msg) from e
+
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for i, text in enumerate(texts):
+                    title = titles[i] if titles else None
+                    futures.append(executor.submit(_embed_single, text, title))
+                return [f.result() for f in futures]
+
+        embeddings: list[list[float]] = []
+        batch_start_index = 0
 
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
             # Handle titles for this batch
@@ -534,13 +566,46 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
-        embeddings: list[list[float]] = []
-        batch_start_index = 0
-
         # Use RETRIEVAL_DOCUMENT as default for documents
         effective_task_type = task_type or self.task_type or "RETRIEVAL_DOCUMENT"
 
         effective_dimensionality = output_dimensionality or self.output_dimensionality
+
+        is_gemini_embedding = "gemini-embedding" in self.model.lower()
+
+        if is_gemini_embedding:
+            import asyncio
+
+            async def _aembed_single(
+                text: str, title: str | None = None
+            ) -> list[float]:
+                config = self._build_config(
+                    task_type=effective_task_type,
+                    title=title,
+                    output_dimensionality=effective_dimensionality,
+                )
+                try:
+                    result = await self.client.aio.models.embed_content(
+                        model=self.model,
+                        contents=text,
+                        config=config,
+                    )
+                    return list(result.embeddings[0].values)
+                except ClientError as e:
+                    msg = f"Error embedding content ({e.status}): {e}"
+                    raise GoogleGenerativeAIError(msg) from e
+                except Exception as e:
+                    msg = f"Error embedding content: {e}"
+                    raise GoogleGenerativeAIError(msg) from e
+
+            tasks = []
+            for i, text in enumerate(texts):
+                title = titles[i] if titles else None
+                tasks.append(_aembed_single(text, title))
+            return list(await asyncio.gather(*tasks))
+
+        embeddings: list[list[float]] = []
+        batch_start_index = 0
 
         for batch in GoogleGenerativeAIEmbeddings._prepare_batches(texts, batch_size):
             # Handle titles for this batch
