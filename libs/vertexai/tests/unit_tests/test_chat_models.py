@@ -48,6 +48,7 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _bytes_to_base64,
+    _get_usage_metadata_gemini,
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
@@ -2479,6 +2480,26 @@ def test_gemini_response_to_chat_result_emits_string_modality() -> None:
     usage = generation_info["usage_metadata"]
     assert usage["prompt_tokens_details"][0]["modality"] == "TEXT"
     assert usage["candidates_tokens_details"][0]["modality"] == "TEXT"
+
+
+def test_get_usage_metadata_gemini_includes_thought_tokens_in_output_tokens() -> None:
+    """Thinking tokens must be folded into `output_tokens` so that
+    `input_tokens + output_tokens == total_tokens`, matching the `UsageMetadata`
+    contract and `ChatGoogleGenerativeAI`'s equivalent `_response_to_result`."""
+    usage = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 10,
+            "candidates_token_count": 5,
+            "total_token_count": 35,
+            "thoughts_token_count": 20,
+        }
+    )
+    assert usage is not None
+    assert usage["input_tokens"] == 10
+    assert usage["output_tokens"] == 25  # 5 visible + 20 thinking
+    assert usage["total_tokens"] == 35
+    assert usage["input_tokens"] + usage["output_tokens"] == usage["total_tokens"]
+    assert usage["output_token_details"] == {"reasoning": 20}
 
 
 def test_get_num_tokens_from_messages(clear_prediction_client_cache: Any) -> None:
