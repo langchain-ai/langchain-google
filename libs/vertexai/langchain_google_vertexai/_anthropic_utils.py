@@ -1,4 +1,5 @@
 import base64
+import json
 import re
 import urllib.parse
 import warnings
@@ -142,6 +143,90 @@ def _format_text_content(text: str) -> dict[str, str | dict[str, Any]]:
     return content
 
 
+def _convert_v1_block_to_anthropic(block: dict) -> dict:
+    """Convert a LangChain v1 content block to Anthropic wire format.
+
+    Builds new dicts and never mutates `block` in place. Unrecognized types are
+    returned unchanged. `reasoning` is intentionally not handled here — the
+    dedicated branch in `_format_message_anthropic` supports `cache_control`.
+
+    Args:
+        block: A content block dict, possibly in LangChain v1 shape.
+
+    Returns:
+        An Anthropic-native content block dict, or the original block when no
+        conversion applies.
+    """
+    block_type = block.get("type")
+
+    if block_type == "tool_call":
+        return {
+            "type": "tool_use",
+            "name": block.get("name", ""),
+            "input": block.get("args", {}),
+            "id": block.get("id", ""),
+        }
+
+    if block_type == "tool_call_chunk":
+        args = block.get("args")
+        if isinstance(args, str):
+            try:
+                input_ = json.loads(args or "{}")
+            except json.JSONDecodeError:
+                input_ = {}
+        else:
+            input_ = args or {}
+        return {
+            "type": "tool_use",
+            "name": block.get("name", ""),
+            "input": input_,
+            "id": block.get("id", ""),
+        }
+
+    if block_type == "non_standard" and "value" in block:
+        # `_clean_content` only strips streaming keys at the top level, so
+        # nested `index` / `partial_json` / `caller` inside `value` survive
+        # merge. Clean the unwrapped block before returning.
+        return _clean_content_block(block["value"])
+
+    if block_type == "server_tool_call":
+        new_block: dict[str, Any] = {}
+        if "id" in block:
+            new_block["id"] = block["id"]
+        new_block["input"] = block.get("args", {})
+        if partial_json := block.get("extras", {}).get("partial_json"):
+            new_block["input"] = {}
+            new_block["partial_json"] = partial_json
+        if block.get("name") == "code_interpreter":
+            new_block["name"] = "code_execution"
+        elif block.get("name") == "remote_mcp":
+            if "tool_name" in block.get("extras", {}):
+                new_block["name"] = block["extras"]["tool_name"]
+            if "server_name" in block.get("extras", {}):
+                new_block["server_name"] = block["extras"]["server_name"]
+        else:
+            new_block["name"] = block.get("name", "")
+        if block.get("name") == "remote_mcp":
+            new_block["type"] = "mcp_tool_use"
+        else:
+            new_block["type"] = "server_tool_use"
+        return new_block
+
+    if block_type == "server_tool_result":
+        new_block = {}
+        if "output" in block:
+            new_block["content"] = block["output"]
+        server_tool_result_type = block.get("extras", {}).get("block_type", "")
+        if server_tool_result_type == "mcp_tool_result":
+            new_block["is_error"] = block.get("status") == "error"
+        if "tool_call_id" in block:
+            new_block["tool_use_id"] = block["tool_call_id"]
+        new_block["type"] = server_tool_result_type
+        return new_block
+
+    return block
+
+
 def _format_message_anthropic(
     message: HumanMessage | AIMessage | SystemMessage, project: str | None
 ):
@@ -179,6 +264,8 @@ def _format_message_anthropic(
                 if "type" not in block:
                     msg = "Dict content block must have a type key"
                     raise ValueError(msg)
+
+                block = _convert_v1_block_to_anthropic(block)
 
                 new_block = {}
 
@@ -418,9 +505,9 @@ def _clean_content_block(block: Any) -> Any:
     # 'partial_json' - added during streaming for incremental JSON parsing
     keys_to_remove = {"index", "partial_json", "caller"}
 
-    # The id field is required for tool_use blocks and some image blocks,
-    # but forbidden in text blocks (specifically inside tool_results).
-    if block.get("type") not in ("tool_use", "image"):
+    # Keep id for tool_use/image and v1 tool_call(s) — format dedup needs
+    # that id after conversion. Strip it from text (esp. inside tool_results).
+    if block.get("type") not in ("tool_use", "image", "tool_call", "tool_call_chunk"):
         keys_to_remove.add("id")
 
     return {k: v for k, v in block.items() if k not in keys_to_remove}
@@ -630,6 +717,8 @@ def _make_message_chunk_from_anthropic_event(
         )
     else:
         pass
+    if message_chunk:
+        message_chunk.response_metadata["model_provider"] = "anthropic"
     return message_chunk
 
 
