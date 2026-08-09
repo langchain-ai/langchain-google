@@ -805,6 +805,7 @@ def _parse_chat_history(
         if (
             isinstance(message, AIMessage)
             and message.response_metadata.get("output_version") == "v1"
+            and message.content
         ):
             # Unpack known v1 content to v1beta format for the request
             #
@@ -923,7 +924,10 @@ def _parse_chat_history(
                     args=json.loads(raw_function_call["arguments"]),
                 )
                 parts = [Part(function_call=function_call)]
-            elif message.response_metadata.get("output_version") == "v1":
+            elif (
+                message.response_metadata.get("output_version") == "v1"
+                and message.content
+            ):
                 # Already converted to v1beta format above
                 parts = message.content  # type: ignore[assignment]
             else:
@@ -3150,13 +3154,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return None
 
     def _filter_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
-        """Filter out messages with empty content."""
-        filtered_messages = []
+        """Normalize messages with empty content."""
+        filtered_messages: list[BaseMessage] = []
         for message in messages:
             if isinstance(message, HumanMessage) and not message.content:
                 warnings.warn(
                     "HumanMessage with empty content was removed to prevent API error"
                 )
+            elif isinstance(message, AIMessage) and message.content == []:
+                filtered_messages.append(message.model_copy(update={"content": ""}))
             else:
                 filtered_messages.append(message)
         return filtered_messages
