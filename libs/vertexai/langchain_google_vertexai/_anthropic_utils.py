@@ -160,12 +160,15 @@ def _convert_v1_block_to_anthropic(block: dict) -> dict:
     block_type = block.get("type")
 
     if block_type == "tool_call":
-        return {
+        tool_use_block = {
             "type": "tool_use",
             "name": block.get("name", ""),
             "input": block.get("args", {}),
             "id": block.get("id", ""),
         }
+        if "caller" in block.get("extras", {}):
+            tool_use_block["caller"] = block["extras"]["caller"]
+        return tool_use_block
 
     if block_type == "tool_call_chunk":
         args = block.get("args")
@@ -338,7 +341,7 @@ def _format_message_anthropic(
                         is_unique = block["id"] not in [
                             tc["id"] for tc in message.tool_calls
                         ]
-                        if not is_unique:
+                        if not is_unique and not block.get("caller"):
                             continue
 
                 content.append(block)
@@ -347,7 +350,15 @@ def _format_message_anthropic(
         raise ValueError(msg)
 
     if isinstance(message, AIMessage) and message.tool_calls:
-        for tc in message.tool_calls:
+        tool_use_ids = [
+            b["id"]
+            for b in content
+            if isinstance(b, dict) and b.get("type") == "tool_use"
+        ]
+        missing_tool_calls = [
+            tc for tc in message.tool_calls if tc["id"] not in tool_use_ids
+        ]
+        for tc in missing_tool_calls:
             tu = cast("dict[str, Any]", _lc_tool_call_to_anthropic_tool_use_block(tc))
             content.append(tu)
 

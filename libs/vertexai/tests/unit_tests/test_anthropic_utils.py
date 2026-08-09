@@ -1755,6 +1755,50 @@ def test_format_messages_v1_tool_call_round_trip() -> None:
     ]
 
 
+def test_format_messages_v1_tool_call_preserves_caller() -> None:
+    """v1 `tool_call` with programmatic `caller` survives dedup (#1933)."""
+    caller = {"type": "code_execution_20250825"}
+    tool_call_id = "toolu_vrtx_01"
+    ai_message = AIMessage(
+        content=[
+            {
+                "type": "tool_call",
+                "id": tool_call_id,
+                "name": "get_weather",
+                "args": {"location": "Boston"},
+                "extras": {"caller": caller},
+            }
+        ],
+        tool_calls=[
+            {
+                "type": "tool_call",
+                "id": tool_call_id,
+                "name": "get_weather",
+                "args": {"location": "Boston"},
+            }
+        ],
+    )
+    messages = [
+        HumanMessage("What's the weather in Boston?"),
+        ai_message,
+        ToolMessage(
+            content="It's sunny.",
+            tool_call_id=tool_call_id,
+            name="get_weather",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="my-project")
+
+    tool_use_blocks = [
+        block
+        for block in formatted[1]["content"]
+        if block.get("type") == "tool_use" and block.get("id") == tool_call_id
+    ]
+    assert len(tool_use_blocks) == 1
+    assert tool_use_blocks[0]["caller"] == caller
+
+
 def test_format_messages_v1_tool_call_validates_as_content_block_param() -> None:
     """Formatted v1 tool_call payload validates as Anthropic ContentBlockParam."""
     ai_message = AIMessage(
