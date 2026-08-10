@@ -805,7 +805,6 @@ def _parse_chat_history(
         if (
             isinstance(message, AIMessage)
             and message.response_metadata.get("output_version") == "v1"
-            and message.content
         ):
             # Unpack known v1 content to v1beta format for the request
             #
@@ -924,10 +923,7 @@ def _parse_chat_history(
                     args=json.loads(raw_function_call["arguments"]),
                 )
                 parts = [Part(function_call=function_call)]
-            elif (
-                message.response_metadata.get("output_version") == "v1"
-                and message.content
-            ):
+            elif message.response_metadata.get("output_version") == "v1":
                 # Already converted to v1beta format above
                 parts = message.content  # type: ignore[assignment]
             else:
@@ -3166,7 +3162,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 and isinstance(message, AIMessage)
                 and message.content == []
             ):
-                filtered_messages.append(message.model_copy(update={"content": ""}))
+                filtered_messages.append(
+                    message.model_copy(
+                        update={"content": [{"type": "text", "text": ""}]}
+                    )
+                )
             else:
                 filtered_messages.append(message)
         return filtered_messages
