@@ -3150,12 +3150,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return None
 
     def _filter_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
-        """Filter out messages with empty content."""
-        filtered_messages = []
+        """Normalize messages with empty content."""
+        filtered_messages: list[BaseMessage] = []
         for message in messages:
             if isinstance(message, HumanMessage) and not message.content:
                 warnings.warn(
                     "HumanMessage with empty content was removed to prevent API error"
+                )
+            elif (
+                self._use_vertexai  # type: ignore[attr-defined]
+                and isinstance(message, AIMessage)
+                and message.content == []
+            ):
+                filtered_messages.append(
+                    message.model_copy(
+                        update={"content": [{"type": "text", "text": ""}]}
+                    )
                 )
             else:
                 filtered_messages.append(message)

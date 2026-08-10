@@ -158,6 +158,36 @@ def test_integration_initialization() -> None:
         assert "Did you mean: 'safety_settings'?" in call_args
 
 
+@pytest.mark.parametrize("response_metadata", [{}, {"output_version": "v1"}])
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_empty_ai_message_content_is_normalized_for_vertex(
+    response_metadata: dict[str, str], vertexai: bool
+) -> None:
+    """Test empty AI content lists become empty text parts for Vertex only."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content=[], response_metadata=response_metadata),
+        HumanMessage(content="What is your name?"),
+    ]
+
+    request = llm._prepare_request(messages)
+
+    empty_ai_content = request["contents"][1]
+    assert empty_ai_content.role == "model"
+    assert empty_ai_content.parts is not None
+    if vertexai:
+        assert len(empty_ai_content.parts) == 1
+        assert empty_ai_content.parts[0].text == ""
+    else:
+        assert empty_ai_content.parts == []
+
+
 def test_seed_initialization() -> None:
     """Test chat model initialization with `seed` parameter."""
     # Test with explicit seed
