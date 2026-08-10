@@ -3161,7 +3161,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 warnings.warn(
                     "HumanMessage with empty content was removed to prevent API error"
                 )
-            elif isinstance(message, AIMessage) and message.content == []:
+            elif (
+                self._use_vertexai  # type: ignore[attr-defined]
+                and isinstance(message, AIMessage)
+                and message.content == []
+            ):
                 filtered_messages.append(message.model_copy(update={"content": ""}))
             else:
                 filtered_messages.append(message)

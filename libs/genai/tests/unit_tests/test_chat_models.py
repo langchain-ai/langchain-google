@@ -159,13 +159,16 @@ def test_integration_initialization() -> None:
 
 
 @pytest.mark.parametrize("response_metadata", [{}, {"output_version": "v1"}])
-def test_empty_ai_message_content_is_normalized(
-    response_metadata: dict[str, str],
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_empty_ai_message_content_is_normalized_for_vertex(
+    response_metadata: dict[str, str], vertexai: bool
 ) -> None:
-    """Test empty AI content lists become empty text parts."""
+    """Test empty AI content lists become empty text parts for Vertex only."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
     )
     messages = [
         HumanMessage(content="Hello"),
@@ -178,8 +181,11 @@ def test_empty_ai_message_content_is_normalized(
     empty_ai_content = request["contents"][1]
     assert empty_ai_content.role == "model"
     assert empty_ai_content.parts is not None
-    assert len(empty_ai_content.parts) == 1
-    assert empty_ai_content.parts[0].text == ""
+    if vertexai:
+        assert len(empty_ai_content.parts) == 1
+        assert empty_ai_content.parts[0].text == ""
+    else:
+        assert empty_ai_content.parts == []
 
 
 def test_seed_initialization() -> None:
