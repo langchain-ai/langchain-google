@@ -7772,7 +7772,8 @@ def test_server_error_classification() -> None:
     assert isinstance(exc_info.value, ModelAPIError)
     assert exc_info.value.is_retryable is True
     assert str(exc_info.value) == str(error)
-=======
+
+
 def test_service_tier_passed_to_generate_content_config() -> None:
     """Test that `service_tier` is properly passed to `GenerateContentConfig`."""
     llm = ChatGoogleGenerativeAI(

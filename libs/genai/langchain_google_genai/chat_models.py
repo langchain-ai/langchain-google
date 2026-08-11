@@ -491,11 +491,6 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
 _VERTEX_SERVICE_TIER_HEADER = "X-Vertex-AI-LLM-Shared-Request-Type"
 
 
-    """Wrapper exception class for errors associated with the `Google GenAI` API.
-    Raised when there are specific issues related to the Google GenAI API usage in the
-    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
-    """
-
 # Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
 # custom sampling parameters and disallows prefilling model turns. Per Google's
 # docs these rules apply to "these models and all future Gemini model releases",
