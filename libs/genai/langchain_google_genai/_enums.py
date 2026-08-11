@@ -8,6 +8,7 @@ from google.genai.types import (
     MediaResolution,
     Modality,
     SafetySetting,
+    ServiceTier,
 )
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "MediaResolution",
     "Modality",
     "SafetySetting",
+    "ServiceTier",
 ]
 
 # Migration notes:

@@ -42,6 +42,7 @@ from google.genai.types import (
     Part,
     PrebuiltVoiceConfig,
     SafetySetting,
+    ServiceTier,
     SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
@@ -217,6 +218,23 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
         else:
             setattr(merged, field, value)
     return merged
+
+
+_VERTEX_SERVICE_TIER_HEADER = "X-Vertex-AI-LLM-Shared-Request-Type"
+"""Header Vertex AI uses to select the service tier.
+
+The Gemini Developer API takes the tier as a request body field instead. Matches the
+header used by the JavaScript integration.
+"""
+
+
+def _tier_value(service_tier: ServiceTier | str) -> str:
+    """Render a service tier as the string the API expects.
+
+    `ServiceTier` is a string enum, so `str()` on a member would yield
+    `'ServiceTier.FLEX'` rather than `'flex'`.
+    """
+    return getattr(service_tier, "value", service_tier)
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
@@ -3099,6 +3117,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if labels is None:
             labels = self.labels
 
+        service_tier = kwargs.pop("service_tier", None)
+        if service_tier is None:
+            service_tier = self.service_tier
+
         _consumed_kwargs = {
             "thinking_budget",
             "thinking_level",
@@ -3128,6 +3150,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             max_retries=max_retries,
             image_config=image_config,
             labels=labels,
+            service_tier=service_tier,
             **remaining_kwargs,
         )
 
@@ -3286,6 +3309,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         max_retries: int | None = None,
         image_config: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        service_tier: ServiceTier | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
@@ -3307,6 +3331,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options = HttpOptions(
                 timeout=timeout,
                 retry_options=retry_options,
+            )
+
+        # Vertex AI selects the tier with a request header and silently ignores the
+        # `service_tier` body field, so send one or the other depending on the
+        # backend. Merged before the per-request options so an explicitly-supplied
+        # header still wins.
+        config_service_tier = service_tier
+        if service_tier is not None and self._use_vertexai:  # type: ignore[attr-defined]
+            config_service_tier = None
+            http_options = _merge_http_options(
+                http_options,
+                HttpOptions(
+                    headers={_VERTEX_SERVICE_TIER_HEADER: _tier_value(service_tier)}
+                ),
             )
 
         if per_request_http_options is not None:
@@ -3350,6 +3388,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options=http_options,
             image_config=image_config_obj,
             labels=labels,
+            service_tier=config_service_tier,
             **request_params,
             **kwargs,
         )
