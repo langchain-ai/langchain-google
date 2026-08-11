@@ -33,6 +33,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
+from langchain_core.tools import tool
 from pydantic import BaseModel
 from vertexai.generative_models import (
     SafetySetting as VertexSafetySetting,  # TODO: migrate to google-genai
@@ -2668,3 +2669,78 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+@tool("write_todos")
+def _write_todos(todos: list[dict], note: str) -> str:
+    """Write todos."""
+    return f"got {len(todos)} todos"
+
+
+def _json_string_tool_call_response() -> GenerateContentResponse:
+    """Response where the model JSON-encoded the list arg and left the str arg alone."""
+    return GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="write_todos",
+                                args={
+                                    "todos": '[{"content": "a", "status": "pending"}]',
+                                    "note": '{"still": "a string"}',
+                                },
+                            )
+                        )
+                    ],
+                )
+            )
+        ]
+    )
+
+
+def test_tool_call_json_string_args_are_decoded(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Gemini JSON-encodes list/dict args; decode them so tool validation passes.
+
+    See https://github.com/langchain-ai/langchain-google/issues/1819
+    """
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_generate = mock_prediction_service.return_value.generate_content
+        mock_generate.return_value = _json_string_tool_call_response()
+
+        message = llm.bind_tools([_write_todos]).invoke("go")
+
+    assert isinstance(message, AIMessage)
+    args = message.tool_calls[0]["args"]
+    assert args["todos"] == [{"content": "a", "status": "pending"}]
+    # A `str`-typed arg holding a JSON payload must not be decoded
+    assert args["note"] == '{"still": "a string"}'
+    assert _write_todos.invoke(message.tool_calls[0]).content == "got 1 todos"
+
+
+def test_tool_call_json_string_args_left_alone_without_tools(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """With no tool declarations there's no schema to justify decoding."""
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_generate = mock_prediction_service.return_value.generate_content
+        mock_generate.return_value = _json_string_tool_call_response()
+
+        message = llm.invoke("go")
+
+    assert isinstance(message, AIMessage)
+    assert message.tool_calls[0]["args"]["todos"] == (
+        '[{"content": "a", "status": "pending"}]'
+    )
