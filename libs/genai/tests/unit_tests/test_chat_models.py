@@ -5466,6 +5466,101 @@ def test_parse_response_candidate_corrects_integer_like_floats() -> None:
     assert isinstance(function_call_args["valid_float"], float)
 
 
+def test_streaming_function_calls_do_not_merge_legacy_function_call() -> None:
+    """Test streaming function calls only use tool call chunks."""
+
+    def function_call_chunk(
+        name: str, args: dict[str, Any], call_id: str
+    ) -> AIMessageChunk:
+        candidate = Candidate(
+            content=Content(
+                role="model",
+                parts=[
+                    Part(
+                        function_call=FunctionCall(
+                            name=name,
+                            args=args,
+                            id=call_id,
+                        )
+                    )
+                ],
+            )
+        )
+        return cast(
+            "AIMessageChunk",
+            _parse_response_candidate(
+                candidate,
+                streaming=True,
+                model_name_for_content="gemini-3.1-pro-preview",
+            ),
+        )
+
+    chunks = [
+        function_call_chunk(
+            "search_docs_by_lang_chain",
+            {"query": "gsuite integration"},
+            "call_1",
+        ),
+        function_call_chunk(
+            "search_docs_by_lang_chain",
+            {"query": "fleet"},
+            "call_2",
+        ),
+        function_call_chunk(
+            "search_support_articles",
+            {"collections": "LangSmith Deployment,SDKs and APIs"},
+            "call_3",
+        ),
+    ]
+
+    for chunk in chunks:
+        assert "function_call" not in chunk.additional_kwargs
+        assert len(chunk.tool_call_chunks) == 1
+
+    combined = chunks[0] + chunks[1] + chunks[2]
+
+    assert "function_call" not in combined.additional_kwargs
+    assert [tool_call["name"] for tool_call in combined.tool_calls] == [
+        "search_docs_by_lang_chain",
+        "search_docs_by_lang_chain",
+        "search_support_articles",
+    ]
+    assert combined.tool_calls[0]["args"] == {"query": "gsuite integration"}
+    assert combined.tool_calls[1]["args"] == {"query": "fleet"}
+    assert combined.tool_calls[2]["args"] == {
+        "collections": "LangSmith Deployment,SDKs and APIs"
+    }
+
+
+def test_non_streaming_function_call_preserves_legacy_function_call() -> None:
+    """Test non-streaming function calls keep function_call metadata."""
+    candidate = Candidate(
+        content=Content(
+            role="model",
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="search_docs_by_lang_chain",
+                        args={"query": "fleet"},
+                        id="call_1",
+                    )
+                )
+            ],
+        )
+    )
+
+    message = _parse_response_candidate(candidate, streaming=False)
+
+    assert (
+        message.additional_kwargs["function_call"]["name"]
+        == "search_docs_by_lang_chain"
+    )
+    assert json.loads(message.additional_kwargs["function_call"]["arguments"]) == {
+        "query": "fleet"
+    }
+    assert message.tool_calls[0]["name"] == "search_docs_by_lang_chain"
+
+
 def test_parse_response_candidate_handles_no_function_call() -> None:
     """Test that the function works correctly when there's no function call."""
     candidate = Candidate(
