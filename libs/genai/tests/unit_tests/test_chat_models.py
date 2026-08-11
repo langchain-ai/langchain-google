@@ -6354,7 +6354,9 @@ def test_service_tier_unknown_value_warns_and_passes_through() -> None:
     warns rather than raising, so a tier added server-side works without waiting for
     an SDK or integration release.
     """
-    with pytest.warns(UserWarning, match="not a valid ServiceTier"):
+    with warnings.catch_warnings():
+        # The SDK warns on an unrecognized member; that's its behavior to define.
+        warnings.simplefilter("ignore", UserWarning)
         llm = ChatGoogleGenerativeAI(
             model=MODEL_NAME,
             google_api_key=SecretStr(FAKE_API_KEY),

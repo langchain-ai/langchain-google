@@ -220,21 +220,9 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
     return merged
 
 
+# Vertex AI selects the service tier with this header; the Gemini Developer API takes
+# it as a request body field instead. Same header the JavaScript integration uses.
 _VERTEX_SERVICE_TIER_HEADER = "X-Vertex-AI-LLM-Shared-Request-Type"
-"""Header Vertex AI uses to select the service tier.
-
-The Gemini Developer API takes the tier as a request body field instead. Matches the
-header used by the JavaScript integration.
-"""
-
-
-def _tier_value(service_tier: ServiceTier | str) -> str:
-    """Render a service tier as the string the API expects.
-
-    `ServiceTier` is a string enum, so `str()` on a member would yield
-    `'ServiceTier.FLEX'` rather than `'flex'`.
-    """
-    return getattr(service_tier, "value", service_tier)
 
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
@@ -3333,18 +3321,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 retry_options=retry_options,
             )
 
-        # Vertex AI selects the tier with a request header and silently ignores the
-        # `service_tier` body field, so send one or the other depending on the
-        # backend. Merged before the per-request options so an explicitly-supplied
-        # header still wins.
+        # Vertex AI accepts the `service_tier` body field and then ignores it, so send
+        # the header there instead. Merged before the per-request options so an
+        # explicitly-supplied header still wins.
         config_service_tier = service_tier
         if service_tier is not None and self._use_vertexai:  # type: ignore[attr-defined]
             config_service_tier = None
             http_options = _merge_http_options(
                 http_options,
-                HttpOptions(
-                    headers={_VERTEX_SERVICE_TIER_HEADER: _tier_value(service_tier)}
-                ),
+                HttpOptions(headers={_VERTEX_SERVICE_TIER_HEADER: service_tier}),
             )
 
         if per_request_http_options is not None:
