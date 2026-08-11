@@ -592,7 +592,11 @@ class _BaseGoogleGenerativeAI(BaseModel):
         rejects a request for a tier it cannot serve, so an unsupported combination
         surfaces as a `400`.
 
-    See: https://ai.google.dev/gemini-api/docs/service-tiers
+    Gemini Developer API: https://ai.google.dev/gemini-api/docs/flex-inference and
+    https://ai.google.dev/gemini-api/docs/priority-inference
+
+    Vertex AI: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/flex-paygo and
+    https://docs.cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo
     """
 
     @model_validator(mode="before")
