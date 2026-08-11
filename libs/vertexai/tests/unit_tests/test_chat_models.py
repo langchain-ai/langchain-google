@@ -2744,3 +2744,22 @@ def test_tool_call_json_string_args_left_alone_without_tools(
     assert message.tool_calls[0]["args"]["todos"] == (
         '[{"content": "a", "status": "pending"}]'
     )
+
+
+def test_tool_call_json_string_args_are_decoded_when_streaming(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """The same decoding applies to streamed tool calls."""
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_stream = mock_prediction_service.return_value.stream_generate_content
+        mock_stream.return_value = iter([_json_string_tool_call_response()])
+
+        chunks = list(llm.bind_tools([_write_todos]).stream("go"))
+
+    assert chunks[0].tool_calls[0]["args"]["todos"] == [
+        {"content": "a", "status": "pending"}
+    ]
