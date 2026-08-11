@@ -49,6 +49,7 @@ from langchain_core.messages.block_translators.google_genai import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.tools import tool
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
@@ -6343,3 +6344,94 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def _json_string_tool_call_response() -> GenerateContentResponse:
+    """Response where the model JSON-encoded the list arg and left the str arg alone."""
+    return GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="write_todos",
+                                args={
+                                    "todos": '[{"content": "a", "status": "pending"}]',
+                                    "note": '{"still": "a string"}',
+                                },
+                            )
+                        )
+                    ],
+                )
+            )
+        ]
+    )
+
+
+@tool("write_todos")
+def _write_todos(todos: list[dict], note: str) -> str:
+    """Write todos."""
+    return f"got {len(todos)} todos"
+
+
+def test_tool_call_json_string_args_are_decoded() -> None:
+    """Gemini JSON-encodes list/dict args; decode them so tool validation passes.
+
+    See https://github.com/langchain-ai/langchain-google/issues/1819
+    """
+    mock_client = Mock()
+    mock_client.models.generate_content.return_value = _json_string_tool_call_response()
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    llm.client = mock_client
+
+    message = llm.bind_tools([_write_todos]).invoke("go")
+    assert isinstance(message, AIMessage)
+    args = message.tool_calls[0]["args"]
+
+    assert args["todos"] == [{"content": "a", "status": "pending"}]
+    # A `str`-typed arg holding a JSON payload must not be decoded
+    assert args["note"] == '{"still": "a string"}'
+    assert _write_todos.invoke(message.tool_calls[0]).content == "got 1 todos"
+
+
+def test_tool_call_json_string_args_are_decoded_when_streaming() -> None:
+    """The same decoding applies to streamed tool calls."""
+    mock_client = Mock()
+    mock_client.models.generate_content_stream.return_value = iter(
+        [_json_string_tool_call_response()]
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    llm.client = mock_client
+
+    chunks = list(llm.bind_tools([_write_todos]).stream("go"))
+    message = cast("AIMessageChunk", chunks[0])
+
+    assert message.tool_calls[0]["args"]["todos"] == [
+        {"content": "a", "status": "pending"}
+    ]
+
+
+def test_tool_call_json_string_args_left_alone_without_tools() -> None:
+    """With no tool declarations there's no schema to justify decoding."""
+    mock_client = Mock()
+    mock_client.models.generate_content.return_value = _json_string_tool_call_response()
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    llm.client = mock_client
+
+    message = llm.invoke("go")
+    assert isinstance(message, AIMessage)
+
+    assert message.tool_calls[0]["args"]["todos"] == (
+        '[{"content": "a", "status": "pending"}]'
+    )
