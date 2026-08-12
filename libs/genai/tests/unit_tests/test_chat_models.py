@@ -1564,6 +1564,65 @@ def test_model_kwargs(mock_client: Mock) -> None:
 
 
 @pytest.mark.parametrize(
+    "param,value",
+    [
+        ("response_logprobs", True),
+        ("logprobs", 3),
+        ("audio_timestamp", True),
+    ],
+)
+def test_model_kwargs_reach_request_config(param: str, value: Any) -> None:
+    """`model_kwargs` should configure the request, like the same kwarg at invoke."""
+    msg = HumanMessage(content="test")
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        model_kwargs={param: value},
+    )
+
+    from_constructor = getattr(llm._prepare_request([msg])["config"], param)
+    invoked = llm._prepare_request([msg], **{param: value})
+    from_invoke = getattr(invoked["config"], param)
+
+    assert from_constructor == value
+    assert from_constructor == from_invoke
+
+
+def test_invoke_kwargs_override_model_kwargs() -> None:
+    """A per-call value wins over the one fixed at construction."""
+    msg = HumanMessage(content="test")
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        model_kwargs={"logprobs": 3},
+    )
+
+    assert llm._prepare_request([msg], logprobs=7)["config"].logprobs == 7
+    # The override is per-call, so it must not leak into the next request.
+    assert llm._prepare_request([msg])["config"].logprobs == 3
+    assert llm.model_kwargs == {"logprobs": 3}
+
+
+def test_unknown_model_kwargs_raise_like_invoke_kwargs() -> None:
+    """An unsupported key fails the same way from either entry point."""
+    msg = HumanMessage(content="test")
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        model_kwargs={"not_a_real_param": 1},
+    )
+    with pytest.raises(ValidationError, match="not_a_real_param"):
+        llm._prepare_request([msg])
+
+    plain = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    with pytest.raises(ValidationError, match="not_a_real_param"):
+        plain._prepare_request([msg], not_a_real_param=1)
+
+
+@pytest.mark.parametrize(
     "is_async,method_name,client_method",
     [
         (False, "_generate", "models.generate_content"),  # Sync
