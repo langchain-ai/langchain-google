@@ -177,6 +177,31 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
     raise ChatGoogleGenerativeAIError(msg) from e
 
 
+def _stream_with_client_error_handling(
+    stream: Iterator[GenerateContentResponse], request: dict[str, Any]
+) -> Iterator[GenerateContentResponse]:
+    """Yield from ``stream``, converting a `ClientError` raised while iterating.
+
+    The streaming clients are lazy, so a `ClientError` surfaces on the first
+    iteration rather than when the stream object is created.
+    """
+    try:
+        yield from stream
+    except ClientError as e:
+        _handle_client_error(e, request)
+
+
+async def _astream_with_client_error_handling(
+    stream: AsyncIterator[GenerateContentResponse], request: dict[str, Any]
+) -> AsyncIterator[GenerateContentResponse]:
+    """Async counterpart of `_stream_with_client_error_handling`."""
+    try:
+        async for chunk in stream:
+            yield chunk
+    except ClientError as e:
+        _handle_client_error(e, request)
+
+
 def _get_default_model_profile(model_name: str) -> ModelProfile:
     default = _MODEL_PROFILES.get(model_name) or {}
     return default.copy()
@@ -3479,7 +3504,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        for chunk in response:
+        for chunk in _stream_with_client_error_handling(response, request):
             if chunk:
                 _chat_result = _response_to_result(
                     chunk, stream=True, prev_usage=prev_usage_metadata
@@ -3548,7 +3573,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ClientError as e:
             _handle_client_error(e, request)
 
-        async for chunk in stream:
+        async for chunk in _astream_with_client_error_handling(stream, request):
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
