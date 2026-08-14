@@ -24,6 +24,7 @@ from google.genai.types import (
     HttpRetryOptions,
     Language,
     Part,
+    ServiceTier,
     ThinkingConfig,
     ThinkingLevel,
 )
@@ -6187,6 +6188,185 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+def test_service_tier_passed_to_generate_content_config() -> None:
+    """Test that `service_tier` is properly passed to `GenerateContentConfig`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        service_tier="flex",
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+    config = request["config"]
+
+    assert config.service_tier == ServiceTier.FLEX
+
+
+def test_service_tier_accepts_enum_member() -> None:
+    """Test that `service_tier` accepts a `ServiceTier` member, not just a string."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        service_tier=ServiceTier.PRIORITY,
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+
+    assert request["config"].service_tier == ServiceTier.PRIORITY
+
+
+def test_service_tier_not_treated_as_unknown_kwarg() -> None:
+    """Test that `service_tier` is a real field, not swallowed by `model_kwargs`.
+
+    Unknown constructor kwargs are diverted into `model_kwargs`, which is never read
+    back when building the request, so the value would be dropped silently.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            service_tier="flex",
+        )
+
+    assert llm.service_tier == ServiceTier.FLEX
+    assert "service_tier" not in llm.model_kwargs
+
+
+def test_service_tier_none_by_default() -> None:
+    """Test that `service_tier` is `None` by default."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.service_tier is None
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+
+    assert request["config"].service_tier is None
+
+
+def test_service_tier_override_in_invoke() -> None:
+    """Test that `service_tier` can be overridden at invocation time via kwargs."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        service_tier="flex",
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+
+    request = llm._prepare_request(messages, service_tier="priority")
+
+    assert request["config"].service_tier == ServiceTier.PRIORITY
+
+
+def test_service_tier_sent_as_header_on_vertexai() -> None:
+    """Test that Vertex AI gets the tier as a header instead of a body field.
+
+    Vertex AI accepts the `service_tier` body field and then ignores it, so sending it
+    there would leave the caller believing a tier was applied when it was not.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+        service_tier="flex",
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    config = llm._prepare_request(messages)["config"]
+
+    assert config.service_tier is None
+    assert config.http_options is not None
+    assert config.http_options.headers == {
+        "X-Vertex-AI-LLM-Shared-Request-Type": "flex"
+    }
+
+
+def test_service_tier_header_preserves_other_http_options() -> None:
+    """Test that the tier header doesn't drop internally-derived HTTP options."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+        service_tier=ServiceTier.PRIORITY,
+        timeout=7,
+        max_retries=3,
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    http_options = llm._prepare_request(messages)["config"].http_options
+
+    assert http_options.headers == {"X-Vertex-AI-LLM-Shared-Request-Type": "priority"}
+    assert http_options.timeout == 7000
+    assert http_options.retry_options is not None
+    assert http_options.retry_options.attempts == 3
+
+
+def test_service_tier_header_yields_to_explicit_header() -> None:
+    """Test that a caller-supplied tier header wins over the one derived here."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+        service_tier="flex",
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(
+        messages,
+        http_options={
+            "headers": {
+                "X-Vertex-AI-LLM-Shared-Request-Type": "priority",
+                "X-Custom": "keep-me",
+            }
+        },
+    )
+
+    assert request["config"].http_options.headers == {
+        "X-Vertex-AI-LLM-Shared-Request-Type": "priority",
+        "X-Custom": "keep-me",
+    }
+
+
+def test_service_tier_unset_adds_no_header_on_vertexai() -> None:
+    """Test that leaving the tier unset doesn't touch the request headers."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    config = llm._prepare_request(messages)["config"]
+
+    assert config.service_tier is None
+    assert config.http_options.headers is None
+
+
+def test_service_tier_unknown_value_warns_and_passes_through() -> None:
+    """Test that a tier the installed SDK doesn't know about still reaches the request.
+
+    `ServiceTier` is case-insensitive and forward-compatible: an unrecognized value
+    warns rather than raising, so a tier added server-side works without waiting for
+    an SDK or integration release.
+    """
+    with warnings.catch_warnings():
+        # The SDK warns on an unrecognized member; that's its behavior to define.
+        warnings.simplefilter("ignore", UserWarning)
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            service_tier="tier-from-the-future",
+        )
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(messages)
+
+    assert request["config"].service_tier == "tier-from-the-future"
 
 
 def test_context_overflow_error_invoke_sync() -> None:
