@@ -3790,13 +3790,133 @@ def test_convert_tool_message_to_parts_list_content_with_media() -> None:
         tool_call_id="123",
     )
     result = _convert_tool_message_to_parts(message)
-    assert len(result) == 2
-    # First part should be the media (image)
-    assert result[0].inline_data is not None
-    # Second part should be the function response
-    assert result[1].function_response is not None
-    assert result[1].function_response.name == "test_tool"
-    assert result[1].function_response.response == {"output": ["Text response"]}
+    assert len(result) == 1
+    # Function response should contain parts with media
+    assert result[0].function_response is not None
+    assert result[0].function_response.name == "test_tool"
+    assert result[0].function_response.response == {"output": ["Text response"]}
+    assert result[0].function_response.parts is not None
+    assert len(result[0].function_response.parts) == 1
+    assert result[0].function_response.parts[0].inline_data is not None
+
+
+def test_convert_tool_message_to_parts_with_display_name() -> None:
+    """Test `_convert_tool_message_to_parts` preserves `display_name`."""
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            {
+                "type": "media",
+                "mime_type": "application/pdf",
+                "file_uri": "gs://bucket/file.pdf",
+                "display_name": "My Document",
+            },
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.parts is not None
+    assert len(result[0].function_response.parts) == 1
+    assert result[0].function_response.parts[0].file_data is not None
+    assert (
+        result[0].function_response.parts[0].file_data.file_uri
+        == "gs://bucket/file.pdf"
+    )
+    assert result[0].function_response.parts[0].file_data.display_name == "My Document"
+
+
+def test_convert_tool_message_to_parts_inline_data_with_display_name() -> None:
+    """Test `_convert_tool_message_to_parts` preserves `display_name` on inline_data."""
+    img_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": img_url},
+                "display_name": "Inline Image",
+            },
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.parts is not None
+    assert len(result[0].function_response.parts) == 1
+    assert result[0].function_response.parts[0].inline_data is not None
+    assert (
+        result[0].function_response.parts[0].inline_data.display_name == "Inline Image"
+    )
+
+
+def test_convert_tool_message_to_parts_multiple_media_blocks_ordering() -> None:
+    """Test `_convert_tool_message_to_parts` preserves 1:1 order
+    for multiple media blocks.
+    """
+    img_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": img_url},
+                "display_name": "Image 1",
+            },
+            {
+                "type": "media",
+                "mime_type": "application/pdf",
+                "file_uri": "gs://bucket/file2.pdf",
+                "display_name": "File 2",
+            },
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert result[0].function_response.parts is not None
+    assert len(result[0].function_response.parts) == 2
+    assert result[0].function_response.parts[0].inline_data is not None
+    assert result[0].function_response.parts[0].inline_data.display_name == "Image 1"
+    assert result[0].function_response.parts[1].file_data is not None
+    assert result[0].function_response.parts[1].file_data.display_name == "File 2"
+
+
+def test_convert_tool_message_to_parts_structured_tool_output_file_type() -> None:
+    """Test structured tool output containing type='file' is not
+    misclassified as media.
+    """
+    message = ToolMessage(
+        name="test_tool",
+        content=[
+            {
+                "type": "file",
+                "path": "/docs/paper.pdf",
+                "status": "success",
+            },
+        ],
+        tool_call_id="123",
+    )
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    # Structured output remains in output without throwing or creating media parts
+    assert (
+        result[0].function_response.parts is None
+        or len(result[0].function_response.parts) == 0
+    )
+    assert result[0].function_response.response == {
+        "output": [{"type": "file", "path": "/docs/paper.pdf", "status": "success"}]
+    }
 
 
 def test_convert_tool_message_to_parts_with_name_parameter() -> None:
