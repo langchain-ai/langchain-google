@@ -49,10 +49,12 @@ def store_fs_vectorstore(request: pytest.FixtureRequest) -> VertexFSVectorStore:
             )
         )
     except Exception as e:
-        if "ResourceExhausted" in str(
-            type(e)
-        ) or "FeatureOnlineStoreOptimizedNodes" in str(e):
-            pytest.skip("Skipping due to Vertex AI FeatureOnlineStore quotas")
+        if (
+            "Optimized serving is no longer supported" in str(e)
+            or "ResourceExhausted" in str(type(e))
+            or "FeatureOnlineStoreOptimizedNodes" in str(e)
+        ):
+            pytest.skip(f"Skipping due to Vertex AI FeatureOnlineStore error: {e}")
         raise
 
     def teardown() -> None:
@@ -151,6 +153,7 @@ def test_psc_feature_store() -> None:
     transport = FeatureOnlineStoreServiceGrpcTransport(
         channel=grpc.insecure_channel("dummy:10002")
     )
+    vertex_fs = None
     try:
         vertex_fs = VertexFSVectorStore(
             project_id=project_id,  # type: ignore[arg-type]
@@ -162,6 +165,15 @@ def test_psc_feature_store() -> None:
             project_allowlist=[project_id],  # type: ignore[list-item]
             transport=transport,
         )
+    except Exception as e:
+        if (
+            "Optimized serving is no longer supported" in str(e)
+            or "ResourceExhausted" in str(type(e))
+            or "FeatureOnlineStoreOptimizedNodes" in str(e)
+        ):
+            pytest.skip(f"Skipping due to Vertex AI FeatureOnlineStore error: {e}")
+        raise
     finally:
         # Clean up resources
-        vertex_fs.online_store.delete()
+        if vertex_fs is not None:
+            vertex_fs.online_store.delete()
