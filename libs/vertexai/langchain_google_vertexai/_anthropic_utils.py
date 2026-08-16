@@ -543,19 +543,21 @@ def _make_message_chunk_from_anthropic_event(
     """
     message_chunk: AIMessageChunk | None = None
     # See https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/lib/streaming/_messages.py  # noqa: E501
-    if event.type == "message_start" and stream_usage:
-        # Follow official langchain_anthropic pattern exactly
-        usage_metadata = _create_usage_metadata(event.message.usage)
-        # We pick up a cumulative count of output_tokens at the end of the stream,
-        # so here we zero out to avoid double counting.
-        usage_metadata["total_tokens"] = (
-            usage_metadata["total_tokens"] - usage_metadata["output_tokens"]
-        )
-        usage_metadata["output_tokens"] = 0
+    if event.type == "message_start":
+        response_metadata: dict = {"model_provider": "anthropic"}
         if hasattr(event.message, "model"):
-            response_metadata = {"model_name": event.message.model}
+            response_metadata["model_name"] = event.message.model
+        if stream_usage:
+            # Follow official langchain_anthropic pattern exactly
+            usage_metadata = _create_usage_metadata(event.message.usage)
+            # We pick up a cumulative count of output_tokens at the end of the stream,
+            # so here we zero out to avoid double counting.
+            usage_metadata["total_tokens"] = (
+                usage_metadata["total_tokens"] - usage_metadata["output_tokens"]
+            )
+            usage_metadata["output_tokens"] = 0
         else:
-            response_metadata = {}
+            usage_metadata = None
         message_chunk = AIMessageChunk(
             content="" if coerce_content_to_string else [],
             usage_metadata=usage_metadata,
