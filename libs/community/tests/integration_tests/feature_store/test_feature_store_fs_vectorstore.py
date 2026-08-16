@@ -41,12 +41,19 @@ def store_fs_vectorstore(request: pytest.FixtureRequest) -> VertexFSVectorStore:
         table_name=TEST_TABLE_NAME,
         online_store_name=TEST_FOS_NAME,
     )
-    TestVertexFSVectorStore_fs_vectorstore.ids = (
-        TestVertexFSVectorStore_fs_vectorstore.store_fs_vectorstore.add_texts(
-            TestVertexFSVectorStore_fs_vectorstore.texts,
-            TestVertexFSVectorStore_fs_vectorstore.metadatas,
+    try:
+        TestVertexFSVectorStore_fs_vectorstore.ids = (
+            TestVertexFSVectorStore_fs_vectorstore.store_fs_vectorstore.add_texts(
+                TestVertexFSVectorStore_fs_vectorstore.texts,
+                TestVertexFSVectorStore_fs_vectorstore.metadatas,
+            )
         )
-    )
+    except Exception as e:
+        if "ResourceExhausted" in str(
+            type(e)
+        ) or "FeatureOnlineStoreOptimizedNodes" in str(e):
+            pytest.skip("Skipping due to Vertex AI FeatureOnlineStore quotas")
+        raise
 
     def teardown() -> None:
         bigquery.Client(location="us-central1").delete_dataset(
