@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import (
     Any,
     Literal,
@@ -377,6 +377,98 @@ def _format_to_gapic_tool(tools: _ToolsType) -> gapic.Tool:
             fd = _format_to_gapic_function_declaration(tool)
             gapic_tool.function_declarations.append(fd)
     return gapic_tool
+
+
+_CONTAINER_TYPES: dict[Any, str] = {
+    gapic.Type.ARRAY: "ARRAY",
+    gapic.Type.OBJECT: "OBJECT",
+}
+
+
+def _container_type_from_schema(schema: Any) -> str | None:
+    """Return `'ARRAY'`/`'OBJECT'` if the schema declares a container, else `None`.
+
+    Args:
+        schema: A `gapic.Schema` (or anything exposing `type_`/`any_of`).
+
+    Returns:
+        The declared container type name, or `None` for non-container schemas.
+    """
+    container_type = _CONTAINER_TYPES.get(getattr(schema, "type_", None))
+    if container_type is not None:
+        return container_type
+    for variant in getattr(schema, "any_of", None) or []:
+        variant_type = _container_type_from_schema(variant)
+        if variant_type is not None:
+            return variant_type
+    return None
+
+
+def get_container_arg_types(
+    tools: Sequence[Any] | None,
+) -> dict[str, dict[str, str]]:
+    """Map each declared function to the args it declares as an array or object.
+
+    Gemini sometimes returns these args as JSON-encoded strings, so the response
+    parser needs to know which args are allowed to be decoded.
+
+    Args:
+        tools: Formatted `gapic.Tool` objects sent with the request. Entries
+            without function declarations (e.g. code execution) are skipped.
+
+    Returns:
+        Mapping of function name to `{arg name: 'ARRAY' | 'OBJECT'}`. Functions
+        that declare no container args are omitted.
+    """
+    arg_types: dict[str, dict[str, str]] = {}
+    for tool in tools or []:
+        for declaration in getattr(tool, "function_declarations", None) or []:
+            properties = getattr(declaration.parameters, "properties", None) or {}
+            declared = {
+                name: container_type
+                for name, schema in properties.items()
+                if (container_type := _container_type_from_schema(schema)) is not None
+            }
+            if declared and declaration.name:
+                arg_types[declaration.name] = declared
+    return arg_types
+
+
+def coerce_json_encoded_args(
+    args: dict[str, Any], declared_types: Mapping[str, str] | None
+) -> dict[str, Any]:
+    """Decode args the model returned as JSON strings but declared as containers.
+
+    Gemini routinely emits list- and dict-typed tool arguments as JSON-encoded
+    strings. Forwarding those verbatim makes tool validation fail before the tool
+    runs, so decode them at the integration boundary. An arg is only decoded when
+    the tool declared it as a container and the decoded value is that container,
+    which leaves string-typed args holding JSON payloads untouched.
+
+    Args:
+        args: Raw args from the model's function call.
+        declared_types: `{arg name: 'ARRAY' | 'OBJECT'}` for this function, as
+            returned by `get_container_arg_types`.
+
+    Returns:
+        The args with JSON-encoded containers decoded. Anything that does not
+        decode is passed through so the tool raises its usual validation error.
+    """
+    if not declared_types:
+        return args
+    coerced = dict(args)
+    for name, declared in declared_types.items():
+        value = coerced.get(name)
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            continue
+        expected = list if declared == "ARRAY" else dict
+        if isinstance(parsed, expected):
+            coerced[name] = parsed
+    return coerced
 
 
 class PydanticFunctionsOutputParser(BaseOutputParser):
