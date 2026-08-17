@@ -1,4 +1,5 @@
 import datetime
+import logging
 from collections.abc import Generator
 from typing import Annotated, Any, Literal
 from unittest.mock import MagicMock, patch
@@ -1647,3 +1648,47 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+class _Address(BaseModel):
+    street: str
+    city: str
+
+
+class _PersonWithAddress(BaseModel):
+    """Nested BaseModel field, so Pydantic v2 emits a `$defs` block."""
+
+    name: str
+    address: _Address
+
+
+def test_nested_model_does_not_warn_about_defs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`$defs` is redundant once `$ref`s are inlined, so it must not warn.
+
+    `_format_json_schema_to_gapic` already skips Pydantic v1's `definitions`;
+    it must skip v2's `$defs` the same way. See #1880.
+    """
+    with caplog.at_level(
+        logging.WARNING, logger="langchain_google_genai._function_utils"
+    ):
+        _convert_pydantic_to_genai_function(_PersonWithAddress)
+
+    assert "$defs" not in caplog.text, (
+        f"Expected no warning mentioning `$defs`, got: {caplog.text!r}"
+    )
+
+
+def test_nested_model_keeps_inlined_properties() -> None:
+    """Skipping `$defs` must not cost us the dereferenced sub-schema.
+
+    Guards against 'fixing' the warning by removing `$defs` before
+    `dereference_refs` runs, which would leave `#/$defs/...` unresolvable.
+    """
+    declaration = _convert_pydantic_to_genai_function(_PersonWithAddress)
+
+    assert declaration.parameters is not None
+    address = declaration.parameters.properties["address"]
+    assert address.properties is not None, "Nested model lost its inlined properties."
+    assert sorted(address.properties) == ["city", "street"]

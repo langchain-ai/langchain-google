@@ -95,7 +95,10 @@ _ToolsType = Sequence[_ToolType]
 def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
     converted_schema: dict[str, Any] = {}
     for key, value in schema.items():
-        if key == "definitions":
+        # `definitions` (Pydantic v1) and `$defs` (v2) hold the sub-schemas that
+        # `dereference_refs` has already inlined by this point, so they carry no
+        # further information and are not part of the GAPIC schema.
+        if key in ("definitions", "$defs"):
             continue
         if key == "items":
             if value is not None:
