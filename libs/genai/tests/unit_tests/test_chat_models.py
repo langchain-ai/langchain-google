@@ -24,12 +24,14 @@ from google.genai.types import (
     HttpRetryOptions,
     Language,
     Part,
+    ThinkingConfig,
     ThinkingLevel,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
 from google.protobuf.struct_pb2 import Struct
+from langchain_core._api import LangChainBetaWarning
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -72,6 +74,7 @@ from langchain_google_genai.chat_models import (
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
+    _uses_fixed_sampling_and_disallows_prefill,
     _validate_video_metadata,
 )
 
@@ -118,7 +121,7 @@ def test_integration_initialization() -> None:
         "ls_provider": "google_genai",
         "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
-        "ls_temperature": 1.0,
+        "ls_temperature": None,
         "ls_max_tokens": 10,
     }
 
@@ -126,7 +129,7 @@ def test_integration_initialization() -> None:
     msg = HumanMessage(content="test")
     request = llm._prepare_request([msg])
     config = request["config"]
-    assert config.temperature == 1.0
+    assert getattr(config, "temperature", None) is None
     assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
@@ -153,6 +156,36 @@ def test_integration_initialization() -> None:
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
         assert "Did you mean: 'safety_settings'?" in call_args
+
+
+@pytest.mark.parametrize("response_metadata", [{}, {"output_version": "v1"}])
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_empty_ai_message_content_is_normalized_for_vertex(
+    response_metadata: dict[str, str], vertexai: bool
+) -> None:
+    """Test empty AI content lists become empty text parts for Vertex only."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content=[], response_metadata=response_metadata),
+        HumanMessage(content="What is your name?"),
+    ]
+
+    request = llm._prepare_request(messages)
+
+    empty_ai_content = request["contents"][1]
+    assert empty_ai_content.role == "model"
+    assert empty_ai_content.parts is not None
+    if vertexai:
+        assert len(empty_ai_content.parts) == 1
+        assert empty_ai_content.parts[0].text == ""
+    else:
+        assert empty_ai_content.parts == []
 
 
 def test_seed_initialization() -> None:
@@ -267,13 +300,6 @@ def test_api_key_masked_when_passed_via_constructor(
 
 
 def test_profile() -> None:
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=SecretStr(FAKE_API_KEY),
-    )
-    assert model.profile
-    assert not model.profile["reasoning_output"]
-
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -440,6 +466,52 @@ def test_parse_history() -> None:
         assert system_instruction is None
     else:
         assert system_instruction == Content(parts=[Part(text=system_input)])
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+def test_fixed_sampling_models_reject_model_prefill(model: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    with pytest.raises(ValueError, match="does not support model prefilling"):
+        llm._prepare_request(
+            [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+        )
+
+
+def test_fixed_sampling_model_accepts_tool_response_as_final_turn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        HumanMessage(content="Look this up"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+        ),
+        ToolMessage(content="result", tool_call_id="call-1"),
+    ]
+
+    request = llm._prepare_request(messages)
+
+    assert request["contents"][-1].role == "user"
+    assert request["contents"][-1].parts[0].function_response is not None
+
+
+def test_other_models_preserve_model_prefill() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    request = llm._prepare_request(
+        [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+    )
+
+    assert request["contents"][-1].role == "model"
 
 
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
@@ -1312,17 +1384,51 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
-    llm_loaded = loads(
-        serialized,
-        secrets_map={"GOOGLE_API_KEY": "test-key"},
-        valid_namespaces=["langchain_google_genai"],
-        allowed_objects="all",
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
     # Pydantic 2 equality will fail on complex attributes like clients with
     # different IDs
     llm.client = None
     llm_loaded.client = None
     assert llm == llm_loaded
+
+
+def test_serialize_with_thinking_config() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        thinking_config={"include_thoughts": True, "thinkingBudget": 2048},
+    )
+    serialized = dumps(llm)
+    assert "not_implemented" not in serialized
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+
+
+def test_thinking_config_object_is_stored_as_serializable_dict() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=2048),
+    )
+
+    assert llm.thinking_config == {"include_thoughts": True, "thinking_budget": 2048}
 
 
 @pytest.mark.parametrize(
@@ -1406,6 +1512,24 @@ def test_temperature_range_model_validation() -> None:
 
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
+
+
+def test_temperature_default_by_model_version() -> None:
+    """Test that legacy models get 0.7 temperature by default.
+
+    Also ensures Gemini 3 models get None.
+    """
+    llm_gemini_3 = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_3.temperature is None
+
+    llm_gemini_2_5 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_2_5.temperature == 0.7
 
 
 @patch("langchain_google_genai.chat_models.Client")
@@ -2281,6 +2405,44 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert result.usage_metadata["input_tokens"] == 20
         assert result.usage_metadata["output_tokens"] == 15
         assert result.usage_metadata["total_tokens"] == 35
+
+
+def test_constructor_thinking_config_is_propagated() -> None:
+    """Test that constructor-level `thinking_config` is sent in request config."""
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="There are 2 O's in Google.")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=20,
+            candidates_token_count=15,
+            total_token_count=35,
+            cached_content_token_count=0,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"include_thoughts": True, "thinkingBudget": 2048},
+    )
+    assert llm.client is not None
+    assert llm.model_kwargs == {}
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        llm.invoke("How many O's are in Google?")
+
+        mock_client_method.assert_called_once()
+        config = mock_client_method.call_args.kwargs.get("config")
+        assert config is not None
+        assert config.thinking_config is not None
+        assert config.thinking_config.include_thoughts is True
+        assert config.thinking_config.thinking_budget == 2048
 
 
 def test_modalities_override_in_generation_config() -> None:
@@ -4342,6 +4504,26 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         assert config.thinking_config.include_thoughts is False, msg
 
 
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gemini-3.5-flash-lite", True),
+        ("gemini-3.6-flash", True),
+        ("models/gemini-3.6-flash", True),
+        ("publishers/google/models/gemini-3.5-flash-lite-001", True),
+        ("GEMINI-3.6-FLASH", True),
+        ("gemini-3.5-flash", False),
+        ("gemini-3.1-flash-lite", False),
+        ("gemini-3.6-flash-preview", False),
+        ("", False),
+    ],
+)
+def test_uses_fixed_sampling_and_disallows_prefill(
+    model: str, *, expected: bool
+) -> None:
+    assert _uses_fixed_sampling_and_disallows_prefill(model) is expected
+
+
 def test_is_new_gemini_model() -> None:
     assert _is_gemini_3_or_later("gemini-3.0-pro") is True
     assert _is_gemini_3_or_later("gemini-2.5-pro") is False
@@ -4534,6 +4716,244 @@ def test_thinking_budget_alone_still_works() -> None:
     assert config.thinking_config.thinking_level is None
 
 
+def test_thinking_config_flat_args_take_precedence() -> None:
+    """Test flat thinking args override matching raw `thinking_config` keys."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinking_budget": 2048, "include_thoughts": False},
+        thinking_budget=64,
+        include_thoughts=True,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 64
+    assert config.thinking_config.include_thoughts is True
+
+
+def test_thinking_config_cross_source_level_budget_warning() -> None:
+    """Test merged `thinking_level` and `thinking_budget` emit a warning."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinkingLevel": "low"},
+        thinking_budget=128,
+    )
+
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert len(warning_list) == 1
+    assert issubclass(warning_list[0].category, UserWarning)
+    assert "thinking_level' takes precedence" in str(warning_list[0].message)
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_config_single_source_level_budget_warning() -> None:
+    """Test raw `thinking_config` warns when it includes level and budget."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinkingLevel": "high", "thinkingBudget": 128},
+    )
+
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert len(warning_list) == 1
+    assert issubclass(warning_list[0].category, UserWarning)
+    assert "thinking_level' takes precedence" in str(warning_list[0].message)
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_config_object_is_propagated() -> None:
+    """Test `ThinkingConfig` constructor input is propagated to request config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=512),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.include_thoughts is True
+    assert config.thinking_config.thinking_budget == 512
+
+
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_level"),
+    [
+        ("minimal", ThinkingLevel.MINIMAL),
+        ("low", ThinkingLevel.LOW),
+        ("medium", ThinkingLevel.MEDIUM),
+        ("high", ThinkingLevel.HIGH),
+    ],
+)
+def test_reasoning_effort_is_alias_for_thinking_level(
+    reasoning_effort: str, expected_level: ThinkingLevel
+) -> None:
+    """Test `reasoning_effort` sets the same underlying `thinking_level` value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+    assert llm.thinking_level == reasoning_effort
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == expected_level
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_level_wins_when_both_constructor_kwargs_given() -> None:
+    """Test `thinking_level` takes precedence when both are passed.
+
+    `reasoning_effort` is now the canonical field (`Field(alias="thinking_level")`),
+    but `thinking_level` -- Gemini's native name -- is the alias, and Pydantic's
+    alias-resolution precedence has the alias win over the field's own name when
+    both are supplied.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+        reasoning_effort="high",
+    )
+    assert llm.thinking_level == "low"
+
+
+def test_reasoning_effort_composes_with_include_thoughts() -> None:
+    """Test `include_thoughts` composes with `reasoning_effort`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="high",
+        include_thoughts=True,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+    assert config.thinking_config.include_thoughts is True
+
+
+def test_reasoning_effort_call_time_kwarg_override() -> None:
+    """Test a call-time `reasoning_effort` kwarg overrides the constructor value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_reasoning_effort_call_time_kwarg_yields_to_thinking_level_kwarg() -> None:
+    """Test a call-time `thinking_level` kwarg wins over `reasoning_effort`.
+
+    Mirrors the construction-time alias-resolution precedence.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_level="low", reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+
+
+def test_reasoning_effort_not_leaked_as_unrecognized_kwarg() -> None:
+    """Test `reasoning_effort` doesn't leak through as a stray request kwarg."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    assert "reasoning_effort" not in request
+
+
+def test_reasoning_effort_constructor_kwarg_does_not_warn() -> None:
+    """Test `reasoning_effort` doesn't log an unexpected-argument warning."""
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            reasoning_effort="high",
+        )
+    mock_warning.assert_not_called()
+
+
+_ALL_REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high"]
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_levels", "expected_default"),
+    [
+        ("gemini-3-flash-preview", _ALL_REASONING_EFFORT_LEVELS, "high"),
+        ("gemini-3-pro-image-preview", None, None),
+        ("gemini-3-pro-preview", ["low", "high"], "high"),
+        ("gemini-3.1-flash-image-preview", ["minimal", "high"], "minimal"),
+        ("gemini-3.1-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
+        (
+            "gemini-3.1-flash-lite-preview",
+            _ALL_REASONING_EFFORT_LEVELS,
+            "minimal",
+        ),
+        ("gemini-3.1-pro-preview", ["low", "medium", "high"], "high"),
+        (
+            "gemini-3.1-pro-preview-customtools",
+            ["low", "medium", "high"],
+            "high",
+        ),
+        ("gemini-3.5-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-3.5-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
+        ("gemini-3.6-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-2.5-pro", None, None),
+    ],
+)
+def test_reasoning_effort_profile_fields(
+    model_name: str,
+    expected_levels: list[str] | None,
+    expected_default: str | None,
+) -> None:
+    """Test reasoning effort profile fields match the supported model settings."""
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    assert llm.profile is not None
+    assert llm.profile.get("reasoning_effort_levels") == expected_levels
+    assert llm.profile.get("reasoning_effort_default") == expected_default
+
+
 def test_kwargs_override_max_output_tokens() -> None:
     """Test that max_output_tokens can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
@@ -4559,6 +4979,282 @@ def test_kwargs_override_stop() -> None:
     request = llm._prepare_request([msg], stop=["me"])
     config = request["config"]
     assert config.stop_sequences == ["me"]
+
+
+def test_kwargs_stop_sequences_overrides_constructor_stop() -> None:
+    """Test that per-call `stop_sequences` overrides constructor `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["you"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop_sequences=["me"])
+    config = request["config"]
+    assert config.stop_sequences == ["me"]
+
+
+def test_generation_config_constructor_fields_are_propagated() -> None:
+    """Test Google generation config field aliases are propagated."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        presence_penalty=0.1,
+        frequency_penalty=0.2,
+        candidate_count=2,
+        stop_sequences=["stop"],
+    )
+
+    assert llm.model_kwargs == {}
+    assert llm.n == 2
+    assert llm.stop == ["stop"]
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.presence_penalty == 0.1
+    assert config.frequency_penalty == 0.2
+    assert config.candidate_count == 2
+    assert config.stop_sequences == ["stop"]
+
+
+def test_generation_config_constructor_defaults_are_preserved() -> None:
+    """Test unset generation config fields keep default request semantics."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.presence_penalty is None
+    assert config.frequency_penalty is None
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+@pytest.mark.parametrize(
+    ("constructor_kwargs", "request_kwargs"),
+    [
+        ({"temperature": 0.2, "top_k": 10, "top_p": 0.8}, {}),
+        ({}, {"temperature": 0.2, "top_k": 10, "top_p": 0.8}),
+        (
+            {},
+            {
+                "generation_config": {
+                    "temperature": 0.2,
+                    "top_k": 10,
+                    "top_p": 0.8,
+                }
+            },
+        ),
+    ],
+)
+def test_fixed_sampling_models_omit_custom_sampling_parameters(
+    model: str,
+    constructor_kwargs: dict[str, Any],
+    request_kwargs: dict[str, Any],
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+        **constructor_kwargs,
+    )
+
+    # The warning firing for every source also proves the parameters actually
+    # reached the request before being stripped (a per-source positive control).
+    with pytest.warns(UserWarning, match="will be ignored"):
+        request = llm._prepare_request(
+            [HumanMessage(content="test")],
+            **request_kwargs,
+        )
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert {"temperature", "top_k", "top_p"}.isdisjoint(request_config)
+    assert request_config["max_output_tokens"] == 100
+
+
+def test_fixed_sampling_model_without_sampling_parameters_does_not_warn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        llm._prepare_request([HumanMessage(content="test")])
+
+    assert not [w for w in caught if "will be ignored" in str(w.message)]
+
+
+def test_other_models_preserve_custom_sampling_parameters() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        temperature=0.2,
+        top_k=10,
+        top_p=0.8,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert not [w for w in caught if "will be ignored" in str(w.message)]
+    assert request_config["temperature"] == 0.2
+    assert request_config["top_k"] == 10
+    assert request_config["top_p"] == 0.8
+
+
+def test_n_constructor_field_sets_candidate_count() -> None:
+    """Test LangChain `n` field still sets Google `candidate_count`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.candidate_count == 2
+
+
+def test_kwargs_override_generation_config_constructor_fields() -> None:
+    """Test per-call kwargs override model-level generation config fields."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        presence_penalty=0.1,
+        frequency_penalty=0.2,
+        candidate_count=2,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        candidate_count=3,
+        presence_penalty=0.0,
+        frequency_penalty=0.5,
+    )
+    config = request["config"]
+    assert config.presence_penalty == 0.0
+    assert config.frequency_penalty == 0.5
+    assert config.candidate_count == 3
+
+
+def test_constructor_stop_is_propagated() -> None:
+    """Test model-level `stop` is propagated when no per-call stop is passed."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.stop_sequences == ["stop"]
+
+
+def test_per_call_empty_stop_overrides_constructor_stop() -> None:
+    """Test a per-call empty `stop` list clears the model-level `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop=[])
+    config = request["config"]
+    # An empty list is a valid "clear the stops" signal and must not fall back
+    # to the model-level `stop`.
+    assert config.stop_sequences == []
+
+
+def test_n_and_candidate_count_alias_resolves_to_alias() -> None:
+    """Test passing both `n` and its `candidate_count` alias: alias wins.
+
+    Pins the standard Pydantic `populate_by_name=True` resolution order so a
+    future change to alias handling is caught.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+        candidate_count=5,
+    )
+
+    assert llm.n == 5
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.5, 2.1, 5.0])
+def test_penalty_out_of_range_raises(field: str, value: float) -> None:
+    """Test penalties outside `[-2.0, 2.0]` are rejected at construction."""
+    with pytest.raises(ValueError, match=f"{field} must be in the range"):
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **{field: value},
+        )
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.0, 2.0])
+def test_penalty_range_bounds_are_allowed(field: str, value: float) -> None:
+    """Test penalties at the documented bounds are accepted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        **{field: value},
+    )
+
+    assert getattr(llm, field) == value
+
+
+def test_penalties_in_identifying_params() -> None:
+    """Test penalties are included in identifying parameters for tracing."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    params = llm._identifying_params
+    assert params["frequency_penalty"] == 0.2
+    assert params["presence_penalty"] == 0.1
+
+
+def test_serialize_round_trips_generation_config_aliases() -> None:
+    """Test alias-set generation config fields survive serialization."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        candidate_count=2,
+        stop_sequences=["stop"],
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    serialized = dumps(llm)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+    assert llm_loaded.n == 2
+    assert llm_loaded.stop == ["stop"]
 
 
 def test_kwargs_override_thinking_budget() -> None:

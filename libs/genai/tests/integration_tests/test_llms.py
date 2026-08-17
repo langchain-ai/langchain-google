@@ -3,6 +3,7 @@
 Chat model tests are in `test_chat_models.py` and use `ChatGoogleGenerativeAI`.
 """
 
+import os
 from collections.abc import Generator
 
 import pytest
@@ -11,6 +12,15 @@ from langchain_core.outputs import LLMResult
 from langchain_google_genai import GoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 
 MODEL_NAMES = ["gemini-3.5-flash"]
+
+# Whether requests route through the LangSmith gateway. Mirrors the truthiness
+# used by `langchain_core`'s gateway resolution.
+_GATEWAY_ENABLED = (os.environ.get("LANGSMITH_GATEWAY") or "").lower() not in (
+    "",
+    "false",
+    "0",
+    "no",
+)
 
 
 @pytest.mark.parametrize(
@@ -87,6 +97,11 @@ def test_generativeai_stream(model_name: str, backend_config: dict) -> None:
 def test_generativeai_get_num_tokens_gemini(
     model_name: str, backend_config: dict
 ) -> None:
+    if _GATEWAY_ENABLED and not backend_config.get("vertexai"):
+        pytest.skip(
+            "The LangSmith gateway does not proxy Gemini's countTokens action; "
+            "see test_gateway_gemini_counttokens_unsupported in test_chat_models.py."
+        )
     llm = GoogleGenerativeAI(temperature=0, model=model_name, **backend_config)
     output = llm.get_num_tokens("How are you?")
     assert output == 4

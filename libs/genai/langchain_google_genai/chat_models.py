@@ -96,7 +96,14 @@ from langchain_core.utils.function_calling import (
 )
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self, is_typeddict
 
@@ -218,6 +225,28 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     Raised when there are specific issues related to the Google GenAI API usage in the
     `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
     """
+
+
+# Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
+# custom sampling parameters and disallows prefilling model turns. Per Google's
+# docs these rules apply to "these models and all future Gemini model releases",
+# but Gemini version numbers are not monotonic across variants (e.g. plain
+# `gemini-3.5-flash` is *not* affected while `gemini-3.5-flash-lite` is), so the
+# affected models are tracked by an explicit allowlist. Add future GA models here
+# as they ship.
+_FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
+    {"gemini-3.5-flash-lite", "gemini-3.6-flash"}
+)
+_CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
+
+
+def _uses_fixed_sampling_and_disallows_prefill(model_name: str) -> bool:
+    """Check whether a model uses fixed sampling and rejects model prefills."""
+    if not model_name:
+        return False
+    normalized_model = model_name.lower().rsplit("/", 1)[-1]
+    normalized_model = re.sub(r"-\d{3}$", "", normalized_model)
+    return normalized_model in _FIXED_SAMPLING_AND_NO_PREFILL_MODELS
 
 
 def _is_gemini_3_or_later(model_name: str) -> bool:
@@ -2001,8 +2030,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         for more info.
 
         Gemini 3+ models use [`thinking_level`][langchain_google_genai.ChatGoogleGenerativeAI.thinking_level]
-        (`'low'`, `'medium'`, or `'high'`) to control reasoning depth. If not specified,
-        defaults to `'high'`.
+        to control reasoning depth. Supported levels and defaults vary by model. Check
+        `model.profile` for `reasoning_effort_levels` and
+        `reasoning_effort_default`.
 
         ```python
         model = ChatGoogleGenerativeAI(
@@ -2336,7 +2366,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
-    stop: list[str] | None = None
+    stop: list[str] | None = Field(default=None, alias="stop_sequences")
     """Stop sequences for the model."""
 
     response_mime_type: str | None = None
@@ -2381,23 +2411,52 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    thinking_level: Literal["minimal", "low", "medium", "high"] | None = Field(
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
+        alias="thinking_level",
     )
     """Indicates the thinking level.
 
-    Supported values:
+    Possible values (support varies by model):
+        * `'minimal'`: Lowest available reasoning depth.
         * `'low'`: Minimizes latency and cost.
         * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
 
+    Check the model profile's `reasoning_effort_levels` and
+    `reasoning_effort_default` fields for model-specific support. If those fields are
+    unavailable, consult the upstream
+    [Gemini API docs](https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels-gemini-3).
+
     !!! note "Replaces `thinking_budget`"
 
         `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
-        provided, `thinking_level` takes precedence.
+        provided, this field takes precedence.
 
-        If left unspecified, the model's default thinking level is used. For Gemini 3+,
-        this defaults to `'high'`.
+        If left unspecified, the model's default thinking level is used.
+
+    !!! note "`thinking_level` alias"
+
+        `thinking_level` -- Gemini's own native name for this setting -- is also
+        accepted as an alias for this field, at both construction and call time.
+        If both `thinking_level` and `reasoning_effort` are set, `thinking_level`
+        wins (Pydantic's alias-resolution precedence). Use `reasoning_effort` or
+        `thinking_level` interchangeably to read the value back.
+    """
+
+    thinking_config: dict[str, Any] | ThinkingConfig | None = Field(
+        default=None,
+    )
+    """Raw Google GenAI thinking configuration.
+
+    Accepts the same fields as `google.genai.types.ThinkingConfig`, including
+    `thinking_level`, `thinking_budget`, and `include_thoughts`.
+
+    !!! note "Precedence"
+
+        If `thinking_config` is provided together with flat thinking arguments,
+        the flat arguments take precedence for matching fields. After merging,
+        `thinking_level` takes precedence over `thinking_budget` for Gemini 3+ models.
     """
 
     cached_content: str | None = None
@@ -2441,6 +2500,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return "chat-google-generative-ai"
 
     @property
+    def thinking_level(self) -> Literal["minimal", "low", "medium", "high"] | None:
+        """Alias for `reasoning_effort` (Gemini's native name for this setting)."""
+        return self.reasoning_effort
+
+    @property
     def _supports_code_execution(self) -> bool:
         """Whether the model supports code execution.
 
@@ -2453,6 +2517,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @classmethod
     def is_lc_serializable(cls) -> bool:
         return True
+
+    @field_validator("thinking_config", mode="before")
+    @classmethod
+    def _serialize_thinking_config(
+        cls, value: ThinkingConfig | dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if isinstance(value, ThinkingConfig):
+            return value.model_dump(exclude_none=True)
+        return value
 
     @model_validator(mode="before")
     @classmethod
@@ -2474,20 +2547,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
-        """Validates params and builds client.
-
-        We override `temperature` to `1.0` for Gemini 3+ models if not explicitly set.
-        This is to prevent infinite loops and degraded performance that can occur with
-        `temperature < 1.0` on these models.
-        """
-        if self.temperature is not None and not 0 <= self.temperature <= 2.0:
-            msg = "temperature must be in the range [0.0, 2.0]"
-            raise ValueError(msg)
-
+        """Validates params and builds client."""
         if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
             self.model
         ):
-            self.temperature = 1.0
+            self.temperature = None
+
+        if self.temperature is not None and not 0 <= self.temperature <= 2.0:
+            msg = "temperature must be in the range [0.0, 2.0]"
+            raise ValueError(msg)
 
         if self.top_p is not None and not 0 <= self.top_p <= 1:
             msg = "top_p must be in the range [0.0, 1.0]"
@@ -2495,6 +2563,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         if self.top_k is not None and self.top_k <= 0:
             msg = "top_k must be positive"
+            raise ValueError(msg)
+
+        if (
+            self.frequency_penalty is not None
+            and not -2.0 <= self.frequency_penalty <= 2.0
+        ):
+            msg = "frequency_penalty must be in the range [-2.0, 2.0]"
+            raise ValueError(msg)
+
+        if (
+            self.presence_penalty is not None
+            and not -2.0 <= self.presence_penalty <= 2.0
+        ):
+            msg = "presence_penalty must be in the range [-2.0, 2.0]"
             raise ValueError(msg)
 
         additional_headers = self.additional_headers or {}
@@ -2665,6 +2747,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return {
             "model": self.model,
             "temperature": self.temperature,
+            "frequency_penalty": self.frequency_penalty,
+            "presence_penalty": self.presence_penalty,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "max_output_tokens": self.max_output_tokens,
@@ -2674,7 +2758,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "media_resolution": self.media_resolution,
             "thinking_budget": self.thinking_budget,
             "include_thoughts": self.include_thoughts,
-            "thinking_level": self.thinking_level,
+            "thinking_level": self.reasoning_effort,
+            "thinking_config": self.thinking_config,
             "image_config": self.image_config,
         }
 
@@ -2754,14 +2839,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> dict[str, Any]:
         """Build the base generation configuration from instance attributes."""
         config: dict[str, Any] = {
-            "candidate_count": self.n,
+            "candidate_count": kwargs.get("candidate_count", self.n),
             "temperature": kwargs.get("temperature", self.temperature),
-            "stop_sequences": stop,
+            "stop_sequences": (
+                stop if stop is not None else kwargs.get("stop_sequences", self.stop)
+            ),
             "max_output_tokens": kwargs.get(
                 "max_output_tokens", self.max_output_tokens
             ),
             "top_k": kwargs.get("top_k", self.top_k),
             "top_p": kwargs.get("top_p", self.top_p),
+            "frequency_penalty": kwargs.get(
+                "frequency_penalty", self.frequency_penalty
+            ),
+            "presence_penalty": kwargs.get("presence_penalty", self.presence_penalty),
             "response_modalities": kwargs.get(
                 "response_modalities", self.response_modalities
             ),
@@ -2796,12 +2887,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
     def _build_thinking_config(self, **kwargs: Any) -> ThinkingConfig | None:
         """Build thinking configuration if supported by the model."""
-        thinking_level = kwargs.get("thinking_level", self.thinking_level)
+        raw_thinking_config = kwargs.get("thinking_config", self.thinking_config)
+        # `thinking_level` is Gemini's native alias for `reasoning_effort`
+        # (`Field(alias="thinking_level")`). Pydantic aliases don't apply to
+        # call-time kwargs, so it's resolved here too. `thinking_level` wins if
+        # both are set, matching the construction-time alias-resolution
+        # precedence.
+        thinking_level = kwargs.get(
+            "thinking_level", kwargs.get("reasoning_effort", self.reasoning_effort)
+        )
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
 
         has_thinking_params = (
-            thinking_level is not None
+            raw_thinking_config is not None
+            or thinking_level is not None
             or thinking_budget is not None
             or include_thoughts is not None
         )
@@ -2809,23 +2909,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             return None
 
         config: dict[str, Any] = {}
-
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
-        if thinking_level is not None:
-            if thinking_budget is not None:
-                warnings.warn(
-                    "Both 'thinking_level' and 'thinking_budget' were provided. "
-                    "'thinking_level' takes precedence for Gemini 3+ models; "
-                    "'thinking_budget' will be ignored.",
-                    UserWarning,
-                    stacklevel=2,
+        if raw_thinking_config is not None:
+            config.update(
+                ThinkingConfig.model_validate(raw_thinking_config).model_dump(
+                    exclude_none=True
                 )
-            config["thinking_level"] = thinking_level
-        elif thinking_budget is not None:
-            config["thinking_budget"] = thinking_budget
+            )
 
+        if thinking_level is not None:
+            config["thinking_level"] = thinking_level
+        if thinking_budget is not None:
+            config["thinking_budget"] = thinking_budget
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
+
+        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        if "thinking_level" in config and "thinking_budget" in config:
+            warnings.warn(
+                "Both 'thinking_level' and 'thinking_budget' were set after merging "
+                "thinking configuration values. 'thinking_level' takes precedence "
+                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
+            config.pop("thinking_budget")
 
         return ThinkingConfig(**config)
 
@@ -2931,6 +3038,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             convert_system_message_to_human=self.convert_system_message_to_human,
             model=self.model,
         )
+        if (
+            _uses_fixed_sampling_and_disallows_prefill(self.model)
+            and history
+            and history[-1].role == "model"
+        ):
+            msg = (
+                f"Model '{self.model}' does not support model prefilling. The final "
+                "request turn must be a user message or a function response."
+            )
+            raise ValueError(msg)
 
         # Process tool configuration
         formatted_tool_config = self._process_tool_config(
@@ -2986,6 +3103,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_budget",
             "thinking_level",
             "include_thoughts",
+            "reasoning_effort",
             "response_schema",
             "response_json_schema",
             "response_mime_type",
@@ -3032,12 +3150,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return None
 
     def _filter_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
-        """Filter out messages with empty content."""
-        filtered_messages = []
+        """Normalize messages with empty content."""
+        filtered_messages: list[BaseMessage] = []
         for message in messages:
             if isinstance(message, HumanMessage) and not message.content:
                 warnings.warn(
                     "HumanMessage with empty content was removed to prevent API error"
+                )
+            elif (
+                self._use_vertexai  # type: ignore[attr-defined]
+                and isinstance(message, AIMessage)
+                and message.content == []
+            ):
+                filtered_messages.append(
+                    message.model_copy(
+                        update={"content": [{"type": "text", "text": ""}]}
+                    )
                 )
             else:
                 filtered_messages.append(message)
@@ -3191,6 +3319,28 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if image_config_dict is not None:
             image_config_obj = ImageConfig(**image_config_dict)
 
+        request_params = params.model_dump(exclude_unset=True)
+        if _uses_fixed_sampling_and_disallows_prefill(self.model):
+            # These models use fixed sampling defaults and ignore custom sampling
+            # parameters. Drop them from the request and warn so an explicitly-set
+            # value isn't silently discarded (consistent with how superseded
+            # thinking parameters are handled above).
+            ignored_parameters = [
+                parameter
+                for parameter in _CUSTOM_SAMPLING_PARAMETERS
+                if parameter in request_params
+            ]
+            if ignored_parameters:
+                warnings.warn(
+                    f"Model '{self.model}' uses fixed sampling defaults; the "
+                    f"sampling parameter(s) {', '.join(ignored_parameters)} "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                for parameter in ignored_parameters:
+                    request_params.pop(parameter, None)
+
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
@@ -3200,7 +3350,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options=http_options,
             image_config=image_config_obj,
             labels=labels,
-            **params.model_dump(exclude_unset=True),
+            **request_params,
             **kwargs,
         )
 

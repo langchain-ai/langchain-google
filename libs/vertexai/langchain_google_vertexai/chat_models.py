@@ -167,7 +167,6 @@ _allowed_params = [
     "seed",
     "response_logprobs",
     "logprobs",
-    "labels",
     "audio_timestamp",
     "response_modalities",
     "thinking_budget",
@@ -180,7 +179,6 @@ _allowed_params_prediction_service = [
     "request",
     "timeout",
     "metadata",
-    "labels",
     # Allow controlling GAPIC client retries from callers.
     "retry",
 ]
@@ -1899,7 +1897,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     """
 
     labels: dict[str, str] | None = None
-    """Optional tag llm calls with metadata to help in tracebility and biling."""
+    """Optional tag llm calls with metadata to help in traceability and billing."""
 
     perform_literal_eval_on_string_raw_content: bool = False
     """Whether to perform literal eval on string raw content."""
@@ -2242,6 +2240,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         formatted_safety_settings = self._safety_settings_gemini(safety_settings)
         logprobs = logprobs if logprobs is not None else self.logprobs
         logprobs = logprobs if isinstance(logprobs, (int, bool)) else False
+        # `labels` belongs on the request envelope (`GenerateContentRequest`), not on
+        # `GenerationConfig` (which rejects unknown fields) nor on the GAPIC
+        # `generate_content` call (which has no `labels` parameter). It is therefore
+        # excluded from both `_allowed_params` and `_allowed_params_prediction_service`
+        # so it cannot leak into either path. Pop any per-call value here and route it
+        # to the envelope below, falling back to the instance value.
+        request_labels = kwargs.pop("labels", None)
+        request_labels = request_labels if request_labels is not None else self.labels
         generation_config = self._generation_config_gemini(
             stream=stream, stop=stop, logprobs=logprobs, **kwargs
         )
@@ -2334,6 +2340,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                     safety_settings=v1_safety_settings,
                     generation_config=generation_config,
                     cached_content=full_cache_name,
+                    labels=request_labels,
                 )
 
             return GenerateContentRequest(
@@ -2342,6 +2349,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 safety_settings=formatted_safety_settings,
                 generation_config=generation_config,
                 cached_content=full_cache_name,
+                labels=request_labels,
             )
 
         if self.endpoint_version == "v1":
@@ -2353,7 +2361,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 safety_settings=v1_safety_settings,
                 generation_config=generation_config,
                 model=self.full_model_name,
-                labels=self.labels,
+                labels=request_labels,
             )
 
         return GenerateContentRequest(
@@ -2364,7 +2372,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             safety_settings=formatted_safety_settings,
             generation_config=generation_config,
             model=self.full_model_name,
-            labels=self.labels,
+            labels=request_labels,
         )
 
     def _request_from_cached_content(

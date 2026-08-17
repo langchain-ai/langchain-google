@@ -364,15 +364,18 @@ def test_init_client_with_custom_model_kwargs() -> None:
 @pytest.mark.parametrize(
     ("model_name", "expected_max_tokens"),
     [
+        ("claude-sonnet-4-5@20250929", 64000),
+        ("claude-opus-4-1@20250805", 32000),
+        ("claude-opus-4-5@20251101", 64000),
+        ("claude-opus-4-6@default", 128000),
+        ("claude-sonnet-4-6@default", 128000),
+        ("claude-opus-4-8@default", 128000),
+        ("claude-haiku-4-5@20251001", 64000),
+        # Bare base names resolve to the unique `@`-versioned profile.
         ("claude-sonnet-4-5", 64000),
-        ("claude-sonnet-4-5-20250929", 64000),
-        ("claude-opus-4-0", 32000),
-        ("claude-opus-4-5", 64000),
-        ("claude-opus-4-6", 128000),
-        ("claude-3-5-sonnet-20241022", 8192),
-        ("claude-3-7-sonnet-20250219", 64000),
+        ("claude-sonnet-4-6", 128000),
+        ("claude-opus-4-8", 128000),
         ("claude-haiku-4-5", 64000),
-        ("claude-3-opus-20240229", 4096),
     ],
 )
 def test_anthropic_vertex_model_aware_max_tokens(
@@ -401,7 +404,7 @@ def test_anthropic_vertex_unknown_model_fallback() -> None:
 def test_anthropic_vertex_explicit_max_tokens_override() -> None:
     """Test that explicitly set max_output_tokens is not overridden."""
     llm = ChatAnthropicVertex(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
         max_output_tokens=2048,
@@ -412,7 +415,7 @@ def test_anthropic_vertex_explicit_max_tokens_override() -> None:
 def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
     """Test that max_tokens alias also prevents override."""
     llm = ChatAnthropicVertex(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
         max_tokens=512,
@@ -432,19 +435,21 @@ def test_anthropic_vertex_no_model_falls_back() -> None:
 def test_anthropic_vertex_model_alias_resolves_profile() -> None:
     """`model=` alias should resolve the same profile as `model_name=`."""
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
     )
     assert llm.max_output_tokens == 64000
 
 
-def test_anthropic_profiles_smoke() -> None:
-    """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
-    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+def test_anthropic_vertex_profiles_smoke() -> None:
+    """Auto-generated Vertex `_PROFILES` includes Anthropic model metadata."""
+    from langchain_google_vertexai.data._profiles import _PROFILES
 
     assert _PROFILES
-    sample = next(iter(_PROFILES.values()))
+    claude_profiles = [v for k, v in _PROFILES.items() if k.startswith("claude-")]
+    assert claude_profiles
+    sample = claude_profiles[0]
     assert "max_output_tokens" in sample
 
 
@@ -455,7 +460,7 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
     from langchain_google_vertexai import model_garden
 
     monkeypatch.setitem(
-        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        model_garden._VERTEX_PROFILES,  # noqa: SLF001
         "claude-test-no-output-key",
         {"name": "Test"},
     )
@@ -469,7 +474,9 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
 
 def test_profile() -> None:
     model = ChatVertexAI(
-        model="gemini-2.0-flash", project="test-project", location="moon-dark1"
+        model="meta/llama-3.3-70b-instruct-maas",
+        project="test-project",
+        location="moon-dark1",
     )
     assert model.profile
     assert not model.profile["reasoning_output"]
@@ -1930,6 +1937,101 @@ def test_thinking_configuration() -> None:
     )
     assert request.generation_config.thinking_config.thinking_budget == 100
     assert request.generation_config.thinking_config.include_thoughts is True
+
+
+def test_labels_on_request_envelope() -> None:
+    """`labels` belongs on the request envelope, not on `GenerationConfig`.
+
+    Regression test: passing `labels` as an invocation-time keyword used to leak into
+    `GenerationConfig`, which rejects unknown fields and raised
+    ``ValueError: Unknown field for GenerationConfig: labels``.
+    """
+    input_message = HumanMessage("Query.")
+
+    # Init param: labels land on the request envelope.
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    # Invocation param must not raise (the regression) and overrides the init value.
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+    # Invocation param with no init value.
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    request = llm._prepare_request_gemini([input_message], labels={"only": "per-call"})
+    assert dict(request.labels) == {"only": "per-call"}
+
+    # No labels anywhere.
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {}
+
+
+def test_labels_on_request_envelope_cached_content() -> None:
+    """`labels` reach the envelope on the cached-content path.
+
+    Previously the cached-content branches omitted `labels` entirely, silently
+    dropping them; init-time and per-call values must now propagate.
+    """
+    input_message = HumanMessage("Query.")
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        cached_content="my-cache",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+
+def test_labels_on_request_envelope_v1_endpoint() -> None:
+    """`labels` reach the envelope on the ``v1`` endpoint path."""
+    input_message = HumanMessage("Query.")
+
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        endpoint_version="v1",
+        labels={"team": "qa"},
+    )
+    request = llm._prepare_request_gemini([input_message])
+    assert dict(request.labels) == {"team": "qa"}
+
+    request = llm._prepare_request_gemini([input_message], labels={"env": "prod"})
+    assert dict(request.labels) == {"env": "prod"}
+
+
+def test_labels_via_public_invoke() -> None:
+    """End-to-end: ``invoke(..., labels=...)`` routes labels to the envelope only.
+
+    Guards the user-facing path. ``labels`` must land on ``request.labels`` and must
+    NOT leak as a keyword to the GAPIC ``generate_content`` call, which has no
+    ``labels`` parameter and would raise ``TypeError`` in production.
+    """
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
+        response = GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hi")]))]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
+
+        llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+        llm.invoke([HumanMessage("Query.")], labels={"env": "prod"})
+
+        mock_generate_content.assert_called_once()
+        call_kwargs = mock_generate_content.call_args.kwargs
+        assert dict(call_kwargs["request"].labels) == {"env": "prod"}
+        assert "labels" not in call_kwargs
 
 
 def test_thought_signature() -> None:
