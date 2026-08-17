@@ -1351,10 +1351,11 @@ def _response_to_result(
     # `usage_metadata.traffic_type` is only populated on the Vertex AI backend and
     # reports which quota (e.g. on-demand vs. provisioned throughput) served the
     # request.
-    traffic_type: str | None = None
-    if response.usage_metadata and response.usage_metadata.traffic_type:
-        raw_traffic_type = response.usage_metadata.traffic_type
-        traffic_type = getattr(raw_traffic_type, "name", str(raw_traffic_type))
+    traffic_type = (
+        response.usage_metadata.traffic_type.name
+        if response.usage_metadata and response.usage_metadata.traffic_type
+        else None
+    )
 
     generations: list[ChatGeneration] = []
 
@@ -1374,8 +1375,6 @@ def _response_to_result(
             generation_info["model_name"] = response.model_version or ""
             # Set for final chunk
             model_name_for_metadata = response.model_version
-            if traffic_type:
-                generation_info["traffic_type"] = traffic_type
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings
@@ -1398,6 +1397,7 @@ def _response_to_result(
         # Only include traffic_type in the final chunk (when finish_reason exists)
         # to avoid duplication when chunks are concatenated with +=
         if candidate.finish_reason and traffic_type:
+            generation_info["traffic_type"] = traffic_type
             message.response_metadata["traffic_type"] = traffic_type
 
         try:
@@ -2332,6 +2332,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "model_provider": "google_genai",
             "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
             "finish_reason": "STOP",
+            # Only present on the Vertex AI backend
+            "traffic_type": "ON_DEMAND",
             "safety_ratings": [
                 {
                     "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
