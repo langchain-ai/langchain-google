@@ -1348,6 +1348,14 @@ def _response_to_result(
     except AttributeError:
         lc_usage = None
 
+    # `usage_metadata.traffic_type` is only populated on the Vertex AI backend and
+    # reports which quota (e.g. on-demand vs. provisioned throughput) served the
+    # request.
+    traffic_type: str | None = None
+    if response.usage_metadata and response.usage_metadata.traffic_type:
+        raw_traffic_type = response.usage_metadata.traffic_type
+        traffic_type = getattr(raw_traffic_type, "name", str(raw_traffic_type))
+
     generations: list[ChatGeneration] = []
 
     for candidate in response.candidates or []:
@@ -1366,6 +1374,8 @@ def _response_to_result(
             generation_info["model_name"] = response.model_version or ""
             # Set for final chunk
             model_name_for_metadata = response.model_version
+            if traffic_type:
+                generation_info["traffic_type"] = traffic_type
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings
@@ -1384,6 +1394,11 @@ def _response_to_result(
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
+
+        # Only include traffic_type in the final chunk (when finish_reason exists)
+        # to avoid duplication when chunks are concatenated with +=
+        if candidate.finish_reason and traffic_type:
+            message.response_metadata["traffic_type"] = traffic_type
 
         try:
             if candidate.grounding_metadata:
