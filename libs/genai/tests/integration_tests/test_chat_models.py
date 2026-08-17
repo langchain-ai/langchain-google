@@ -231,7 +231,7 @@ async def test_chat_google_genai_invoke(is_async: bool, backend_config: dict) ->
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
+async def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
     """Test generating an image and then text.
 
     Using `generation_config` to specify response modalities.
@@ -242,7 +242,7 @@ def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
 
     for _ in range(3):
         # We break as soon as we get an image back, as it's not guaranteed
-        result = llm.invoke(
+        result = await llm.ainvoke(
             "Say 'meow!' and then Generate an image of a cat.",
             config={"tags": ["meow"]},
             generation_config={
@@ -273,7 +273,7 @@ def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
-    _ = llm.invoke([result, next_message])
+    _ = await llm.ainvoke([result, next_message])
 
     # Test content_blocks property
     content_blocks = result.content_blocks
@@ -285,10 +285,12 @@ def test_chat_google_genai_invoke_with_image(backend_config: dict) -> None:
     assert content_blocks[1].get("type") == "image"
 
     # Test we can pass back in content_blocks
-    _ = llm.invoke(["What's this?", {"role": "assistant", "content": content_blocks}])
+    _ = await llm.ainvoke(
+        ["What's this?", {"role": "assistant", "content": content_blocks}]
+    )
 
 
-def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
+async def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
     """Test generating audio."""
     # Skip on Vertex AI - having some issues possibly upstream
     # TODO: look later
@@ -301,7 +303,7 @@ def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
         **backend_config,
     )
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "Please say The quick brown fox jumps over the lazy dog",
     )
     assert isinstance(result, AIMessage)
@@ -329,7 +331,7 @@ def test_chat_google_genai_invoke_with_audio(backend_config: dict) -> None:
         (100, "explicit thinking budget"),
     ],
 )
-def test_chat_google_genai_invoke_thinking(
+async def test_chat_google_genai_invoke_thinking(
     thinking_budget: int | None, test_description: str, backend_config: dict
 ) -> None:
     """Test invoke a thinking model with different thinking budget configurations."""
@@ -339,7 +341,7 @@ def test_chat_google_genai_invoke_thinking(
 
     llm = ChatGoogleGenerativeAI(**llm_kwargs, **backend_config)
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "How many O's are in Google? Please tell me how you double checked the result",
     )
 
@@ -439,7 +441,7 @@ def _check_thinking_output(content: list, output_version: str) -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_chat_google_genai_invoke_thinking_include_thoughts(
+async def test_chat_google_genai_invoke_thinking_include_thoughts(
     output_version: str, backend_config: dict
 ) -> None:
     """Test invoke thinking model with `include_thoughts`."""
@@ -487,7 +489,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
 
     # Test we can pass back in
     next_message = {"role": "user", "content": "Thanks!"}
-    result = llm.invoke([input_message, full, next_message])
+    result = await llm.ainvoke([input_message, full, next_message])
     assert isinstance(result, AIMessage)
     # Follow-up response should also maintain structured format
     assert isinstance(result.content, list), (
@@ -499,7 +501,7 @@ def test_chat_google_genai_invoke_thinking_include_thoughts(
 
 @pytest.mark.flaky(retries=5, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_chat_google_genai_invoke_thinking_with_tools(
+async def test_chat_google_genai_invoke_thinking_with_tools(
     output_version: str, backend_config: dict
 ) -> None:
     """Test thinking with function calling to get thought signatures.
@@ -547,7 +549,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
         ),
     }
 
-    result = llm_with_required_tools.invoke([input_message])
+    result = await llm_with_required_tools.ainvoke([input_message])
 
     assert isinstance(result, AIMessage)
     content = result.content
@@ -585,7 +587,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 
         # Test we can pass the result back in (with signature)
         next_message = {"role": "user", "content": "Thanks!"}
-        _ = llm_with_tools.invoke([input_message, result, next_message])
+        _ = await llm_with_tools.ainvoke([input_message, result, next_message])
     else:
         # v1 format:
         # Signatures are attached to function_call Parts, not reasoning Parts.
@@ -619,7 +621,9 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 
         # Test we can pass the result back in (with signature)
         next_message = {"role": "user", "content": "Thanks!"}
-        follow_up_result = llm_with_tools.invoke([input_message, result, next_message])
+        follow_up_result = await llm_with_tools.ainvoke(
+            [input_message, result, next_message]
+        )
 
         # Verify the follow-up call succeeded and returned a valid response
         assert isinstance(follow_up_result, AIMessage)
@@ -638,7 +642,7 @@ def test_chat_google_genai_invoke_thinking_with_tools(
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_thought_signature_round_trip(backend_config: dict) -> None:
+async def test_thought_signature_round_trip(backend_config: dict) -> None:
     """Test thought signatures are properly preserved in round-trip conversations."""
     # TODO: could paramaterize over output_version too
 
@@ -673,7 +677,7 @@ def test_thought_signature_round_trip(backend_config: dict) -> None:
 
         mock_convert.side_effect = real_convert
 
-        first_result = llm_with_required_tools.invoke([first_message])
+        first_result = await llm_with_required_tools.ainvoke([first_message])
 
         # Verify we got a response with structured content (contains signatures)
         assert isinstance(first_result, AIMessage)
@@ -681,7 +685,7 @@ def test_thought_signature_round_trip(backend_config: dict) -> None:
 
         # Second call - this should trigger signature conversion
         second_message = {"role": "user", "content": "Thanks!"}
-        second_result = llm_with_tools.invoke(
+        second_result = await llm_with_tools.ainvoke(
             [first_message, first_result, second_message]
         )
 
@@ -702,14 +706,14 @@ def test_thought_signature_round_trip(backend_config: dict) -> None:
         assert second_result.content is not None
 
 
-def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> None:
+async def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> None:
     """Test invoking a thinking model with zero `thinking_budget`."""
     # Note certain models may not allow `thinking_budget=0`
     llm = ChatGoogleGenerativeAI(
         model=_THINKING_MODEL, thinking_budget=0, **backend_config
     )
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "How many O's are in Google? Please tell me how you double checked the result",
     )
 
@@ -723,13 +727,13 @@ def test_chat_google_genai_invoke_thinking_disabled(backend_config: dict) -> Non
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_google_genai_invoke_no_image_generation_without_modalities(
+async def test_chat_google_genai_invoke_no_image_generation_without_modalities(
     backend_config: dict,
 ) -> None:
     """Test invoke tokens with image without response modalities."""
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "Generate an image of a cat. Then, say meow!",
         config={"tags": ["meow"]},
         generation_config={"top_k": 2, "top_p": 1, "temperature": 0.7},
@@ -773,7 +777,7 @@ def test_chat_google_genai_invoke_no_image_generation_without_modalities(
     ],
 )
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_chat_google_genai_multimodal(
+async def test_chat_google_genai_multimodal(
     test_case: str,
     messages: list[BaseMessage],
     use_streaming: bool,
@@ -810,7 +814,7 @@ def test_chat_google_genai_multimodal(
         assert any_chunk
     else:
         # Test invoke
-        response = llm.invoke(messages)
+        response = await llm.ainvoke(messages)
         assert isinstance(response, AIMessage)
         if isinstance(response.content, list):
             text_content = "".join(
@@ -824,7 +828,7 @@ def test_chat_google_genai_multimodal(
             assert len(response.content.strip()) > 0
 
 
-def test_multimodal_pdf_input_url(backend_config: dict) -> None:
+async def test_multimodal_pdf_input_url(backend_config: dict) -> None:
     """Test multimodal PDF input from a public URL.
 
     Note: This test uses the `image_url` format which downloads the content.
@@ -849,7 +853,7 @@ def test_multimodal_pdf_input_url(backend_config: dict) -> None:
         ]
     )
 
-    response = llm.invoke([message])
+    response = await llm.ainvoke([message])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -863,7 +867,7 @@ def test_multimodal_pdf_input_url(backend_config: dict) -> None:
         assert len(response.content.strip()) > 0
 
 
-def test_multimodal_pdf_input_base64(backend_config: dict) -> None:
+async def test_multimodal_pdf_input_base64(backend_config: dict) -> None:
     """Test multimodal PDF input from base64 encoded data.
 
     Verifies that PDFs can be passed as base64 encoded data URIs
@@ -895,7 +899,7 @@ def test_multimodal_pdf_input_base64(backend_config: dict) -> None:
         ]
     )
 
-    response = llm.invoke([message])
+    response = await llm.ainvoke([message])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -926,13 +930,13 @@ def test_multimodal_pdf_input_base64(backend_config: dict) -> None:
         ),
     ],
 )
-def test_chat_google_genai_invoke_media_resolution(
+async def test_chat_google_genai_invoke_media_resolution(
     message: BaseMessage, backend_config: dict
 ) -> None:
     """Test invoke vision model with `media_resolution` set to low and without."""
     llm = ChatGoogleGenerativeAI(model=_VISION_MODEL, **backend_config)
-    result = llm.invoke([message])
-    result_low_res = llm.invoke(
+    result = await llm.ainvoke([message])
+    result_low_res = await llm.ainvoke(
         [message], media_resolution=MediaResolution.MEDIA_RESOLUTION_LOW
     )
 
@@ -947,14 +951,14 @@ def test_chat_google_genai_invoke_media_resolution(
     )
 
 
-def test_chat_google_genai_single_call_with_history(backend_config: dict) -> None:
+async def test_chat_google_genai_single_call_with_history(backend_config: dict) -> None:
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     text_question1, text_answer1 = "How much is 2+2?", "4"
     text_question2 = "How much is 3+3?"
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model.invoke([message1, message2, message3])
+    response = await model.ainvoke([message1, message2, message3])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -971,7 +975,7 @@ def test_chat_google_genai_single_call_with_history(backend_config: dict) -> Non
     "model_name",
     [_MODEL, _PRO_MODEL],
 )
-def test_chat_google_genai_system_message(
+async def test_chat_google_genai_system_message(
     model_name: str, backend_config: dict
 ) -> None:
     """Test system message handling.
@@ -986,7 +990,7 @@ def test_chat_google_genai_system_message(
     message1 = HumanMessage(content=text_question1)
     message2 = AIMessage(content=text_answer1)
     message3 = HumanMessage(content=text_question2)
-    response = model.invoke([system_message, message1, message2, message3])
+    response = await model.ainvoke([system_message, message1, message2, message3])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -1044,7 +1048,7 @@ def test_gateway_gemini_counttokens_unsupported() -> None:
         llm.get_num_tokens_from_messages([HumanMessage(content="How are you?")])
 
 
-def test_single_call_previous_blocked_response(backend_config: dict) -> None:
+async def test_single_call_previous_blocked_response(backend_config: dict) -> None:
     """Test handling of blocked responses in conversation history.
 
     If a previous call was blocked, the AIMessage will have empty content.
@@ -1071,7 +1075,7 @@ def test_single_call_previous_blocked_response(backend_config: dict) -> None:
         },
     )
     user_message = HumanMessage(content=text_question)
-    response = model.invoke([blocked_message, user_message])
+    response = await model.ainvoke([blocked_message, user_message])
     assert isinstance(response, AIMessage)
     if isinstance(response.content, list):
         text_content = "".join(
@@ -1084,7 +1088,7 @@ def test_single_call_previous_blocked_response(backend_config: dict) -> None:
         assert isinstance(response.content, str)
 
 
-def test_json_mode_typeddict(backend_config: dict) -> None:
+async def test_json_mode_typeddict(backend_config: dict) -> None:
     """Test structured output with `TypedDict` using `json_mode` method."""
     from typing_extensions import TypedDict
 
@@ -1096,7 +1100,7 @@ def test_json_mode_typeddict(backend_config: dict) -> None:
     model = llm.with_structured_output(MyModel, method="json_mode")  # type: ignore[arg-type]
     message = HumanMessage(content="My name is Erick and I am 28 years old")
 
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert isinstance(response, dict)
     assert response == {"name": "Erick", "age": 28}
 
@@ -1107,7 +1111,7 @@ def test_json_mode_typeddict(backend_config: dict) -> None:
     assert chunk == {"name": "Erick", "age": 28}
 
 
-def test_nested_bind_tools(backend_config: dict) -> None:
+async def test_nested_bind_tools(backend_config: dict) -> None:
     """Test nested Pydantic models in tool calling with `tool_choice`."""
     from pydantic import Field
 
@@ -1123,12 +1127,12 @@ def test_nested_bind_tools(backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     llm_with_tools = llm.bind_tools([People], tool_choice="People")
 
-    response = llm_with_tools.invoke("Chester, no hair color provided.")
+    response = await llm_with_tools.ainvoke("Chester, no hair color provided.")
     assert isinstance(response, AIMessage)
     assert response.tool_calls[0]["name"] == "People"
 
 
-def test_timeout_non_streaming(backend_config: dict) -> None:
+async def test_timeout_non_streaming(backend_config: dict) -> None:
     """Test timeout parameter in non-streaming mode."""
     model = ChatGoogleGenerativeAI(
         model=_MODEL,
@@ -1136,10 +1140,10 @@ def test_timeout_non_streaming(backend_config: dict) -> None:
         **backend_config,
     )
     with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
-        model.invoke([HumanMessage(content="Hello")])
+        await model.ainvoke([HumanMessage(content="Hello")])
 
 
-def test_timeout_streaming(backend_config: dict) -> None:
+async def test_timeout_streaming(backend_config: dict) -> None:
     """Test timeout parameter in streaming mode."""
     model = ChatGoogleGenerativeAI(
         model=_MODEL,
@@ -1148,24 +1152,24 @@ def test_timeout_streaming(backend_config: dict) -> None:
         **backend_config,
     )
     with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
-        model.invoke([HumanMessage(content="Hello")])
+        await model.ainvoke([HumanMessage(content="Hello")])
 
 
-def test_response_metadata_avg_logprobs(backend_config: dict) -> None:
+async def test_response_metadata_avg_logprobs(backend_config: dict) -> None:
     """Test that `avg_logprobs` are present in response metadata."""
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
-    response = llm.invoke("Hello!")
+    response = await llm.ainvoke("Hello!")
     probs = response.response_metadata.get("avg_logprobs")
     if probs is not None:
         assert isinstance(probs, float)
 
 
 @pytest.mark.xfail(reason="logprobs are subject to daily quotas")
-def test_logprobs(backend_config: dict) -> None:
+async def test_logprobs(backend_config: dict) -> None:
     """Test logprobs parameter with different configurations."""
     # Test with integer logprobs (top K)
     llm = ChatGoogleGenerativeAI(model=_MODEL, logprobs=2, **backend_config)
-    msg = llm.invoke("hey")
+    msg = await llm.ainvoke("hey")
     tokenprobs = msg.response_metadata.get("logprobs_result")
     assert tokenprobs is None or isinstance(tokenprobs, list)
     if tokenprobs:
@@ -1183,17 +1187,17 @@ def test_logprobs(backend_config: dict) -> None:
 
     # Test with logprobs=True
     llm2 = ChatGoogleGenerativeAI(model=_MODEL, logprobs=True, **backend_config)
-    msg2 = llm2.invoke("how are you")
+    msg2 = await llm2.ainvoke("how are you")
     assert msg2.response_metadata["logprobs_result"]
 
     # Test with logprobs=False
     llm3 = ChatGoogleGenerativeAI(model=_MODEL, logprobs=False, **backend_config)
-    msg3 = llm3.invoke("howdy")
+    msg3 = await llm3.ainvoke("howdy")
     assert msg3.response_metadata.get("logprobs_result") is None
 
 
 @pytest.mark.xfail(reason="logprobs are subject to daily quotas")
-def test_logprobs_with_json_schema(backend_config: dict) -> None:
+async def test_logprobs_with_json_schema(backend_config: dict) -> None:
     """Test logprobs with JSON schema structured output.
 
     Ensures logprobs are populated when using JSON schema responses.
@@ -1222,7 +1226,7 @@ def test_logprobs_with_json_schema(backend_config: dict) -> None:
         **backend_config,
     )
 
-    msg = llm.invoke("Return a JSON object with fieldA='test' and fieldB=42")
+    msg = await llm.ainvoke("Return a JSON object with fieldA='test' and fieldB=42")
     tokenprobs = msg.response_metadata.get("logprobs_result")
     # We don't assert exact content to avoid flakiness, but if present it must
     # be a well-formed list of token/logprob dicts, including zero logprobs.
@@ -1246,7 +1250,9 @@ def test_logprobs_with_json_schema(backend_config: dict) -> None:
 
 
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_safety_settings_gemini(use_streaming: bool, backend_config: dict) -> None:
+async def test_safety_settings_gemini(
+    use_streaming: bool, backend_config: dict
+) -> None:
     """Test safety settings with both `invoke` and `stream` methods."""
     safety_settings: dict[HarmCategory, HarmBlockThreshold] = {
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
@@ -1266,13 +1272,13 @@ def test_safety_settings_gemini(use_streaming: bool, backend_config: dict) -> No
         assert len(streamed_messages) > 0
     else:
         # Test invoke
-        output = llm.invoke("how to make a bomb?")
+        output = await llm.ainvoke("how to make a bomb?")
         assert isinstance(output, AIMessage)
         assert len(output.content) > 0
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None:
+async def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None:
     @tool
     def search(
         question: str,
@@ -1308,7 +1314,7 @@ def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None
             "sparrow, hawk, crow by using search tool."
         )
     )
-    response = llm_with_search_force.invoke([request])
+    response = await llm_with_search_force.ainvoke([request])
 
     assert isinstance(response, AIMessage)
     assert len(response.tool_calls) > 0
@@ -1332,7 +1338,9 @@ def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None
             "colors?"
         )
     )
-    result = llm_with_search.invoke([request, response, *tool_messages, follow_up])
+    result = await llm_with_search.ainvoke(
+        [request, response, *tool_messages, follow_up]
+    )
 
     assert isinstance(result, AIMessage)
 
@@ -1350,7 +1358,7 @@ def test_chat_function_calling_with_multiple_parts(backend_config: dict) -> None
         assert "brown" in content_str.lower()
 
 
-def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
+async def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     """Test function calling with Gemini models.
 
     Safety settings included but not tested.
@@ -1371,7 +1379,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     model = ChatGoogleGenerativeAI(
         model=_MODEL, safety_settings=safety, **backend_config
     ).bind_tools([MyModel], tool_choice="MyModel")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     _check_tool_calls(response, "MyModel")
 
     # Test .bind_tools with function
@@ -1381,7 +1389,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     model = ChatGoogleGenerativeAI(
         model=_MODEL, safety_settings=safety, **backend_config
     ).bind_tools([my_model], tool_choice="my_model")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     _check_tool_calls(response, "my_model")
 
     # Test .bind_tools with tool decorator
@@ -1392,7 +1400,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
     model = ChatGoogleGenerativeAI(
         model=_MODEL, safety_settings=safety, **backend_config
     ).bind_tools([my_tool], tool_choice="my_tool")
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     _check_tool_calls(response, "my_tool")
 
     # Test streaming
@@ -1433,7 +1441,7 @@ def test_chat_vertexai_gemini_function_calling(backend_config: dict) -> None:
         (_MODEL, "json_schema"),
     ],
 )
-def test_chat_google_genai_with_structured_output(
+async def test_chat_google_genai_with_structured_output(
     model_name: str,
     method: Literal["function_calling", "json_mode", "json_schema"] | None,
     backend_config: dict,
@@ -1451,7 +1459,7 @@ def test_chat_google_genai_with_structured_output(
     model = llm.with_structured_output(MyModel, method=method)
     message = HumanMessage(content="My name is Erick and I am 27 years old")
 
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert response is not None, f"Structured output returned None for method={method}."
     assert isinstance(response, MyModel), (
         f"Expected MyModel instance, got {type(response)}: {response}"
@@ -1467,7 +1475,7 @@ def test_chat_google_genai_with_structured_output(
         },
         method="function_calling",
     )
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert response is not None, "Structured output with schema dict returned None"
     expected = {"name": "Erick", "age": 27}  # type: ignore[assignment]
     assert response == expected, f"Expected {expected}, got {response}"
@@ -1482,7 +1490,7 @@ def test_chat_google_genai_with_structured_output(
             },
             method=method,
         )
-        response = model.invoke([message])
+        response = await model.ainvoke([message])
         assert response is not None, (
             f"Structured output with method={method} returned None"
         )
@@ -1505,7 +1513,7 @@ def test_chat_google_genai_with_structured_output(
         },
         method=method,
     )
-    response = model.invoke([message])
+    response = await model.ainvoke([message])
     assert response is not None, (
         f"Structured output with JSON schema and method={method} returned None"
     )
@@ -1516,7 +1524,7 @@ def test_chat_google_genai_with_structured_output(
     assert response == expected, f"Expected {expected}, got {response}"
 
 
-def test_chat_google_genai_with_structured_output_nested_model(
+async def test_chat_google_genai_with_structured_output_nested_model(
     backend_config: dict,
 ) -> None:
     """Deeply nested model test for structured output."""
@@ -1536,7 +1544,7 @@ def test_chat_google_genai_with_structured_output_nested_model(
         model=_MODEL, **backend_config
     ).with_structured_output(Response, method="json_schema")
 
-    response = model.invoke("Why is Real Madrid better than Barcelona?")
+    response = await model.ainvoke("Why is Real Madrid better than Barcelona?")
 
     assert isinstance(response, Response)
     assert isinstance(response.response, str)
@@ -1552,7 +1560,9 @@ def test_chat_google_genai_with_structured_output_nested_model(
             assert isinstance(argument.description, str)
 
 
-def test_thinking_params_preserved_with_structured_output(backend_config: dict) -> None:
+async def test_thinking_params_preserved_with_structured_output(
+    backend_config: dict,
+) -> None:
     """Test that `thinking_budget=0` and `include_thoughts=False` are preserved.
 
     Verifies that thinking configuration persists through `with_structured_output()`.
@@ -1573,7 +1583,7 @@ def test_thinking_params_preserved_with_structured_output(backend_config: dict) 
     # Apply structured output - params should be preserved
     structured_llm = llm.with_structured_output(SimpleModel, method="json_schema")
 
-    result = structured_llm.invoke("What is 2+2? Just give a brief answer.")
+    result = await structured_llm.ainvoke("What is 2+2? Just give a brief answer.")
 
     assert isinstance(result, SimpleModel)
     assert isinstance(result.answer, str)
@@ -1584,7 +1594,11 @@ def test_thinking_params_preserved_with_structured_output(backend_config: dict) 
 def test_model_methods_without_eventloop(
     is_async: bool, use_streaming: bool, backend_config: dict
 ) -> None:
-    """Test `invoke` and `stream` (sync & async) without event loop."""
+    """Test `invoke` and `stream` (sync & async) without event loop.
+
+    This test must remain synchronous: it deliberately drives the async methods
+    via `asyncio.run()`, which raises if called from a running event loop.
+    """
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     if use_streaming:
@@ -1633,7 +1647,7 @@ def _check_web_search_output(message: AIMessage, output_version: str) -> None:
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_search_builtin(output_version: str, backend_config: dict) -> None:
+async def test_search_builtin(output_version: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(
         model=_MODEL, output_version=output_version, **backend_config
     ).bind_tools([{"google_search": {}}])
@@ -1654,13 +1668,13 @@ def test_search_builtin(output_version: str, backend_config: dict) -> None:
         "role": "user",
         "content": "Tell me more about that last story.",
     }
-    response = llm.invoke([input_message, full, next_message])
+    response = await llm.ainvoke([input_message, full, next_message])
     _check_web_search_output(response, output_version)
 
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_search_builtin_with_citations(
+async def test_search_builtin_with_citations(
     use_streaming: bool, backend_config: dict
 ) -> None:
     """Test that citations are properly extracted from `grounding_metadata`."""
@@ -1729,7 +1743,7 @@ def test_search_builtin_with_citations(
                         assert isinstance(google_metadata, dict)
     else:
         # Test invoke
-        response = llm.invoke([input_message])
+        response = await llm.ainvoke([input_message])
         assert isinstance(response, AIMessage)
 
         assert "grounding_metadata" in response.response_metadata
@@ -1784,7 +1798,7 @@ def test_search_builtin_with_citations(
 
 @pytest.mark.flaky(retries=5, delay=2)
 @pytest.mark.parametrize("use_streaming", [False, True])
-def test_structured_output_with_google_search(
+async def test_structured_output_with_google_search(
     use_streaming: bool, backend_config: dict
 ) -> None:
     """Test structured outputs combined with Google Search tool.
@@ -1832,7 +1846,7 @@ def test_structured_output_with_google_search(
         assert isinstance(response, AIMessageChunk)
     else:
         # Test invoke
-        response = llm_with_search.invoke(prompt)  # type: ignore[assignment]
+        response = await llm_with_search.ainvoke(prompt)  # type: ignore[assignment]
         assert isinstance(response, AIMessage)
 
     # Extract JSON from response content
@@ -1878,22 +1892,22 @@ def test_structured_output_with_google_search(
         _check_usage_metadata(response)
 
 
-def test_search_with_googletool(backend_config: dict) -> None:
+async def test_search_with_googletool(backend_config: dict) -> None:
     """Test using `GoogleTool` with Google Search."""
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, **backend_config)
-    resp = llm.invoke(
+    resp = await llm.ainvoke(
         "When is the next total solar eclipse in US?",
         tools=[GoogleTool(google_search={})],
     )
     assert "grounding_metadata" in resp.response_metadata
 
 
-def test_url_context_tool(backend_config: dict) -> None:
+async def test_url_context_tool(backend_config: dict) -> None:
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     model_with_search = model.bind_tools([{"url_context": {}}])
 
     input = "What is this page's contents about? https://docs.langchain.com"
-    response = model_with_search.invoke(input)
+    response = await model_with_search.ainvoke(input)
     assert isinstance(response, AIMessage)
 
     assert (
@@ -1904,12 +1918,12 @@ def test_url_context_tool(backend_config: dict) -> None:
     )
 
 
-def test_google_maps_grounding(backend_config: dict) -> None:
+async def test_google_maps_grounding(backend_config: dict) -> None:
     """Test using Google Maps grounding for location-aware responses."""
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     model_with_maps = model.bind_tools([{"google_maps": {}}])
 
-    response = model_with_maps.invoke(
+    response = await model_with_maps.ainvoke(
         "What are some good Italian restaurants in Boston's North End?"
     )
     assert isinstance(response, AIMessage)
@@ -1939,7 +1953,7 @@ def test_google_maps_grounding(backend_config: dict) -> None:
         HumanMessage("What about French restaurants in the same area?"),
     ]
 
-    follow_up_response = model_with_maps.invoke(messages)
+    follow_up_response = await model_with_maps.ainvoke(messages)
     assert isinstance(follow_up_response, AIMessage)
     assert isinstance(follow_up_response.content, str) or isinstance(
         follow_up_response.content, list
@@ -1958,7 +1972,7 @@ def test_google_maps_grounding(backend_config: dict) -> None:
         },
     )
 
-    response_with_location = model_with_location.invoke(
+    response_with_location = await model_with_location.ainvoke(
         "What Italian restaurants are within a 5 minute walk from here?"
     )
     assert isinstance(response_with_location, AIMessage)
@@ -1968,12 +1982,12 @@ def test_google_maps_grounding(backend_config: dict) -> None:
     assert "grounding_metadata" in response_with_location.response_metadata
 
 
-def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
+async def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
     """Test passing Maps grounding tool directly to invoke without binding."""
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
     # Pass tools directly to invoke instead of binding
-    response = model.invoke(
+    response = await model.ainvoke(
         "What are some good Italian restaurants in Boston's North End?",
         tools=[{"google_maps": {}}],
     )
@@ -1982,7 +1996,7 @@ def test_google_maps_grounding_invoke_direct(backend_config: dict) -> None:
     assert "grounding_metadata" in response.response_metadata
 
     # Test with tool_config passed directly to invoke
-    response_with_location = model.invoke(
+    response_with_location = await model.ainvoke(
         "What Italian restaurants are within a 5 minute walk from here?",
         tools=[{"google_maps": {}}],
         tool_config={
@@ -2030,7 +2044,9 @@ def _check_code_execution_output(message: AIMessage, output_version: str) -> Non
 
 @pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_code_execution_builtin(output_version: str, backend_config: dict) -> None:
+async def test_code_execution_builtin(
+    output_version: str, backend_config: dict
+) -> None:
     llm = ChatGoogleGenerativeAI(
         model=_PRO_MODEL, output_version=output_version, **backend_config
     ).bind_tools([{"code_execution": {}}])
@@ -2052,11 +2068,11 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
         "role": "user",
         "content": "Can you show me the calculation again with comments?",
     }
-    response = llm.invoke([input_message, full, next_message])
+    response = await llm.ainvoke([input_message, full, next_message])
     assert isinstance(response, AIMessage)
 
 
-def test_computer_use_tool(backend_config: dict) -> None:
+async def test_computer_use_tool(backend_config: dict) -> None:
     """Test computer use tool integration.
 
     To run this test:
@@ -2077,12 +2093,14 @@ def test_computer_use_tool(backend_config: dict) -> None:
 
     # Simple test - just verify tool binding works
     input_message = "Describe what actions you could take on a web page."
-    response = model_with_computer.invoke(input_message)
+    response = await model_with_computer.ainvoke(input_message)
     assert isinstance(response, AIMessage)
     assert response.content is not None
 
 
-def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -> None:
+async def test_chat_google_genai_invoke_with_generation_params(
+    backend_config: dict,
+) -> None:
     """Test that generation parameters passed to invoke() are respected.
 
     Verifies that `max_output_tokens` (max_tokens) and `thinking_budget`
@@ -2091,7 +2109,7 @@ def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -
     llm = ChatGoogleGenerativeAI(model=_THINKING_MODEL, **backend_config)
 
     # Test with max_output_tokens constraint
-    result_constrained = llm.invoke(
+    result_constrained = await llm.ainvoke(
         "Alice, Bob, and Carol each live in a different house on the same street: "
         "red, green, and blue. The person who lives in the red house owns a cat. "
         "Bob does not live in the green house. Carol owns a dog. The green house "
@@ -2117,13 +2135,13 @@ def test_chat_google_genai_invoke_with_generation_params(backend_config: dict) -
 
 
 @pytest.mark.parametrize("max_tokens", [10, 20, 50])
-def test_chat_google_genai_invoke_respects_max_tokens(
+async def test_chat_google_genai_invoke_respects_max_tokens(
     max_tokens: int, backend_config: dict
 ) -> None:
     """Test that different `max_output_tokens` values are respected."""
     llm = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
 
-    result = llm.invoke(
+    result = await llm.ainvoke(
         "Write a detailed essay about artificial intelligence.",
         max_output_tokens=max_tokens,
     )
@@ -2138,7 +2156,9 @@ def test_chat_google_genai_invoke_respects_max_tokens(
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_agent_loop(output_version: Literal["v0", "v1"], backend_config: dict) -> None:
+async def test_agent_loop(
+    output_version: Literal["v0", "v1"], backend_config: dict
+) -> None:
     """Test agent loop with tool calling (non-streaming).
 
     Ensures that the model can:
@@ -2155,7 +2175,7 @@ def test_agent_loop(output_version: Literal["v0", "v1"], backend_config: dict) -
     input_message = HumanMessage("What is the weather in San Francisco, CA?")
 
     # First call - should make a tool call
-    tool_call_message = llm_with_required_tools.invoke([input_message])
+    tool_call_message = await llm_with_required_tools.ainvoke([input_message])
     assert isinstance(tool_call_message, AIMessage)
     tool_calls = tool_call_message.tool_calls
     assert len(tool_calls) >= 1
@@ -2163,11 +2183,11 @@ def test_agent_loop(output_version: Literal["v0", "v1"], backend_config: dict) -
     assert all("location" in tool_call["args"] for tool_call in tool_calls)
 
     # Execute the tools
-    tool_messages = [get_weather.invoke(tool_call) for tool_call in tool_calls]
+    tool_messages = [await get_weather.ainvoke(tool_call) for tool_call in tool_calls]
     assert all(isinstance(tool_message, ToolMessage) for tool_message in tool_messages)
 
     # Second call - should incorporate tool result
-    response = llm_with_tools.invoke(
+    response = await llm_with_tools.ainvoke(
         [
             input_message,
             tool_call_message,
@@ -2190,7 +2210,7 @@ def test_agent_loop(output_version: Literal["v0", "v1"], backend_config: dict) -
 
 
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_agent_loop_streaming(
+async def test_agent_loop_streaming(
     output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
     """Test agent loop with tool calling (streaming)."""
@@ -2222,7 +2242,7 @@ def test_agent_loop_streaming(
     assert all(tool_call["name"] == "get_weather" for tool_call in tool_calls)
 
     # Execute the tools
-    tool_messages = [get_weather.invoke(tool_call) for tool_call in tool_calls]
+    tool_messages = [await get_weather.ainvoke(tool_call) for tool_call in tool_calls]
     assert all(isinstance(tool_message, ToolMessage) for tool_message in tool_messages)
 
     # Second call - stream final response
@@ -2391,7 +2411,7 @@ def test_gemini_3_pro_streaming_with_thinking(
 
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_gemini_3_pro_agent_loop_streaming(
+async def test_gemini_3_pro_agent_loop_streaming(
     output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
     """Test `gemini-3.1-pro-preview` agent loop with streaming and thinking."""
@@ -2443,7 +2463,7 @@ def test_gemini_3_pro_agent_loop_streaming(
     assert all(tool_call["name"] == "calculate_sum" for tool_call in tool_calls)
 
     # Execute tools
-    tool_messages = [calculate_sum.invoke(tool_call) for tool_call in tool_calls]
+    tool_messages = [await calculate_sum.ainvoke(tool_call) for tool_call in tool_calls]
     assert all(isinstance(tool_message, ToolMessage) for tool_message in tool_messages)
 
     # Second call - stream final response with reasoning
@@ -2481,7 +2501,7 @@ def test_gemini_3_pro_agent_loop_streaming(
 @pytest.mark.flaky(retries=3, delay=1)
 @pytest.mark.parametrize("model_name", [_MODEL, _PRO_MODEL])
 @pytest.mark.parametrize("output_version", ["v0", "v1"])
-def test_streaming_with_multiple_tool_calls(
+async def test_streaming_with_multiple_tool_calls(
     model_name: str, output_version: Literal["v0", "v1"], backend_config: dict
 ) -> None:
     """Test streaming with multiple tool calls in a single response."""
@@ -2550,9 +2570,9 @@ def test_streaming_with_multiple_tool_calls(
     tool_messages = []
     for tool_call in tool_calls:
         if tool_call["name"] == "get_temperature":
-            tool_message = get_temperature.invoke(tool_call)
+            tool_message = await get_temperature.ainvoke(tool_call)
         elif tool_call["name"] == "get_humidity":
-            tool_message = get_humidity.invoke(tool_call)
+            tool_message = await get_humidity.ainvoke(tool_call)
         else:
             continue
         tool_messages.append(tool_message)
@@ -2569,7 +2589,7 @@ def test_streaming_with_multiple_tool_calls(
 
 
 @pytest.mark.extended
-def test_context_caching(backend_config: dict) -> None:
+async def test_context_caching(backend_config: dict) -> None:
     """Test context caching with large text content.
 
     Note: For Google AI backend, `gs://` URIs require client.files.upload() first,
@@ -2616,7 +2636,7 @@ def test_context_caching(backend_config: dict) -> None:
         model=_MODEL, cached_content=cached_content, **backend_config
     )
 
-    response = chat.invoke("What is the secret number?")
+    response = await chat.ainvoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
 
@@ -2633,14 +2653,16 @@ def test_context_caching(backend_config: dict) -> None:
 
     # Using cached content in request
     chat = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
-    response = chat.invoke("What is the secret number?", cached_content=cached_content)
+    response = await chat.ainvoke(
+        "What is the secret number?", cached_content=cached_content
+    )
 
     assert isinstance(response, AIMessage)
     assert "747" in response.text
 
 
 @pytest.mark.extended
-def test_context_caching_tools(backend_config: dict) -> None:
+async def test_context_caching_tools(backend_config: dict) -> None:
     """Test context caching with tools and large text content.
 
     Note: For Google AI backend, `gs://` URIs require client.files.upload() first,
@@ -2693,7 +2715,7 @@ def test_context_caching_tools(backend_config: dict) -> None:
     )
 
     # Invoke the model - it should call the tool from the cached content
-    response = chat.invoke("What is the secret number?")
+    response = await chat.ainvoke("What is the secret number?")
 
     assert isinstance(response, AIMessage)
     # The model should call the get_secret_number tool that was cached
@@ -2702,7 +2724,7 @@ def test_context_caching_tools(backend_config: dict) -> None:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_audio_timestamp(backend_config: dict) -> None:
+async def test_audio_timestamp(backend_config: dict) -> None:
     """Test audio transcription with timestamps.
 
     This test verifies that audio files can be transcribed with timestamps using
@@ -2737,7 +2759,7 @@ def test_audio_timestamp(backend_config: dict) -> None:
         ]
     )
 
-    response = llm.invoke([message], generation_config={"audio_timestamp": True})
+    response = await llm.ainvoke([message], generation_config={"audio_timestamp": True})
 
     assert isinstance(response, AIMessage)
 
@@ -2777,7 +2799,7 @@ def test_audio_timestamp(backend_config: dict) -> None:
     )
 
 
-def test_langgraph_example(backend_config: dict) -> None:
+async def test_langgraph_example(backend_config: dict) -> None:
     """Test integration with LangGraph-style multi-turn tool calling."""
     llm = ChatGoogleGenerativeAI(
         model=_MODEL, max_output_tokens=8192, temperature=0.2, **backend_config
@@ -2819,11 +2841,11 @@ def test_langgraph_example(backend_config: dict) -> None:
         HumanMessage(content="Multiply 2 and 3"),
         HumanMessage(content="No, actually multiply 3 and 3!"),
     ]
-    step1 = llm.invoke(
+    step1 = await llm.ainvoke(
         messages,
         tools=[{"function_declarations": [add_declaration, multiply_declaration]}],
     )
-    step2 = llm.invoke(
+    step2 = await llm.ainvoke(
         [
             *messages,
             step1,
@@ -2938,7 +2960,7 @@ def test_streaming_function_call_arguments() -> None:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_multimodal_function_response() -> None:
+async def test_multimodal_function_response() -> None:
     """Test multimodal function responses with image/file data.
 
     Note: This feature is only available on Vertex AI with Gemini 3 Pro (Preview).
@@ -2982,7 +3004,7 @@ def test_multimodal_function_response() -> None:
     )
 
     # First call - model should request the tool
-    tool_call_message = llm_with_required_tools.invoke([input_message])
+    tool_call_message = await llm_with_required_tools.ainvoke([input_message])
     assert isinstance(tool_call_message, AIMessage)
     tool_calls = tool_call_message.tool_calls
     assert len(tool_calls) >= 1
@@ -3007,7 +3029,7 @@ def test_multimodal_function_response() -> None:
     ]
 
     # Second call - model should incorporate the image response
-    response = llm_with_tools.invoke(
+    response = await llm_with_tools.ainvoke(
         [
             input_message,
             tool_call_message,
@@ -3033,7 +3055,7 @@ def test_multimodal_function_response() -> None:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> None:
+async def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> None:
     """Test multi-turn image editing.
 
     The model generates an image, and then the response is passed back to request
@@ -3047,7 +3069,7 @@ def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> Non
 
     # Retry loop since image generation is not guaranteed
     for _ in range(3):
-        result = llm.invoke(messages)
+        result = await llm.ainvoke(messages)
         assert isinstance(result, AIMessage)
 
         # Check if we got an image back
@@ -3066,7 +3088,7 @@ def test_chat_google_genai_image_editing_multi_turn(backend_config: dict) -> Non
     messages.append(first_response)
     messages.append(HumanMessage(content="make the frog yellow"))
 
-    second_response = llm.invoke(messages)
+    second_response = await llm.ainvoke(messages)
 
     assert isinstance(second_response, AIMessage)
     # The response should contain either text or an image (or both)
