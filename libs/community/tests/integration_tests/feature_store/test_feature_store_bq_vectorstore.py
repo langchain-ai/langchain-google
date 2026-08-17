@@ -131,7 +131,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    async def test_get_doc_by_sql_filter(
+    def test_get_doc_by_sql_filter(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
@@ -142,7 +142,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    async def test_get_doc_by_complexe_sql_filter(
+    def test_get_doc_by_complexe_sql_filter(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
@@ -166,7 +166,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    async def test_existing_store_get_doc_by_sql_filter(
+    def test_existing_store_get_doc_by_sql_filter(
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with sql filter."""
@@ -199,9 +199,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    async def test_get_doc_by_filter(
-        self, store_bq_vectorstore: BigQueryVectorStore
-    ) -> None:
+    def test_get_doc_by_filter(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
         """Test on document retrieval with metadata filter."""
         docs = store_bq_vectorstore.get_documents(filter={"kind": "fruit"})
         kinds = [d.metadata["kind"] for d in docs]
@@ -223,7 +221,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    async def test_existing_store_get_doc_by_filter(
+    def test_existing_store_get_doc_by_filter(
         self, existing_store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test on document retrieval with metadata filter."""
@@ -234,7 +232,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert "planet" not in kinds
 
     @pytest.mark.extended
-    async def test_get_documents_by_ids(
+    def test_get_documents_by_ids(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test retrieving documents by their IDs."""
@@ -250,7 +248,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
             assert orig_doc.metadata == retrieved_doc.metadata
 
     @pytest.mark.extended
-    async def test_add_texts_with_embeddings(
+    def test_add_texts_with_embeddings(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test adding texts with pre-computed embeddings."""
@@ -269,7 +267,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert retrieved_docs[1].metadata["kind"] == "planet"
 
     @pytest.mark.extended
-    async def test_get_documents_by_ids_and_filters(
+    def test_get_documents_by_ids_and_filters(
         self, store_bq_vectorstore: BigQueryVectorStore
     ) -> None:
         """Test retrieving documents by their IDs and with filters."""
@@ -321,9 +319,7 @@ class TestBigQueryVectorStore_bq_vectorstore:
         assert result == []
 
     @pytest.mark.extended
-    async def test_batch_search(
-        self, store_bq_vectorstore: BigQueryVectorStore
-    ) -> None:
+    def test_batch_search(self, store_bq_vectorstore: BigQueryVectorStore) -> None:
         """Test batch search with queries and embeddings."""
         # Batch search with queries
         query_results = store_bq_vectorstore.batch_search(queries=["apple", "treat"])

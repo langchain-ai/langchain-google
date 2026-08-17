@@ -119,9 +119,7 @@ class TestVertexFSVectorStore_fs_vectorstore:
             )
 
     @pytest.mark.extended
-    async def test_get_doc_by_ids(
-        self, store_fs_vectorstore: VertexFSVectorStore
-    ) -> None:
+    def test_get_doc_by_ids(self, store_fs_vectorstore: VertexFSVectorStore) -> None:
         ids = TestVertexFSVectorStore_fs_vectorstore.ids[0:2]
 
         retrieved_docs = store_fs_vectorstore.get_documents(ids=ids)

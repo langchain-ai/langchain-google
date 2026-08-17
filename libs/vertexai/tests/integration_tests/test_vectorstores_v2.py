@@ -1,5 +1,4 @@
 """Test Vertex AI API wrapper for V2.
-import asyncio
 Your end-user credentials would be used to make the calls (make sure you've run
 `gcloud auth login` first).
 Additionally in order to run the test you must have set the following environment
