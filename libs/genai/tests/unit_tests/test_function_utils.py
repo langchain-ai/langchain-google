@@ -1689,6 +1689,8 @@ def test_nested_model_keeps_inlined_properties() -> None:
     declaration = _convert_pydantic_to_genai_function(_PersonWithAddress)
 
     assert declaration.parameters is not None
-    address = declaration.parameters.properties["address"]
+    properties = declaration.parameters.properties
+    assert properties is not None
+    address = properties["address"]
     assert address.properties is not None, "Nested model lost its inlined properties."
     assert sorted(address.properties) == ["city", "street"]
