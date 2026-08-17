@@ -73,11 +73,11 @@ def _check_usage_metadata(message: AIMessage) -> None:
     assert input_tokens > 0
     assert output_tokens > 0
     assert total_tokens > 0
-    reasoning_tokens = message.usage_metadata.get("output_token_details", {}).get(
-        "reasoning", 0
-    )
 
-    assert (input_tokens + output_tokens + reasoning_tokens) == total_tokens
+    # output_tokens already includes reasoning tokens (UsageMetadata contract:
+    # output_tokens is the sum of all output token types, total_tokens =
+    # input_tokens + output_tokens), so they must not be added again here.
+    assert (input_tokens + output_tokens) == total_tokens
 
 
 def _check_tool_calls(response: BaseMessage, expected_name: str) -> None:
@@ -903,9 +903,11 @@ def test_chat_vertexai_gemini_thinking_auto() -> None:
     assert isinstance(response, AIMessage)
     assert response.usage_metadata is not None
     assert response.usage_metadata["output_token_details"]["reasoning"] > 0
+    # output_tokens already includes reasoning tokens, so total_tokens equals their sum
+    # rather than exceeding it.
     assert (
         response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
+        == response.usage_metadata["input_tokens"]
         + response.usage_metadata["output_tokens"]
     )
 
@@ -921,7 +923,7 @@ def test_chat_vertexai_gemini_thinking_configured() -> None:
     assert response.usage_metadata["output_token_details"]["reasoning"] <= 100
     assert (
         response.usage_metadata["total_tokens"]
-        > response.usage_metadata["input_tokens"]
+        == response.usage_metadata["input_tokens"]
         + response.usage_metadata["output_tokens"]
     )
 
@@ -966,9 +968,11 @@ def test_chat_vertexai_gemini_thinking_auto_include_thoughts(
 
     assert full.usage_metadata is not None
     assert full.usage_metadata["output_token_details"]["reasoning"] > 0
+    # output_tokens already includes reasoning tokens, so total_tokens equals their sum
+    # rather than exceeding it.
     assert (
         full.usage_metadata["total_tokens"]
-        > full.usage_metadata["input_tokens"] + full.usage_metadata["output_tokens"]
+        == full.usage_metadata["input_tokens"] + full.usage_metadata["output_tokens"]
     )
 
     # Test we can pass back in
