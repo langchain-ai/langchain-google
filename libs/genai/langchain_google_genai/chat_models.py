@@ -22,7 +22,7 @@ from typing import (
 
 import filetype  # type: ignore[import-untyped]
 from google.genai.client import Client
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -57,7 +57,15 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.exceptions import ContextOverflowError
+from langchain_core.exceptions import (
+    ContextOverflowError,
+    ModelAuthenticationError,
+    ModelInvalidRequestError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+    ModelServerError,
+)
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -142,8 +150,53 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
+    """Wrapper exception class for errors associated with the `Google GenAI` API.
+
+    Raised when there are specific issues related to the Google GenAI API usage in the
+    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
+    """
+
+
 class GoogleContextOverflowError(ClientError, ContextOverflowError):
     """ClientError raised when input exceeds Google's context limit."""
+
+
+# Inherit ChatGoogleGenerativeAIError for backward compatibility
+class GoogleAuthenticationError(ChatGoogleGenerativeAIError, ModelAuthenticationError):
+    """Google authentication error classified as a LangChain model error."""
+
+
+class GooglePermissionDeniedError(
+    ChatGoogleGenerativeAIError, ModelPermissionDeniedError
+):
+    """Google permission error classified as a LangChain model error."""
+
+
+class GoogleInvalidRequestError(ChatGoogleGenerativeAIError, ModelInvalidRequestError):
+    """Google invalid-request error classified as a LangChain model error."""
+
+
+class GoogleModelNotFoundError(ChatGoogleGenerativeAIError, ModelNotFoundError):
+    """Google not-found error classified as a LangChain model error."""
+
+
+class GoogleRateLimitError(ChatGoogleGenerativeAIError, ModelRateLimitError):
+    """Google rate-limit error classified as a LangChain model error."""
+
+
+class GoogleServerError(ServerError, ModelServerError):
+    """Google server error classified as a LangChain model error."""
+
+
+_CLIENT_ERROR_TYPES: dict[int, type[ChatGoogleGenerativeAIError]] = {
+    400: GoogleInvalidRequestError,
+    401: GoogleAuthenticationError,
+    403: GooglePermissionDeniedError,
+    404: GoogleModelNotFoundError,
+    429: GoogleRateLimitError,
+}
+"""HTTP status codes the Google GenAI API reports, keyed to LangChain error types."""
 
 
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
@@ -153,6 +206,11 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
     when the error indicates that the input exceeded the model's token limit,
     so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
     and fall back to context compaction.
+
+    Other recognized status codes are raised as the corresponding
+    `langchain_core.exceptions.ModelError` subclass, which tells retry middleware
+    whether another attempt could succeed. Those remain `ChatGoogleGenerativeAIError`
+    subclasses, so existing handling continues to work.
 
     Args:
         e: The `ClientError` exception to handle.
@@ -174,7 +232,25 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
         ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
+    if error_type := _CLIENT_ERROR_TYPES.get(e.code):
+        raise error_type(msg) from e
     raise ChatGoogleGenerativeAIError(msg) from e
+
+
+def _handle_server_error(e: ServerError) -> None:
+    """Re-raise a `ServerError` as its LangChain-classified equivalent.
+
+    Args:
+        e: The `ServerError` exception to handle.
+
+    Raises:
+        GoogleServerError: Always, preserving the original type and message.
+    """
+    raise GoogleServerError(
+        code=e.code,
+        response_json=e.details,
+        response=e.response,
+    ) from e
 
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
@@ -217,14 +293,6 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
         else:
             setattr(merged, field, value)
     return merged
-
-
-class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
-    """Wrapper exception class for errors associated with the `Google GenAI` API.
-
-    Raised when there are specific issues related to the Google GenAI API usage in the
-    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
-    """
 
 
 # Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
@@ -3391,6 +3459,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         return _response_to_result(response)
 
@@ -3433,6 +3503,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         return _response_to_result(response)
 
@@ -3475,6 +3547,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
@@ -3547,6 +3621,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         async for chunk in stream:
             _chat_result = _response_to_result(
