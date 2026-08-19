@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -32,7 +32,16 @@ from google.genai.types import (
 )
 from google.protobuf.struct_pb2 import Struct
 from langchain_core._api import LangChainBetaWarning
-from langchain_core.exceptions import ContextOverflowError
+from langchain_core.exceptions import (
+    ContextOverflowError,
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelError,
+    ModelInvalidRequestError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+)
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
@@ -68,6 +77,8 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _handle_client_error,
+    _handle_server_error,
     _is_gemini_3_or_later,
     _is_gemini_25_model,
     _merge_http_options,
@@ -6180,6 +6191,69 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+@pytest.mark.parametrize(
+    ("status_code", "status", "model_error_type", "is_retryable"),
+    [
+        (400, "INVALID_ARGUMENT", ModelInvalidRequestError, False),
+        (401, "UNAUTHENTICATED", ModelAuthenticationError, False),
+        (403, "PERMISSION_DENIED", ModelPermissionDeniedError, False),
+        (404, "NOT_FOUND", ModelNotFoundError, False),
+        (429, "RESOURCE_EXHAUSTED", ModelRateLimitError, True),
+    ],
+)
+def test_client_error_classification(
+    status_code: int,
+    status: str,
+    model_error_type: type[ModelError],
+    *,
+    is_retryable: bool,
+) -> None:
+    """Client errors are classified and stay `ChatGoogleGenerativeAIError`."""
+    error = ClientError(
+        code=status_code,
+        response_json={"error": {"message": "boom", "status": status}},
+        response=None,
+    )
+
+    with pytest.raises(ChatGoogleGenerativeAIError) as exc_info:
+        _handle_client_error(error, {"model": MODEL_NAME})
+
+    assert isinstance(exc_info.value, model_error_type)
+    assert exc_info.value.is_retryable is is_retryable
+    # The model name the request used stays in the message.
+    assert MODEL_NAME in str(exc_info.value)
+
+
+def test_unclassified_client_error_stays_unclassified() -> None:
+    """Status codes outside the taxonomy keep the previous behavior."""
+    error = ClientError(
+        code=409,
+        response_json={"error": {"message": "boom", "status": "ABORTED"}},
+        response=None,
+    )
+
+    with pytest.raises(ChatGoogleGenerativeAIError) as exc_info:
+        _handle_client_error(error, {"model": MODEL_NAME})
+
+    assert not isinstance(exc_info.value, ModelError)
+
+
+def test_server_error_classification() -> None:
+    """Server errors are raised as both `ServerError` and the LangChain type."""
+    error = ServerError(
+        code=503,
+        response_json={"error": {"message": "overloaded", "status": "UNAVAILABLE"}},
+        response=None,
+    )
+
+    with pytest.raises(ServerError) as exc_info:
+        _handle_server_error(error)
+
+    assert isinstance(exc_info.value, ModelAPIError)
+    assert exc_info.value.is_retryable is True
+    assert str(exc_info.value) == str(error)
 
 
 def test_context_overflow_error_invoke_sync() -> None:
