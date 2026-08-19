@@ -1295,7 +1295,7 @@ def _response_to_result(
     prev_usage: UsageMetadata | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
-    llm_output = (
+    llm_output: dict[str, Any] = (
         {"prompt_feedback": response.prompt_feedback.model_dump()}
         if response.prompt_feedback
         else {}
@@ -1347,6 +1347,19 @@ def _response_to_result(
             lc_usage = None
     except AttributeError:
         lc_usage = None
+
+    # `llm_output` is what `BaseCallbackHandler.on_llm_end` reads for token
+    # accounting. Without these keys, callback-based token trackers report zero
+    # even though the counts are available on `AIMessage.usage_metadata`.
+    if lc_usage is not None:
+        llm_output["token_usage"] = {
+            "prompt_tokens": lc_usage["input_tokens"],
+            "completion_tokens": lc_usage["output_tokens"],
+            "total_tokens": lc_usage["total_tokens"],
+        }
+        llm_output["usage_metadata"] = lc_usage
+    if response.model_version:
+        llm_output["model_name"] = response.model_version
 
     generations: list[ChatGeneration] = []
 
@@ -3353,6 +3366,36 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **request_params,
             **kwargs,
         )
+
+    def _combine_llm_outputs(
+        self, llm_outputs: list[dict[str, Any] | None], /
+    ) -> dict[str, Any]:
+        """Merge per-generation `llm_output` payloads for the final `LLMResult`.
+
+        `BaseChatModel` returns an empty dict by default, which would discard the
+        token counts populated in `_response_to_result` whenever a caller reads
+        `LLMResult.llm_output`. Summing the counts keeps a batched result
+        consistent with the per-generation values.
+
+        Args:
+            llm_outputs: Per-generation `llm_output` dicts, which may be `None`.
+
+        Returns:
+            The summed `token_usage` and the model name, when available.
+        """
+        combined: dict[str, Any] = {}
+        token_usage: dict[str, int] = {}
+        for llm_output in llm_outputs:
+            if not llm_output:
+                continue
+            for key, value in (llm_output.get("token_usage") or {}).items():
+                if value is not None:
+                    token_usage[key] = token_usage.get(key, 0) + value
+            if "model_name" in llm_output:
+                combined.setdefault("model_name", llm_output["model_name"])
+        if token_usage:
+            combined["token_usage"] = token_usage
+        return combined
 
     def _generate(
         self,
