@@ -6368,7 +6368,9 @@ def test_response_to_result_populates_llm_output_token_usage() -> None:
     assert result.llm_output["model_name"] == MODEL_NAME
 
     # The callback-facing counts must agree with the message-level ones.
-    usage_metadata = result.generations[0].message.usage_metadata
+    message = result.generations[0].message
+    assert isinstance(message, AIMessage)
+    usage_metadata = message.usage_metadata
     assert usage_metadata is not None
     assert result.llm_output["usage_metadata"] == usage_metadata
     assert (
