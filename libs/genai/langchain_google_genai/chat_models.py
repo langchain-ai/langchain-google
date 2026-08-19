@@ -59,12 +59,12 @@ from langchain_core.callbacks.manager import (
 )
 from langchain_core.exceptions import (
     ContextOverflowError,
+    ModelAPIError,
     ModelAuthenticationError,
     ModelInvalidRequestError,
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
-    ModelServerError,
 )
 from langchain_core.language_models import (
     LangSmithParams,
@@ -185,7 +185,7 @@ class GoogleRateLimitError(ChatGoogleGenerativeAIError, ModelRateLimitError):
     """Google rate-limit error classified as a LangChain model error."""
 
 
-class GoogleServerError(ServerError, ModelServerError):
+class GoogleAPIError(ServerError, ModelAPIError):
     """Google server error classified as a LangChain model error."""
 
 
@@ -244,9 +244,9 @@ def _handle_server_error(e: ServerError) -> None:
         e: The `ServerError` exception to handle.
 
     Raises:
-        GoogleServerError: Always, preserving the original type and message.
+        GoogleAPIError: Always, preserving the original type and message.
     """
-    raise GoogleServerError(
+    raise GoogleAPIError(
         code=e.code,
         response_json=e.details,
         response=e.response,
