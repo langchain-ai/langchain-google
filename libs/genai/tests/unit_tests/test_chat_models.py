@@ -4,7 +4,7 @@ import base64
 import json
 import os
 import warnings
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
@@ -6333,28 +6333,68 @@ async def test_context_overflow_error_invoke_async() -> None:
             await chat.ainvoke("test")
 
 
+def _raising_stream(error: Exception) -> Callable[..., Iterator[Any]]:
+    """Build a stand-in for the SDK's streaming call.
+
+    `generate_content_stream` is a generator function, so the request runs -- and
+    the error is raised -- when the returned iterator is advanced, not when it is
+    called. A `Mock(side_effect=...)` raises on the call instead, which would let
+    a regression through.
+    """
+
+    def _stream(**_kwargs: Any) -> Iterator[Any]:
+        yield from ()
+        raise error
+
+    return _stream
+
+
+def _araising_stream(error: Exception) -> Callable[..., Any]:
+    """Async counterpart to `_raising_stream`.
+
+    The async SDK method is a coroutine that returns an async generator, so the
+    request runs once that generator is iterated.
+    """
+
+    async def _stream(**_kwargs: Any) -> AsyncIterator[Any]:
+        async def _gen() -> AsyncIterator[Any]:
+            for chunk in ():  # never yields
+                yield chunk
+            raise error
+
+        return _gen()
+
+    return _stream
+
+
+_CONTEXT_OVERFLOW_CLIENT_ERROR = ClientError(
+    code=400,
+    response_json={
+        "error": {
+            "message": (
+                "The input token count (1632254) exceeds the maximum "
+                "number of tokens allowed (1048576)."
+            ),
+            "status": "INVALID_ARGUMENT",
+        }
+    },
+    response=None,
+)
+
+
+def _streaming_model(stream: Callable[..., Any], *, is_async: bool = False) -> Any:
+    """Patch `Client` so the chat model streams through `stream`."""
+    mock_client = Mock()
+    if is_async:
+        mock_client.return_value.aio.models.generate_content_stream = stream
+    else:
+        mock_client.return_value.models.generate_content_stream = stream
+    return mock_client
+
+
 def test_context_overflow_error_stream_sync() -> None:
     """Test token overflow is converted to `ContextOverflowError` (stream)."""
-    mock_client = Mock()
-    mock_models = Mock()
-
-    # Simulate an INVALID_ARGUMENT error from the API (token limit exceeded)
-    mock_models.generate_content_stream = Mock(
-        side_effect=ClientError(
-            code=400,
-            response_json={
-                "error": {
-                    "message": (
-                        "The input token count (1632254) exceeds the maximum "
-                        "number of tokens allowed (1048576)."
-                    ),
-                    "status": "INVALID_ARGUMENT",
-                }
-            },
-            response=None,
-        )
-    )
-    mock_client.return_value.models = mock_models
+    mock_client = _streaming_model(_raising_stream(_CONTEXT_OVERFLOW_CLIENT_ERROR))
 
     with patch("langchain_google_genai.chat_models.Client", mock_client):
         chat = ChatGoogleGenerativeAI(
@@ -6368,6 +6408,90 @@ def test_context_overflow_error_stream_sync() -> None:
             match="exceeds the maximum number of tokens allowed",
         ):
             list(chat.stream("test"))
+
+
+async def test_context_overflow_error_stream_async() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (astream)."""
+    mock_client = _streaming_model(
+        _araising_stream(_CONTEXT_OVERFLOW_CLIENT_ERROR), is_async=True
+    )
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            [chunk async for chunk in chat.astream("test")]
+
+
+@pytest.mark.parametrize(
+    ("error", "model_error_type"),
+    [
+        (
+            ClientError(
+                code=401,
+                response_json={"error": {"message": "bad key", "status": "UNAUTH"}},
+                response=None,
+            ),
+            ModelAuthenticationError,
+        ),
+        (
+            ServerError(
+                code=503,
+                response_json={"error": {"message": "busy", "status": "UNAVAILABLE"}},
+                response=None,
+            ),
+            ModelAPIError,
+        ),
+    ],
+)
+def test_stream_error_classification(
+    error: Exception, model_error_type: type[ModelError]
+) -> None:
+    """Streaming errors are classified the same as non-streaming ones.
+
+    The SDK raises these while the stream is consumed, so classifying only at the
+    call site would let them escape unclassified.
+    """
+    mock_client = _streaming_model(_raising_stream(error))
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(model_error_type):
+            list(chat.stream("test"))
+
+
+async def test_astream_error_classification() -> None:
+    """Streaming errors are classified on the async path too."""
+    error = ClientError(
+        code=429,
+        response_json={"error": {"message": "slow down", "status": "EXHAUSTED"}},
+        response=None,
+    )
+    mock_client = _streaming_model(_araising_stream(error), is_async=True)
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(ModelRateLimitError) as exc_info:
+            [chunk async for chunk in chat.astream("test")]
+
+    assert exc_info.value.is_retryable is True
 
 
 def test_context_overflow_error_backwards_compatibility() -> None:

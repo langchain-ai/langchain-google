@@ -253,6 +253,55 @@ def _handle_server_error(e: ServerError) -> None:
     ) from e
 
 
+def _classified_stream(
+    response: Iterator[GenerateContentResponse], request: dict[str, Any]
+) -> Iterator[GenerateContentResponse]:
+    """Yield stream chunks, classifying errors raised while the request runs.
+
+    `generate_content_stream` is a generator, so the request is not issued until
+    the returned iterator is advanced. Classifying at the call site would never
+    fire; the errors surface here instead.
+
+    Args:
+        response: The chunk iterator returned by the SDK.
+        request: The request dict containing model info.
+
+    Yields:
+        Each chunk the SDK produces.
+    """
+    try:
+        yield from response
+    except ClientError as e:
+        _handle_client_error(e, request)
+    except ServerError as e:
+        _handle_server_error(e)
+
+
+async def _aclassified_stream(
+    response: AsyncIterator[GenerateContentResponse], request: dict[str, Any]
+) -> AsyncIterator[GenerateContentResponse]:
+    """Yield stream chunks, classifying errors raised while the request runs.
+
+    The async counterpart to `_classified_stream`. Awaiting
+    `generate_content_stream` only builds the async generator, so the request is
+    issued once it is iterated.
+
+    Args:
+        response: The chunk iterator returned by the SDK.
+        request: The request dict containing model info.
+
+    Yields:
+        Each chunk the SDK produces.
+    """
+    try:
+        async for chunk in response:
+            yield chunk
+    except ClientError as e:
+        _handle_client_error(e, request)
+    except ServerError as e:
+        _handle_server_error(e)
+
+
 def _get_default_model_profile(model_name: str) -> ModelProfile:
     default = _MODEL_PROFILES.get(model_name) or {}
     return default.copy()
@@ -3539,21 +3588,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        try:
-            response: Iterator[GenerateContentResponse] = (
-                self.client.models.generate_content_stream(
-                    **request,
-                )
+        response: Iterator[GenerateContentResponse] = (
+            self.client.models.generate_content_stream(
+                **request,
             )
-        except ClientError as e:
-            _handle_client_error(e, request)
-        except ServerError as e:
-            _handle_server_error(e)
+        )
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        for chunk in response:
+        for chunk in _classified_stream(response, request):
             if chunk:
                 _chat_result = _response_to_result(
                     chunk, stream=True, prev_usage=prev_usage_metadata
@@ -3615,16 +3659,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        try:
-            stream = await self.client.aio.models.generate_content_stream(
-                **request,
-            )
-        except ClientError as e:
-            _handle_client_error(e, request)
-        except ServerError as e:
-            _handle_server_error(e)
+        stream = await self.client.aio.models.generate_content_stream(
+            **request,
+        )
 
-        async for chunk in stream:
+        async for chunk in _aclassified_stream(stream, request):
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
