@@ -183,6 +183,14 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                         else base64,
                     }
                 }
+                # Preserve thought_signature when present in extras for Google
+                if (
+                    model_provider == "google_genai"
+                    and "extras" in block_dict
+                    and isinstance(block_dict["extras"], dict)
+                    and "signature" in block_dict["extras"]
+                ):
+                    new_block["thought_signature"] = block_dict["extras"]["signature"]
                 new_content.append(new_block)
             elif (url := block_dict.get("url")) and model_provider == "google_genai":
                 # Google file service
@@ -192,6 +200,13 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                         "file_uri": url,
                     }
                 }
+                # Preserve thought_signature when present in extras for Google
+                if (
+                    "extras" in block_dict
+                    and isinstance(block_dict["extras"], dict)
+                    and "signature" in block_dict["extras"]
+                ):
+                    new_block["thought_signature"] = block_dict["extras"]["signature"]
                 new_content.append(new_block)
 
         # TODO: AudioContentBlock -> audio once models support passing back in
