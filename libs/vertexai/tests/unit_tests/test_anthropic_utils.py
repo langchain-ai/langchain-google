@@ -1226,6 +1226,49 @@ def test_format_messages_tool_message_with_streaming_metadata() -> None:
     }
 
 
+def test_format_messages_preformatted_tool_result_nested_streaming_metadata() -> None:
+    """Streaming metadata is stripped from nested content of pre-formatted tool_results.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1256
+
+    When a ToolMessage already holds `tool_result` blocks (e.g. rehydrated from a
+    prior turn in a multi-agent graph), `_clean_content_block` stripped streaming
+    metadata from the top level of the `tool_result` block but left its nested
+    `content` blocks untouched. The leaked `index` on the inner text block made
+    the Anthropic API reject the request with
+    `tool_result.content.0.text.index: Extra inputs are not permitted`.
+    """
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="get_weather", args={"city": "Paris"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "call_1",
+                    "content": [{"type": "text", "text": "Sunny, 22°C", "index": 0}],
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    # The nested text block must not leak the streaming 'index' field.
+    assert formatted[1]["content"][0] == {
+        "type": "tool_result",
+        "tool_use_id": "call_1",
+        "content": [{"type": "text", "text": "Sunny, 22°C"}],  # NO 'index'
+    }
+
+
 def test_format_messages_tool_message_with_error() -> None:
     """Test that error ToolMessages include is_error flag."""
     messages = [
