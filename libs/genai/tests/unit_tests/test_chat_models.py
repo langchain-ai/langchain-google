@@ -6358,7 +6358,8 @@ def _araising_stream(error: Exception) -> Callable[..., Any]:
 
     async def _stream(**_kwargs: Any) -> AsyncIterator[Any]:
         async def _gen() -> AsyncIterator[Any]:
-            for chunk in ():  # never yields
+            no_chunks: tuple[Any, ...] = ()
+            for chunk in no_chunks:
                 yield chunk
             raise error
 
