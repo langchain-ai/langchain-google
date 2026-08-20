@@ -29,6 +29,12 @@ from langchain_google_vertexai._anthropic_utils import (
     _thinking_in_params,
 )
 
+# Claude on Vertex AI rejects url-type image sources, so http(s) URLs are
+# downloaded and inlined as base64 (#1088). Tests mock the download and assert
+# against the base64 of these bytes.
+_MOCK_URL_IMAGE_BYTES = b"\x89PNG\r\n\x1a\nmock-png-bytes"
+_MOCK_URL_IMAGE_B64 = base64.b64encode(_MOCK_URL_IMAGE_BYTES).decode("ascii")
+
 
 def test_format_message_anthropic_with_cache_control_in_kwargs() -> None:
     """Test formatting a message with cache control in additional_kwargs."""
@@ -804,8 +810,9 @@ def test_format_messages_anthropic_with_mixed_messages() -> None:
                         {
                             "type": "image",
                             "source": {
-                                "type": "url",
-                                "url": "https://example.com/image.png",
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": _MOCK_URL_IMAGE_B64,
                             },
                         },
                         {
@@ -855,8 +862,9 @@ def test_format_messages_anthropic_with_mixed_messages() -> None:
                         {
                             "type": "image",
                             "source": {
-                                "type": "url",
-                                "url": "https://example.com/image.png",
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": _MOCK_URL_IMAGE_B64,
                             },
                         },
                         {
@@ -882,10 +890,12 @@ def test_format_messages_anthropic_with_mixed_messages() -> None:
         ),
     ],
 )
+@patch("langchain_google_vertexai._anthropic_utils.ImageBytesLoader")
 def test_format_messages_anthropic(
-    source_history, expected_sm, expected_history
+    mock_image_loader, source_history, expected_sm, expected_history
 ) -> None:
     """Test the original format_messages_anthropic functionality."""
+    mock_image_loader.return_value.load_bytes.return_value = _MOCK_URL_IMAGE_BYTES
     sm, result_history = _format_messages_anthropic(
         source_history, project="test-project"
     )
@@ -1226,6 +1236,49 @@ def test_format_messages_tool_message_with_streaming_metadata() -> None:
     }
 
 
+def test_format_messages_preformatted_tool_result_nested_streaming_metadata() -> None:
+    """Streaming metadata is stripped from nested content of pre-formatted tool_results.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1256
+
+    When a ToolMessage already holds `tool_result` blocks (e.g. rehydrated from a
+    prior turn in a multi-agent graph), `_clean_content_block` stripped streaming
+    metadata from the top level of the `tool_result` block but left its nested
+    `content` blocks untouched. The leaked `index` on the inner text block made
+    the Anthropic API reject the request with
+    `tool_result.content.0.text.index: Extra inputs are not permitted`.
+    """
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                create_tool_call(
+                    name="get_weather", args={"city": "Paris"}, id="call_1"
+                )
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "call_1",
+                    "content": [{"type": "text", "text": "Sunny, 22°C", "index": 0}],
+                }
+            ],
+            tool_call_id="call_1",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    # The nested text block must not leak the streaming 'index' field.
+    assert formatted[1]["content"][0] == {
+        "type": "tool_result",
+        "tool_use_id": "call_1",
+        "content": [{"type": "text", "text": "Sunny, 22°C"}],  # NO 'index'
+    }
+
+
 def test_format_messages_tool_message_with_error() -> None:
     """Test that error ToolMessages include is_error flag."""
     messages = [
@@ -1481,8 +1534,16 @@ def test_format_messages_tool_message_with_image_blocks() -> None:
     }
 
 
-def test_format_messages_tool_message_with_url_image_block() -> None:
-    """Test URL image blocks in ToolMessage are converted."""
+@patch("langchain_google_vertexai._anthropic_utils.ImageBytesLoader")
+def test_format_messages_tool_message_with_url_image_block(mock_image_loader) -> None:
+    """URL image blocks are downloaded and inlined as base64 for Claude on Vertex.
+
+    Regression test for
+    https://github.com/langchain-ai/langchain-google/issues/1088. Claude on
+    Vertex AI rejects url-type image sources, so http(s) URLs must be fetched and
+    sent as base64 (mirroring Anthropic's SDK and how data: URLs are handled).
+    """
+    mock_image_loader.return_value.load_bytes.return_value = _MOCK_URL_IMAGE_BYTES
     messages = [
         AIMessage(
             content="",
@@ -1508,7 +1569,11 @@ def test_format_messages_tool_message_with_url_image_block() -> None:
     image_block = formatted[1]["content"][0]["content"][0]
     assert image_block == {
         "type": "image",
-        "source": {"type": "url", "url": "https://example.com/image.png"},
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": _MOCK_URL_IMAGE_B64,
+        },
     }
 
 

@@ -358,14 +358,12 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
         }
     if "url" in block:
         url = block["url"]
-        if url.startswith("data:"):
-            return {
-                "type": "image",
-                "source": _format_image(url, project),
-            }
+        # Claude on Vertex AI rejects url-type image sources (unlike Anthropic's
+        # direct API). Download and inline as base64 via _format_image, which
+        # already handles data:, http(s), and gs:// URLs. (#1088)
         return {
             "type": "image",
-            "source": {"type": "url", "url": url},
+            "source": _format_image(url, project),
         }
     if "file_id" in block:
         return {
@@ -423,7 +421,15 @@ def _clean_content_block(block: Any) -> Any:
     if block.get("type") not in ("tool_use", "image"):
         keys_to_remove.add("id")
 
-    return {k: v for k, v in block.items() if k not in keys_to_remove}
+    cleaned = {k: v for k, v in block.items() if k not in keys_to_remove}
+
+    # tool_result blocks nest their own content blocks, which can also carry
+    # streaming metadata (e.g. `index`). The top-level strip above does not
+    # reach them, so recurse into the nested content (#1256).
+    if block.get("type") == "tool_result" and isinstance(cleaned.get("content"), list):
+        cleaned["content"] = [_clean_content_block(b) for b in cleaned["content"]]
+
+    return cleaned
 
 
 def _clean_content(content: Any) -> Any:
