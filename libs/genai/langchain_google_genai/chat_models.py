@@ -22,7 +22,7 @@ from typing import (
 
 import filetype  # type: ignore[import-untyped]
 from google.genai.client import Client
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -57,7 +57,15 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.exceptions import ContextOverflowError
+from langchain_core.exceptions import (
+    ContextOverflowError,
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelInvalidRequestError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+)
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -142,8 +150,53 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
+    """Wrapper exception class for errors associated with the `Google GenAI` API.
+
+    Raised when there are specific issues related to the Google GenAI API usage in the
+    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
+    """
+
+
 class GoogleContextOverflowError(ClientError, ContextOverflowError):
     """ClientError raised when input exceeds Google's context limit."""
+
+
+# Inherit ChatGoogleGenerativeAIError for backward compatibility
+class GoogleAuthenticationError(ChatGoogleGenerativeAIError, ModelAuthenticationError):
+    """Google authentication error classified as a LangChain model error."""
+
+
+class GooglePermissionDeniedError(
+    ChatGoogleGenerativeAIError, ModelPermissionDeniedError
+):
+    """Google permission error classified as a LangChain model error."""
+
+
+class GoogleInvalidRequestError(ChatGoogleGenerativeAIError, ModelInvalidRequestError):
+    """Google invalid-request error classified as a LangChain model error."""
+
+
+class GoogleModelNotFoundError(ChatGoogleGenerativeAIError, ModelNotFoundError):
+    """Google not-found error classified as a LangChain model error."""
+
+
+class GoogleRateLimitError(ChatGoogleGenerativeAIError, ModelRateLimitError):
+    """Google rate-limit error classified as a LangChain model error."""
+
+
+class GoogleAPIError(ServerError, ModelAPIError):
+    """Google server error classified as a LangChain model error."""
+
+
+_CLIENT_ERROR_TYPES: dict[int, type[ChatGoogleGenerativeAIError]] = {
+    400: GoogleInvalidRequestError,
+    401: GoogleAuthenticationError,
+    403: GooglePermissionDeniedError,
+    404: GoogleModelNotFoundError,
+    429: GoogleRateLimitError,
+}
+"""HTTP status codes the Google GenAI API reports, keyed to LangChain error types."""
 
 
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
@@ -153,6 +206,11 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
     when the error indicates that the input exceeded the model's token limit,
     so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
     and fall back to context compaction.
+
+    Other recognized status codes are raised as the corresponding
+    `langchain_core.exceptions.ModelError` subclass, which tells retry middleware
+    whether another attempt could succeed. Those remain `ChatGoogleGenerativeAIError`
+    subclasses, so existing handling continues to work.
 
     Args:
         e: The `ClientError` exception to handle.
@@ -174,7 +232,74 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
         ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
+    if error_type := _CLIENT_ERROR_TYPES.get(e.code):
+        raise error_type(msg) from e
     raise ChatGoogleGenerativeAIError(msg) from e
+
+
+def _handle_server_error(e: ServerError) -> None:
+    """Re-raise a `ServerError` as its LangChain-classified equivalent.
+
+    Args:
+        e: The `ServerError` exception to handle.
+
+    Raises:
+        GoogleAPIError: Always, preserving the original type and message.
+    """
+    raise GoogleAPIError(
+        code=e.code,
+        response_json=e.details,
+        response=e.response,
+    ) from e
+
+
+def _classified_stream(
+    response: Iterator[GenerateContentResponse], request: dict[str, Any]
+) -> Iterator[GenerateContentResponse]:
+    """Yield stream chunks, classifying errors raised while the request runs.
+
+    `generate_content_stream` is a generator, so the request is not issued until
+    the returned iterator is advanced. Classifying at the call site would never
+    fire; the errors surface here instead.
+
+    Args:
+        response: The chunk iterator returned by the SDK.
+        request: The request dict containing model info.
+
+    Yields:
+        Each chunk the SDK produces.
+    """
+    try:
+        yield from response
+    except ClientError as e:
+        _handle_client_error(e, request)
+    except ServerError as e:
+        _handle_server_error(e)
+
+
+async def _aclassified_stream(
+    response: AsyncIterator[GenerateContentResponse], request: dict[str, Any]
+) -> AsyncIterator[GenerateContentResponse]:
+    """Yield stream chunks, classifying errors raised while the request runs.
+
+    The async counterpart to `_classified_stream`. Awaiting
+    `generate_content_stream` only builds the async generator, so the request is
+    issued once it is iterated.
+
+    Args:
+        response: The chunk iterator returned by the SDK.
+        request: The request dict containing model info.
+
+    Yields:
+        Each chunk the SDK produces.
+    """
+    try:
+        async for chunk in response:
+            yield chunk
+    except ClientError as e:
+        _handle_client_error(e, request)
+    except ServerError as e:
+        _handle_server_error(e)
 
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
@@ -217,14 +342,6 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
         else:
             setattr(merged, field, value)
     return merged
-
-
-class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
-    """Wrapper exception class for errors associated with the `Google GenAI` API.
-
-    Raised when there are specific issues related to the Google GenAI API usage in the
-    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
-    """
 
 
 # Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
@@ -3391,6 +3508,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         return _response_to_result(response)
 
@@ -3433,6 +3552,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         return _response_to_result(response)
 
@@ -3467,19 +3588,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        try:
-            response: Iterator[GenerateContentResponse] = (
-                self.client.models.generate_content_stream(
-                    **request,
-                )
+        response: Iterator[GenerateContentResponse] = (
+            self.client.models.generate_content_stream(
+                **request,
             )
-        except ClientError as e:
-            _handle_client_error(e, request)
+        )
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        for chunk in response:
+        for chunk in _classified_stream(response, request):
             if chunk:
                 _chat_result = _response_to_result(
                     chunk, stream=True, prev_usage=prev_usage_metadata
@@ -3541,14 +3659,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        try:
-            stream = await self.client.aio.models.generate_content_stream(
-                **request,
-            )
-        except ClientError as e:
-            _handle_client_error(e, request)
+        stream = await self.client.aio.models.generate_content_stream(
+            **request,
+        )
 
-        async for chunk in stream:
+        async for chunk in _aclassified_stream(stream, request):
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
