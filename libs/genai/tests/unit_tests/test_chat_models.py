@@ -1392,6 +1392,79 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     )
 
 
+def _multi_image_stream_responses() -> list[GenerateContentResponse]:
+    return [
+        GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Images:")]))]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        parts=[
+                            Part(
+                                inline_data=Blob(data=b"first", mime_type="image/png")
+                            ),
+                            Part(
+                                inline_data=Blob(data=b"second", mime_type="image/png")
+                            ),
+                        ]
+                    )
+                )
+            ]
+        ),
+    ]
+
+
+def test_streaming_consecutive_image_blocks_have_distinct_indices() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert llm.client is not None
+    with patch.object(
+        llm.client.models,
+        "generate_content_stream",
+        return_value=iter(_multi_image_stream_responses()),
+    ):
+        chunks = list(llm._stream([HumanMessage(content="Generate two images")]))
+
+    full = chunks[0].message + chunks[1].message
+    assert isinstance(full.content, list)
+    image_blocks = [
+        block
+        for block in full.content
+        if isinstance(block, dict) and block.get("type") == "image_url"
+    ]
+    assert [block["index"] for block in image_blocks] == [0, 1]
+    assert len(image_blocks) == 2
+
+
+async def test_astreaming_consecutive_image_blocks_have_distinct_indices() -> None:
+    async def stream() -> AsyncIterator[GenerateContentResponse]:
+        for response in _multi_image_stream_responses():
+            yield response
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert llm.async_client is not None
+    llm.async_client.models.generate_content_stream = AsyncMock(return_value=stream())
+    chunks = [
+        chunk
+        async for chunk in llm._astream([HumanMessage(content="Generate two images")])
+    ]
+
+    full = chunks[0].message + chunks[1].message
+    assert isinstance(full.content, list)
+    image_blocks = [
+        block
+        for block in full.content
+        if isinstance(block, dict) and block.get("type") == "image_url"
+    ]
+    assert [block["index"] for block in image_blocks] == [0, 1]
+    assert len(image_blocks) == 2
+
+
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)

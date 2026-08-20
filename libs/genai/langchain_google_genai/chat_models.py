@@ -1573,6 +1573,22 @@ def _response_to_result(
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
+def _assign_streaming_block_indices(
+    content: list[str | dict[str, Any]], index: int, index_type: str
+) -> tuple[int, str]:
+    first_block = True
+    for block in content:
+        if not isinstance(block, dict) or "type" not in block:
+            continue
+        if block["type"] != index_type or not first_block:
+            index_type = block["type"]
+            index += 1
+        if "index" not in block:
+            block["index"] = index
+        first_block = False
+    return index, index_type
+
+
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     r"""Google GenAI chat model integration.
 
@@ -3605,15 +3621,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
 
-            # Populate index if missing
             if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+                index, index_type = _assign_streaming_block_indices(
+                    message.content, index, index_type
+                )
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -3670,15 +3681,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
 
-            # populate index if missing
             if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+                index, index_type = _assign_streaming_block_indices(
+                    message.content, index, index_type
+                )
 
             prev_usage_metadata = (
                 message.usage_metadata
