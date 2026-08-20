@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
 from langchain_google_genai._function_utils import (
+    _tool_choice_to_tool_config,
     _ToolChoiceType,
     convert_to_genai_function_declarations,
 )
@@ -179,6 +180,22 @@ def create_context_cache(
 
     if tool_list:
         cache_config_kwargs["tools"] = tool_list
+
+    # Apply tool_choice into the cache's tool_config so a forced/among tool
+    # selection is baked into the cached content (it can't be set on later
+    # requests). Mirrors ChatGoogleGenerativeAI's tool_choice handling.
+    if tool_choice:
+        if not tool_list:
+            msg = (
+                f"Received {tool_choice=} but no tools. 'tool_choice' can only "
+                "be specified if 'tools' is specified."
+            )
+            raise ValueError(msg)
+        all_names = model._extract_tool_names(tool_list)
+        if all_names:
+            cache_config_kwargs["tool_config"] = _tool_choice_to_tool_config(
+                tool_choice, all_names
+            )
 
     # Create the cache
     cache = model.client.caches.create(
