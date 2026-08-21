@@ -4709,6 +4709,55 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
         assert config.thinking_config.thinking_budget is None
 
 
+def test_thinking_budget_takes_precedence_for_pre_gemini_3_models() -> None:
+    """`thinking_budget` (not `thinking_level`) must win on Gemini < 3 models.
+
+    Regression test for GH issue #1462: previously `thinking_level` was
+    unconditionally preferred even though it is not a recognized field for
+    Gemini 2.x models, silently dropping `thinking_budget`.
+    """
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr(FAKE_API_KEY),
+            thinking_budget=1024,
+            thinking_level="low",
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 1
+        assert issubclass(warning_list[0].category, UserWarning)
+        assert "not supported by" in str(warning_list[0].message)
+
+        # thinking_budget must be used; thinking_level must be dropped
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == 1024
+        assert config.thinking_config.thinking_level is None
+
+
+def test_thinking_level_still_wins_for_gemini_3_models() -> None:
+    """`thinking_level` must still win for Gemini 3+ models (unchanged)."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=1024,
+        thinking_level="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.thinking_budget is None
+
+
 def test_thinking_budget_alone_still_works() -> None:
     """Test that `thinking_budget` still works when `thinking_level` is not provided."""
     llm = ChatGoogleGenerativeAI(
