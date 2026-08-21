@@ -12,7 +12,17 @@ from __future__ import annotations
 
 import json
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import InvalidArgument
@@ -746,6 +756,20 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     summary_spec_kwargs: Dict[str, Any] = Field(default_factory=dict)
     """ Additional kwargs for `SearchRequest.ContentSearchSpec.SummarySpec`"""
 
+    response_format: Literal["content", "content_and_artifact"] = "content"
+    """Whether to additionally return `summary_with_metadata` (citations and
+    references) as a tool artifact.
+
+    Set to `"content_and_artifact"` to receive citation/reference metadata
+    alongside the summary text. In that mode, calling the tool directly
+    (`.run()` / `.invoke()`) still returns only the summary string; the
+    artifact -- a dict with `citation_metadata` and `references` keys, when
+    present in the response -- is attached to the resulting `ToolMessage`
+    when the tool is invoked as part of an agent's tool call. This preserves
+    backward compatibility with the default `"content"` mode, where the
+    citation/reference metadata is dropped, matching prior behavior.
+    """
+
     model_config = ConfigDict(
         extra="forbid",
         arbitrary_types_allowed=True,
@@ -777,15 +801,37 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
 
         return kwargs
 
-    def _run(self, user_query: str) -> str:
+    def _run(self, user_query: str) -> Union[str, Tuple[str, Optional[Dict[str, Any]]]]:
         """Runs the tool.
 
         Args:
             search_query: The query to run by the agent.
 
         Returns:
-            The response from the agent.
+            The summary text, or, when `response_format` is
+            `"content_and_artifact"`, a tuple of the summary text and a dict
+            artifact containing citation/reference metadata (or `None` if the
+            response carries no such metadata).
         """
         request = self._create_search_request(user_query)
         response = self._client.search(request)
-        return response.summary.summary_text
+        summary_text = response.summary.summary_text
+
+        if self.response_format != "content_and_artifact":
+            return summary_text
+
+        artifact: Optional[Dict[str, Any]] = None
+        if self.summary_include_citations and response.summary.summary_with_metadata:
+            metadata_dict = MessageToDict(
+                response.summary.summary_with_metadata._pb,
+                preserving_proto_field_name=True,
+            )
+            citation_metadata = metadata_dict.get("citation_metadata")
+            references = metadata_dict.get("references")
+            if citation_metadata or references:
+                artifact = {
+                    "citation_metadata": citation_metadata,
+                    "references": references,
+                }
+
+        return summary_text, artifact
