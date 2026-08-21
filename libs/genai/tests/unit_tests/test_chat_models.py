@@ -6535,3 +6535,110 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def test_response_to_result_populates_llm_output_token_usage() -> None:
+    """`llm_output` carries token usage so `on_llm_end` can track tokens."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Hello there"}], "role": "model"},
+                "finish_reason": "STOP",
+            }
+        ],
+        "model_version": MODEL_NAME,
+        "usage_metadata": {
+            "prompt_token_count": 10,
+            "candidates_token_count": 20,
+            "total_token_count": 30,
+        },
+    }
+
+    result = _response_to_result(
+        GenerateContentResponse.model_validate(raw_response), stream=False
+    )
+
+    assert result.llm_output is not None
+    assert result.llm_output["token_usage"] == {
+        "prompt_tokens": 10,
+        "completion_tokens": 20,
+        "total_tokens": 30,
+    }
+    assert result.llm_output["model_name"] == MODEL_NAME
+
+    # The callback-facing counts must agree with the message-level ones.
+    message = result.generations[0].message
+    assert isinstance(message, AIMessage)
+    usage_metadata = message.usage_metadata
+    assert usage_metadata is not None
+    assert result.llm_output["usage_metadata"] == usage_metadata
+    assert (
+        result.llm_output["token_usage"]["total_tokens"]
+        == usage_metadata["total_tokens"]
+    )
+
+
+def test_response_to_result_llm_output_without_usage_metadata() -> None:
+    """A response with no usage metadata must not gain a `token_usage` key."""
+    raw_response = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "Hello there"}], "role": "model"},
+                "finish_reason": "STOP",
+            }
+        ],
+    }
+
+    result = _response_to_result(
+        GenerateContentResponse.model_validate(raw_response), stream=False
+    )
+
+    assert result.llm_output is not None
+    assert "token_usage" not in result.llm_output
+
+
+def test_combine_llm_outputs_sums_token_usage() -> None:
+    """Batched generations sum their token usage instead of discarding it."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+
+    combined = llm._combine_llm_outputs(
+        [
+            {
+                "token_usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+                "model_name": MODEL_NAME,
+            },
+            {
+                "token_usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 2,
+                    "total_tokens": 3,
+                },
+                "model_name": MODEL_NAME,
+            },
+            None,
+        ]
+    )
+
+    assert combined == {
+        "model_name": MODEL_NAME,
+        "token_usage": {
+            "prompt_tokens": 11,
+            "completion_tokens": 22,
+            "total_tokens": 33,
+        },
+    }
+
+
+def test_combine_llm_outputs_without_token_usage() -> None:
+    """Outputs carrying no token usage produce no `token_usage` key."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+
+    assert llm._combine_llm_outputs([None, {}]) == {}
