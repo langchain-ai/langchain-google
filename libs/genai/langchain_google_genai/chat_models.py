@@ -1430,13 +1430,22 @@ def _response_to_result(
         ) + thought_tokens
         total_tokens = response.usage_metadata.total_token_count or 0
         cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
+        # Tokens consumed by tool-execution results fed back to the model as
+        # input (e.g. function call responses in an agentic loop). These are
+        # part of the billed input token count but were previously untracked,
+        # causing usage_metadata to under-report input costs in tool-use
+        # workflows. Fixes GH issue #<TBD>.
+        tool_use_tokens = response.usage_metadata.tool_use_prompt_token_count or 0
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
+            input_token_details: dict[str, int] = {"cache_read": cache_read_tokens}
+            if tool_use_tokens > 0:
+                input_token_details["tool_use"] = tool_use_tokens
             if thought_tokens > 0:
                 cumulative_usage = UsageMetadata(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens},
+                    input_token_details=input_token_details,
                     output_token_details={"reasoning": thought_tokens},
                 )
             else:
@@ -1444,7 +1453,7 @@ def _response_to_result(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens},
+                    input_token_details=input_token_details,
                 )
             # previous usage metadata needs to be subtracted because gemini api returns
             # already-accumulated token counts with each chunk
@@ -3040,16 +3049,32 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        # `thinking_level` only takes precedence over `thinking_budget` for
+        # Gemini 3+ models -- it isn't a recognized field for earlier models,
+        # which must keep using `thinking_budget`. See GH issue #1462.
         if "thinking_level" in config and "thinking_budget" in config:
-            warnings.warn(
-                "Both 'thinking_level' and 'thinking_budget' were set after merging "
-                "thinking configuration values. 'thinking_level' takes precedence "
-                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
-                UserWarning,
-                stacklevel=2,
-            )
-            config.pop("thinking_budget")
+            effective_model = kwargs.get("model", self.model) or ""
+            if _is_gemini_3_or_later(effective_model):
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values. 'thinking_level' "
+                    "takes precedence for Gemini 3+ models; 'thinking_budget' "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_budget")
+            else:
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values, but 'thinking_level' "
+                    f"is not supported by {effective_model!r} (pre-Gemini 3). "
+                    "'thinking_budget' will be used instead and 'thinking_level' "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_level")
 
         return ThinkingConfig(**config)
 
