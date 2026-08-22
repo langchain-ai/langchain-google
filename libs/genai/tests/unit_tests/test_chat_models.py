@@ -1,6 +1,7 @@
 """Test chat model integration."""
 
 import base64
+import io
 import json
 import os
 import warnings
@@ -2683,6 +2684,65 @@ def test_content_blocks_translation_with_mixed_image_content() -> None:
     image_block = content_blocks[1]
     assert image_block["type"] == "image"
     assert "base64" in image_block
+
+
+def test_audio_sample_rate_read_from_mime_type() -> None:
+    """WAV frame rate must match the `rate` parameter in the MIME type.
+
+    Regression test: previously the frame rate was hardcoded at 24000 Hz
+    regardless of the MIME type, so audio at other sample rates (e.g.
+    audio/pcm;rate=16000 from Gemini Live) was wrapped in a WAV container
+    with the wrong frame rate, causing garbled playback.
+    """
+    import struct
+    import wave
+
+    # Raw PCM silence at 16 kHz (100 ms = 1600 samples × 2 bytes)
+    pcm_samples = struct.pack("<" + "h" * 1600, *([0] * 1600))
+
+    candidate = Candidate(
+        content=Content(
+            parts=[
+                Part(
+                    inline_data=Blob(data=pcm_samples, mime_type="audio/pcm;rate=16000")
+                )
+            ]
+        ),
+        finish_reason="STOP",
+    )
+    msg = _parse_response_candidate(candidate)
+    audio_bytes = msg.additional_kwargs.get("audio")
+    assert audio_bytes is not None, "Expected audio bytes in additional_kwargs"
+
+    buf = io.BytesIO(audio_bytes)
+    with wave.open(buf, "rb") as wf:
+        assert wf.getframerate() == 16000, (
+            f"Expected 16000 Hz from 'audio/pcm;rate=16000', got {wf.getframerate()}"
+        )
+
+
+def test_audio_sample_rate_defaults_to_24000_when_absent() -> None:
+    """WAV frame rate must default to 24000 Hz when MIME type has no `rate` param."""
+    import struct
+    import wave
+
+    pcm_samples = struct.pack("<" + "h" * 2400, *([0] * 2400))
+
+    candidate = Candidate(
+        content=Content(
+            parts=[Part(inline_data=Blob(data=pcm_samples, mime_type="audio/pcm"))]
+        ),
+        finish_reason="STOP",
+    )
+    msg = _parse_response_candidate(candidate)
+    audio_bytes = msg.additional_kwargs.get("audio")
+    assert audio_bytes is not None
+
+    buf = io.BytesIO(audio_bytes)
+    with wave.open(buf, "rb") as wf:
+        assert wf.getframerate() == 24000, (
+            f"Expected 24000 Hz fallback for 'audio/pcm', got {wf.getframerate()}"
+        )
 
 
 def test_chat_google_genai_invoke_with_audio_mocked() -> None:
