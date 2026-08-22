@@ -1,6 +1,7 @@
 """Test chat model integration."""
 
 import base64
+import io
 import json
 import os
 import warnings
@@ -2685,6 +2686,65 @@ def test_content_blocks_translation_with_mixed_image_content() -> None:
     assert "base64" in image_block
 
 
+def test_audio_sample_rate_read_from_mime_type() -> None:
+    """WAV frame rate must match the `rate` parameter in the MIME type.
+
+    Regression test: previously the frame rate was hardcoded at 24000 Hz
+    regardless of the MIME type, so audio at other sample rates (e.g.
+    audio/pcm;rate=16000 from Gemini Live) was wrapped in a WAV container
+    with the wrong frame rate, causing garbled playback.
+    """
+    import struct
+    import wave
+
+    # Raw PCM silence at 16 kHz (100 ms = 1600 samples × 2 bytes)
+    pcm_samples = struct.pack("<" + "h" * 1600, *([0] * 1600))
+
+    candidate = Candidate(
+        content=Content(
+            parts=[
+                Part(
+                    inline_data=Blob(data=pcm_samples, mime_type="audio/pcm;rate=16000")
+                )
+            ]
+        ),
+        finish_reason="STOP",
+    )
+    msg = _parse_response_candidate(candidate)
+    audio_bytes = msg.additional_kwargs.get("audio")
+    assert audio_bytes is not None, "Expected audio bytes in additional_kwargs"
+
+    buf = io.BytesIO(audio_bytes)
+    with wave.open(buf, "rb") as wf:
+        assert wf.getframerate() == 16000, (
+            f"Expected 16000 Hz from 'audio/pcm;rate=16000', got {wf.getframerate()}"
+        )
+
+
+def test_audio_sample_rate_defaults_to_24000_when_absent() -> None:
+    """WAV frame rate must default to 24000 Hz when MIME type has no `rate` param."""
+    import struct
+    import wave
+
+    pcm_samples = struct.pack("<" + "h" * 2400, *([0] * 2400))
+
+    candidate = Candidate(
+        content=Content(
+            parts=[Part(inline_data=Blob(data=pcm_samples, mime_type="audio/pcm"))]
+        ),
+        finish_reason="STOP",
+    )
+    msg = _parse_response_candidate(candidate)
+    audio_bytes = msg.additional_kwargs.get("audio")
+    assert audio_bytes is not None
+
+    buf = io.BytesIO(audio_bytes)
+    with wave.open(buf, "rb") as wf:
+        assert wf.getframerate() == 24000, (
+            f"Expected 24000 Hz fallback for 'audio/pcm', got {wf.getframerate()}"
+        )
+
+
 def test_chat_google_genai_invoke_with_audio_mocked() -> None:
     """Test generating audio with mocked response and `content_blocks` translation."""
     mock_response = GenerateContentResponse(
@@ -4707,6 +4767,55 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
         assert config.thinking_config.thinking_level == ThinkingLevel.LOW
         # Pydantic models define all fields; check value is None rather than hasattr
         assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_budget_takes_precedence_for_pre_gemini_3_models() -> None:
+    """`thinking_budget` (not `thinking_level`) must win on Gemini < 3 models.
+
+    Regression test for GH issue #1462: previously `thinking_level` was
+    unconditionally preferred even though it is not a recognized field for
+    Gemini 2.x models, silently dropping `thinking_budget`.
+    """
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr(FAKE_API_KEY),
+            thinking_budget=1024,
+            thinking_level="low",
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 1
+        assert issubclass(warning_list[0].category, UserWarning)
+        assert "not supported by" in str(warning_list[0].message)
+
+        # thinking_budget must be used; thinking_level must be dropped
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == 1024
+        assert config.thinking_config.thinking_level is None
+
+
+def test_thinking_level_still_wins_for_gemini_3_models() -> None:
+    """`thinking_level` must still win for Gemini 3+ models (unchanged)."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=1024,
+        thinking_level="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.thinking_budget is None
 
 
 def test_thinking_budget_alone_still_works() -> None:

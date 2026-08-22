@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import email.message
 import io
 import json
 import logging
@@ -1286,11 +1287,22 @@ def _parse_response_candidate(
             if part.inline_data.mime_type.startswith("audio/"):
                 buffer = io.BytesIO()
 
+                # Parse sample rate from MIME-type parameters (e.g.
+                # "audio/pcm;rate=16000"). Fall back to 24 kHz — the default
+                # output rate used by Gemini Live and TTS — when the parameter
+                # is absent (e.g. plain "audio/wav" or "audio/mp3").
+                _mime_msg = email.message.Message()
+                _mime_msg["content-type"] = part.inline_data.mime_type
+                _rate_param = _mime_msg.get_param("rate")
+                try:
+                    _frame_rate = int(_rate_param) if _rate_param else 24000
+                except (ValueError, TypeError):
+                    _frame_rate = 24000
+
                 with wave.open(buffer, "wb") as wf:
                     wf.setnchannels(1)
                     wf.setsampwidth(2)
-                    # TODO: Read Sample Rate from MIME content type.
-                    wf.setframerate(24000)
+                    wf.setframerate(_frame_rate)
                     wf.writeframes(part.inline_data.data)
 
                 audio_data = buffer.getvalue()
@@ -3040,16 +3052,32 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        # `thinking_level` only takes precedence over `thinking_budget` for
+        # Gemini 3+ models -- it isn't a recognized field for earlier models,
+        # which must keep using `thinking_budget`. See GH issue #1462.
         if "thinking_level" in config and "thinking_budget" in config:
-            warnings.warn(
-                "Both 'thinking_level' and 'thinking_budget' were set after merging "
-                "thinking configuration values. 'thinking_level' takes precedence "
-                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
-                UserWarning,
-                stacklevel=2,
-            )
-            config.pop("thinking_budget")
+            effective_model = kwargs.get("model", self.model) or ""
+            if _is_gemini_3_or_later(effective_model):
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values. 'thinking_level' "
+                    "takes precedence for Gemini 3+ models; 'thinking_budget' "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_budget")
+            else:
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values, but 'thinking_level' "
+                    f"is not supported by {effective_model!r} (pre-Gemini 3). "
+                    "'thinking_budget' will be used instead and 'thinking_level' "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_level")
 
         return ThinkingConfig(**config)
 
