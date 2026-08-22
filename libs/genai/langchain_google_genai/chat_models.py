@@ -1430,13 +1430,22 @@ def _response_to_result(
         ) + thought_tokens
         total_tokens = response.usage_metadata.total_token_count or 0
         cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
+        # Tokens consumed by tool-execution results fed back to the model as
+        # input (e.g. function call responses in an agentic loop). These are
+        # part of the billed input token count but were previously untracked,
+        # causing usage_metadata to under-report input costs in tool-use
+        # workflows. Fixes GH issue #<TBD>.
+        tool_use_tokens = response.usage_metadata.tool_use_prompt_token_count or 0
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
+            input_token_details: dict[str, int] = {"cache_read": cache_read_tokens}
+            if tool_use_tokens > 0:
+                input_token_details["tool_use"] = tool_use_tokens
             if thought_tokens > 0:
                 cumulative_usage = UsageMetadata(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens},
+                    input_token_details=input_token_details,
                     output_token_details={"reasoning": thought_tokens},
                 )
             else:
@@ -1444,7 +1453,7 @@ def _response_to_result(
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    input_token_details={"cache_read": cache_read_tokens},
+                    input_token_details=input_token_details,
                 )
             # previous usage metadata needs to be subtracted because gemini api returns
             # already-accumulated token counts with each chunk
