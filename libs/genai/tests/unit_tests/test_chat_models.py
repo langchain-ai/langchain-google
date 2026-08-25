@@ -1,9 +1,11 @@
 """Test chat model integration."""
 
+import asyncio
 import base64
 import json
 import os
 import warnings
+import weakref
 from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
@@ -6535,3 +6537,90 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def test_model_copy_does_not_close_shared_client() -> None:
+    """Collecting a copy must not close the transport the original still uses.
+
+    `model_copy` does not re-run the validator that builds the client, so a copy
+    shares the original's `Client`. This test guards against a change that would
+    make the copy close the transport when it is collected, which would break the
+    original.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    httpx_client = model.client._api_client._httpx_client
+    assert httpx_client is not None
+    assert not httpx_client.is_closed
+
+    copy = model.model_copy(update={"callbacks": []})
+    assert copy is not model
+    assert copy.client is model.client
+
+    copy_ref = weakref.ref(copy)
+    del copy
+    # Guard against a vacuous pass: the assertion below only means something if the
+    # copy was really collected and so had its chance to run a finalizer.
+    assert copy_ref() is None
+
+    assert not httpx_client.is_closed
+
+
+def test_client_closed_when_last_model_reference_dropped() -> None:
+    """Dropping the last reference to a model must still close its transport.
+
+    This checks that the model's `Client` is correctly closed when the model is garbage-
+    collected. This test was added to check that removing the `__del__` method from
+    `ChatGoogleGenerativeAI` (which used to close the client) does not break the
+    expected behavior of closing the transport when the last reference to the model is
+    dropped.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    # Hold the transport only: keeping the `Client` or `BaseApiClient` alive would
+    # prevent the SDK finalizers that perform the cleanup from ever running.
+    httpx_client = model.client._api_client._httpx_client
+    assert httpx_client is not None
+    assert not httpx_client.is_closed
+
+    del model
+
+    assert httpx_client.is_closed
+
+
+async def test_dropping_model_emits_no_unclosed_resource_warnings() -> None:
+    """Relying on the SDK's finalizers must not resurrect unclosed-resource noise.
+
+    This checked that garbage-collecting a model does not emit "Unclosed client session"
+    or "Unclosed connector" warnings. It was added to ensure that removing the `__del__`
+    method from `ChatGoogleGenerativeAI` (which used to close the client) does not break
+    the expected behavior of suppressing warnings when the last reference to the model
+    is dropped.
+    """
+    loop = asyncio.get_running_loop()
+    handler_contexts: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: handler_contexts.append(context))
+
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+
+            model = ChatGoogleGenerativeAI(
+                model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+            )
+            assert model.client is not None
+            # Materialize the cached aiohttp session; no request is sent.
+            await model.client._api_client._get_aiohttp_session()
+
+            del model
+            await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+    unclosed = [c for c in handler_contexts if "Unclosed" in str(c.get("message", ""))]
+    assert unclosed == []
