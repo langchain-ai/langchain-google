@@ -3269,7 +3269,7 @@ def test_parse_chat_history_tool_calls_preserves_thinking_block() -> None:
     message = AIMessage(
         content=[
             {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
-        ],  # type: ignore[list-item]
+        ],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
     )
 
@@ -3320,7 +3320,7 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
     message = AIMessage(
         content=[
             {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
-        ],  # type: ignore[list-item]
+        ],
         tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
         response_metadata={"model_provider": "google_genai"},
     )
@@ -3335,10 +3335,10 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
         }
     )
     # Sanity check: the projection produced a reasoning block and a tool_call block
-    assert v1_message.content[0]["type"] == "reasoning"  # type: ignore[index, call-overload]
+    assert v1_message.content[0]["type"] == "reasoning"  # type: ignore[index]
     assert any(
         isinstance(block, dict) and block.get("type") == "tool_call"
-        for block in v1_message.content  # type: ignore[union-attr]
+        for block in v1_message.content
     )
 
     _, formatted_messages = _parse_chat_history([v1_message])
@@ -3353,6 +3353,7 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
     assert len(function_call_parts) == 1
     assert thought_parts[0].text == "Let me think."
     assert thought_parts[0].thought_signature == sig_bytes
+    assert function_call_parts[0].function_call is not None
     assert function_call_parts[0].function_call.name == "search"
     assert function_call_parts[0].function_call.args == {"q": "x"}
 
@@ -3531,7 +3532,7 @@ def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
     # function calls must still be emitted exactly once each.
     assert any(
         isinstance(block, dict) and block.get("type") == "tool_call"
-        for block in v1_message.content  # type: ignore[union-attr]
+        for block in v1_message.content
     )
 
     _, formatted_messages = _parse_chat_history([v1_message])
@@ -3540,6 +3541,8 @@ def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
     assert parts is not None
     function_call_parts = [part for part in parts if part.function_call]
     assert len(function_call_parts) == 2
+    assert function_call_parts[0].function_call is not None
+    assert function_call_parts[1].function_call is not None
     assert function_call_parts[0].function_call.args == {"q": "a"}
     assert function_call_parts[1].function_call.args == {"q": "b"}
     # Text content is preserved too
