@@ -206,7 +206,10 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif file_id := block_dict.get("file_id"):
+            elif (file_id := block_dict.get("file_id")) and model_provider in (
+                "google_genai",
+                "google_vertexai",
+            ):
                 # File ID from uploaded file
                 new_block = {
                     "file_data": {

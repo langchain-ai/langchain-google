@@ -4022,6 +4022,33 @@ def test_parse_chat_history_tool_calls_v1_file_id_becomes_file_data() -> None:
     assert parts[0].file_data.mime_type == "application/pdf"
 
 
+def test_parse_chat_history_tool_calls_v1_foreign_file_id_dropped() -> None:
+    """A provider-scoped foreign file ID must not be replayed to Gemini."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "file",
+                "file_id": "file-openai-abc",
+                "mime_type": "application/pdf",
+            },
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+
+
 def test_parse_chat_history_tool_calls_v1_text_signature_decoded() -> None:
     """A signature on a v1 `text` block round-trips as decoded bytes."""
     signature = base64.b64encode(b"text_sig").decode("ascii")
