@@ -315,6 +315,59 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
+#: Providers whose content blocks and thought signatures this package can consume
+#: directly. Vertex AI serves the same Gemini models, so its signatures are valid
+#: here and must not be stripped.
+_NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
+
+
+def _block_signature(block: Mapping[str, Any]) -> Any:
+    """Return the thought signature carried by a content block, if any.
+
+    Signatures live at the top level on v0 `thinking` blocks and under `extras`
+    on v1 `reasoning` and `text` blocks.
+
+    Args:
+        block: The content block to inspect.
+
+    Returns:
+        The signature value, or `None` if the block carries none.
+    """
+    extras = block.get("extras")
+    return block.get("signature") or (
+        extras.get("signature") if isinstance(extras, Mapping) else None
+    )
+
+
+def _is_redundant_v1beta_part(block: Any) -> bool:
+    """Whether an already-converted v1beta part must be dropped before conversion.
+
+    Function calls are rebuilt from `message.tool_calls` so that they are emitted
+    exactly once, and the Gemini API rejects text parts that carry neither text
+    nor a thought signature. A part whose text is empty but which carries a
+    signature is kept: the signature is the payload Gemini requires to be echoed
+    back on thinking-enabled turns.
+
+    Args:
+        block: A block from an `AIMessage` whose content was already projected to
+            v1beta dicts by `_convert_from_v1_to_generativelanguage_v1beta`.
+
+    Returns:
+        `True` if the block must not be converted to a part.
+    """
+    if not isinstance(block, dict):
+        return False
+    if "function_call" in block:
+        return True
+    if block.get("text"):
+        return False
+    return set(block) <= {
+        "text",
+        "thought",
+        "thought_signature",
+    } and not block.get("thought_signature")
+
+
 def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
     """Merge a per-request `HttpOptions` over internally-derived options.
 
@@ -980,13 +1033,47 @@ DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
 )
 
 
+def _convert_to_parts_dropping_unconvertible(
+    content: list[Any], model: str | None = None
+) -> list[Part]:
+    """Convert content to parts, dropping blocks that have no Gemini equivalent.
+
+    Used for `AIMessage`s that may carry another provider's content blocks. Such a
+    block is an expected occurrence in a multi-provider history rather than a
+    programming error, so it is dropped with a warning instead of raising. Blocks
+    that do convert are unaffected.
+
+    Args:
+        content: The content blocks to convert.
+        model: The model name, used for version-specific logic.
+
+    Returns:
+        The convertible blocks as parts, in their original order.
+    """
+    try:
+        return _convert_to_parts(content, model=model)
+    except ValueError:
+        # Retry per block so that one unconvertible block does not discard the rest.
+        parts: list[Part] = []
+        for block in content:
+            try:
+                parts.extend(_convert_to_parts([block], model=model))
+            except ValueError:
+                logger.warning(
+                    "Dropping content block that cannot be represented as a "
+                    "Gemini part (type: %s).",
+                    block.get("type") if isinstance(block, Mapping) else type(block),
+                )
+        return parts
+
+
 def _prepare_content_for_tool_call_message(
     message: AIMessage,
 ) -> str | list[Any]:
     """Prepare `AIMessage` content for conversion when the message has tool calls.
 
     Strips valid and invalid function-call content blocks (valid calls are rebuilt
-    from `message.tool_calls`) and normalizes foreign-provider reasoning blocks so
+    from `message.tool_calls`) and normalizes another provider's blocks so that
     conversion never crashes on shapes this package did not produce. Foreign server
     tools are retained only for matched code-interpreter call/result pairs.
 
@@ -994,11 +1081,21 @@ def _prepare_content_for_tool_call_message(
         message: The `AIMessage` whose content should be prepared.
 
     Returns:
-        The normalized message content, with function-call blocks removed and
-        unrepresentable reasoning blocks dropped.
+        The content to convert -- `message.content_blocks` for messages from
+        another provider, otherwise `message.content` -- with function-call blocks
+        removed, another provider's signatures stripped, unmatched foreign server
+        tool blocks dropped, and text/thought blocks that carry neither text nor a
+        signature dropped.
     """
     model_provider = message.response_metadata.get("model_provider")
-    is_foreign = model_provider is not None and model_provider != "google_genai"
+    is_foreign = (
+        model_provider is not None and model_provider not in _NATIVE_MODEL_PROVIDERS
+    )
+    # Messages with no `model_provider` (hand-built messages, checkpoints serialized
+    # before core stamped the field) may hold either shape. Read `content` rather
+    # than `content_blocks` for those: core projects Google's own `thinking` and
+    # `media` blocks to `non_standard`, which would discard genuine signatures.
+    # `_convert_to_parts_dropping_unconvertible` handles any foreign block instead.
     content = message.content_blocks if is_foreign else message.content
 
     if not isinstance(content, list):
@@ -1011,12 +1108,12 @@ def _prepare_content_for_tool_call_message(
     code_interpreter_call_ids: set[str] = set()
     if is_foreign:
         code_interpreter_call_ids = {
-            block["id"]
+            call_id
             for block in content
             if isinstance(block, dict)
             and block.get("type") == "server_tool_call"
             and block.get("name") == "code_interpreter"
-            and isinstance(block.get("id"), str)
+            and isinstance(call_id := block.get("id"), str)
         }
 
     filtered: list[Any] = []
@@ -1031,9 +1128,10 @@ def _prepare_content_for_tool_call_message(
 
         block_type = block.get("type")
         if block_type in ("tool_call", "tool_call_chunk", "invalid_tool_call"):
-            # Function-call parts are emitted from `message.tool_calls`; the
-            # v1 converter also translates these blocks, so including them here
-            # would duplicate each function call.
+            # Function calls are rebuilt from `message.tool_calls` below.
+            # `_convert_to_parts` has no `tool_call` branch, so leaving these in
+            # would raise; they would also duplicate every call. Foreign messages
+            # reach here via `content_blocks`, which does include these blocks.
             continue
         if is_foreign and block_type == "server_tool_call":
             if block.get("name") != "code_interpreter":
@@ -1044,30 +1142,24 @@ def _prepare_content_for_tool_call_message(
             and block.get("tool_call_id") not in code_interpreter_call_ids
         ):
             continue
-        if block_type == "text" and not block.get("text"):
-            # Skip empty text blocks; they carry no information and the Gemini
-            # API rejects empty parts.
-            continue
-        if block_type in ("thinking", "reasoning") and not (
-            block.get("thinking") or block.get("reasoning") or block.get("summary")
-        ):
-            # Skip empty thought blocks; the Gemini API rejects empty parts.
-            continue
-        if block_type == "reasoning" and "reasoning" not in block and not is_foreign:
-            # Reasoning block in a shape `_convert_to_parts` cannot represent
-            # (e.g. OpenAI's `summary` blocks on a message without provider
-            # metadata). Drop rather than crash. Foreign-provider messages get
-            # no filtering here so summary text can still be converted below.
-            continue
-        if is_foreign and (
-            block_type in ("thinking", "text")
-            or (
-                # A foreign reasoning block's signature is unusable by Google;
-                # strip it whether the block carries reasoning text or a summary.
-                block_type == "reasoning"
+        # Blocks with no text are dropped because the Gemini API rejects empty
+        # parts -- unless they carry a thought signature, which is itself the
+        # payload Gemini requires to be echoed back on thinking-enabled turns.
+        if (
+            block_type in ("text", "thinking", "reasoning")
+            and not (
+                block.get("text")
+                or block.get("thinking")
+                or block.get("reasoning")
+                or block.get("summary")
             )
+            and not _block_signature(block)
         ):
-            # Signatures from other providers are not meaningful to Google.
+            continue
+        # Signatures from other providers are not meaningful to Google. Strip them
+        # from reasoning blocks whether the block carries reasoning text or a
+        # summary.
+        if is_foreign and block_type in ("thinking", "text", "reasoning"):
             sanitized_block: dict[str, Any] = {
                 k: v for k, v in block.items() if k != "signature"
             }
@@ -1165,34 +1257,23 @@ def _parse_chat_history(
                 # when passing messages back to the API.
                 if message.response_metadata.get("output_version") == "v1":
                     # Content was already converted to v1beta dicts above by
-                    # `_convert_from_v1_to_generativelanguage_v1beta`. Keep
-                    # non-function-call blocks (function calls are rebuilt from
-                    # `message.tool_calls` below so they are emitted exactly once)
-                    # and drop empty text blocks (the Gemini API rejects empty
-                    # parts).
+                    # `_convert_from_v1_to_generativelanguage_v1beta`, so these
+                    # blocks carry no `type` key and need their own filter rather
+                    # than `_prepare_content_for_tool_call_message`.
                     ai_message_parts.extend(
-                        _convert_to_parts(
+                        _convert_to_parts_dropping_unconvertible(
                             [
                                 block
                                 for block in message.content
-                                if not (
-                                    isinstance(block, dict)
-                                    and (
-                                        "function_call" in block
-                                        or (
-                                            set(block) <= {"text", "thought_signature"}
-                                            and not block.get("text")
-                                        )
-                                    )
-                                )
+                                if not _is_redundant_v1beta_part(block)
                             ],
                             model=model,
                         )
                     )
                 else:
                     ai_message_parts.extend(
-                        _convert_to_parts(
-                            _prepare_content_for_tool_call_message(message),
+                        _convert_to_parts_dropping_unconvertible(
+                            _prepare_content_for_tool_call_message(message),  # type: ignore[arg-type]
                             model=model,
                         )
                     )
