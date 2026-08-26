@@ -3412,6 +3412,102 @@ def test_parse_chat_history_tool_calls_foreign_signatures_not_leaked() -> None:
     assert parts[0].thought_signature is None
 
 
+def test_parse_chat_history_tool_calls_v1_preserves_media_and_code_parts() -> None:
+    """v1-projected media/code parts survive the tool-call branch.
+
+    `_convert_from_v1_to_generativelanguage_v1beta` produces type-less v1beta
+    dicts (`inline_data`, `file_data`, `executable_code`,
+    `code_execution_result`); they must be converted to real media/code parts
+    rather than stringified as text.
+    """
+    message = AIMessage(
+        content=[
+            {
+                "type": "image",
+                "base64": "aGVsbG8=",
+                "mime_type": "image/png",
+            },
+            {
+                "type": "server_tool_call",
+                "name": "code_interpreter",
+                "args": {"code": "print(1)", "language": "python"},
+                "id": "srv_1",
+            },
+            {
+                "type": "server_tool_result",
+                "extras": {"block_type": "code_execution_result", "outcome": 1},
+                "output": "1",
+            },
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 4
+    image_part = parts[0]
+    assert image_part.inline_data is not None
+    assert image_part.inline_data.mime_type == "image/png"
+    assert image_part.inline_data.data == b"aGVsbG8="
+    assert image_part.text is None
+    executable_part = parts[1]
+    assert executable_part.executable_code is not None
+    assert executable_part.executable_code.code == "print(1)"
+    assert executable_part.executable_code.language == Language.PYTHON
+    result_part = parts[2]
+    assert result_part.code_execution_result is not None
+    assert result_part.code_execution_result.output == "1"
+    assert result_part.code_execution_result.outcome == (
+        CodeExecutionResultOutcome.OUTCOME_OK
+    )
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(function_call_parts) == 1
+
+
+def test_parse_chat_history_tool_calls_skips_empty_text_blocks() -> None:
+    """Empty text blocks don't produce empty parts (Gemini rejects them)."""
+    message = AIMessage(
+        content=[{"type": "text", "text": ""}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_skips_empty_v1_text() -> None:
+    """Empty text blocks in v1-projected messages don't produce empty parts."""
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": ""},
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
 def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
     """v1-projected messages emit exactly one FunctionCall part per tool call."""
     message = AIMessage(

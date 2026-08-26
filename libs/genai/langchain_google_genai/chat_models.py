@@ -723,7 +723,7 @@ def _convert_to_parts(
                                 for item in summary
                                 if isinstance(item, dict)
                             )
-                        else:
+                        if not reasoning_text:
                             continue
                     parts.append(
                         Part(
@@ -813,6 +813,39 @@ def _convert_to_parts(
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
+            elif "inline_data" in part or "file_data" in part:
+                # `inline_data`/`file_data` part produced by
+                # `_convert_from_v1_to_generativelanguage_v1beta` when unpacking
+                # v1 image/file content blocks (the `_parse_chat_history`
+                # tool-call branch routes v1-converted content through here).
+                media_data = part.get("inline_data") or part.get("file_data")
+                data_kwargs: dict[str, Any] = {
+                    k: v for k, v in (media_data or {}).items() if v is not None
+                }
+                if "inline_data" in part:
+                    parts.append(Part(inline_data=Blob(**data_kwargs)))
+                else:
+                    parts.append(Part(file_data=FileData(**data_kwargs)))
+            elif "executable_code" in part:
+                # Same already-converted v1beta shape, for `server_tool_call`
+                # (code_interpreter) blocks.
+                exec_kwargs: dict[str, Any] = {
+                    k: v
+                    for k, v in (part.get("executable_code") or {}).items()
+                    if v is not None
+                }
+                parts.append(Part(executable_code=ExecutableCode(**exec_kwargs)))
+            elif "code_execution_result" in part:
+                # Same already-converted v1beta shape, for `server_tool_result`
+                # (code_execution_result) blocks.
+                result_kwargs: dict[str, Any] = {
+                    k: v
+                    for k, v in (part.get("code_execution_result") or {}).items()
+                    if v is not None
+                }
+                parts.append(
+                    Part(code_execution_result=CodeExecutionResult(**result_kwargs))
+                )
             elif set(part) <= {"text", "thought_signature"} and isinstance(
                 part.get("text"), str
             ):
@@ -974,6 +1007,15 @@ def _prepare_content_for_tool_call_message(
             # v1 converter also translates these blocks, so including them here
             # would duplicate each function call.
             continue
+        if block_type == "text" and not block.get("text"):
+            # Skip empty text blocks; they carry no information and the Gemini
+            # API rejects empty parts.
+            continue
+        if block_type in ("thinking", "reasoning") and not (
+            block.get("thinking") or block.get("reasoning") or block.get("summary")
+        ):
+            # Skip empty thought blocks; the Gemini API rejects empty parts.
+            continue
         if block_type == "reasoning" and "reasoning" not in block and not is_foreign:
             # Reasoning block in a shape `_convert_to_parts` cannot represent
             # (e.g. OpenAI's `summary` blocks on a message without provider
@@ -1082,14 +1124,23 @@ def _parse_chat_history(
                     # Content was already converted to v1beta dicts above by
                     # `_convert_from_v1_to_generativelanguage_v1beta`. Keep
                     # non-function-call blocks (function calls are rebuilt from
-                    # `message.tool_calls` below so they are emitted exactly once).
+                    # `message.tool_calls` below so they are emitted exactly once)
+                    # and drop empty text blocks (the Gemini API rejects empty
+                    # parts).
                     ai_message_parts.extend(
                         _convert_to_parts(
                             [
                                 block
                                 for block in message.content
                                 if not (
-                                    isinstance(block, dict) and "function_call" in block
+                                    isinstance(block, dict)
+                                    and (
+                                        "function_call" in block
+                                        or (
+                                            set(block) <= {"text", "thought_signature"}
+                                            and not block.get("text")
+                                        )
+                                    )
                                 )
                             ],
                             model=model,
