@@ -3426,6 +3426,80 @@ def test_parse_chat_history_tool_calls_drops_invalid_foreign_calls() -> None:
     assert parts[0].function_call.name == "search"
 
 
+def test_parse_chat_history_tool_calls_drops_foreign_web_search_pair() -> None:
+    """Foreign server-tool results are not cast as Gemini code results."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "web_search_call",
+                "id": "ws_1",
+                "status": "completed",
+                "action": {
+                    "type": "search",
+                    "query": "weather",
+                    "sources": [
+                        {"type": "url", "url": "https://example.com/weather"}
+                    ],
+                },
+            },
+            {
+                "type": "function_call",
+                "name": "lookup",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+        ],
+        tool_calls=[{"name": "lookup", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "lookup"
+    assert parts[0].code_execution_result is None
+
+
+def test_parse_chat_history_tool_calls_keeps_foreign_code_interpreter_pair() -> None:
+    """Matched foreign code-interpreter calls and results remain compatible."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "code_interpreter_call",
+                "id": "ci_1",
+                "code": "print(1)",
+                "outputs": ["1"],
+                "status": "completed",
+            },
+            {
+                "type": "function_call",
+                "name": "lookup",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+        ],
+        tool_calls=[{"name": "lookup", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 3
+    assert parts[0].executable_code is not None
+    assert parts[0].executable_code.code == "print(1)"
+    assert parts[1].code_execution_result is not None
+    assert parts[1].code_execution_result.output == "['1']"
+    assert parts[2].function_call is not None
+    assert parts[2].function_call.name == "lookup"
+
+
 def test_parse_chat_history_tool_calls_non_standard_block_dropped(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

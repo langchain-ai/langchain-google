@@ -987,7 +987,8 @@ def _prepare_content_for_tool_call_message(
 
     Strips valid and invalid function-call content blocks (valid calls are rebuilt
     from `message.tool_calls`) and normalizes foreign-provider reasoning blocks so
-    conversion never crashes on shapes this package did not produce.
+    conversion never crashes on shapes this package did not produce. Foreign server
+    tools are retained only for matched code-interpreter call/result pairs.
 
     Args:
         message: The `AIMessage` whose content should be prepared.
@@ -1007,6 +1008,17 @@ def _prepare_content_for_tool_call_message(
             return []
         return content
 
+    code_interpreter_call_ids: set[str] = set()
+    if is_foreign:
+        code_interpreter_call_ids = {
+            block["id"]
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "server_tool_call"
+            and block.get("name") == "code_interpreter"
+            and isinstance(block.get("id"), str)
+        }
+
     filtered: list[Any] = []
     for block in content:
         if not isinstance(block, dict):
@@ -1022,6 +1034,15 @@ def _prepare_content_for_tool_call_message(
             # Function-call parts are emitted from `message.tool_calls`; the
             # v1 converter also translates these blocks, so including them here
             # would duplicate each function call.
+            continue
+        if is_foreign and block_type == "server_tool_call":
+            if block.get("name") != "code_interpreter":
+                continue
+        if (
+            is_foreign
+            and block_type == "server_tool_result"
+            and block.get("tool_call_id") not in code_interpreter_call_ids
+        ):
             continue
         if block_type == "text" and not block.get("text"):
             # Skip empty text blocks; they carry no information and the Gemini
