@@ -131,6 +131,7 @@ from langchain_google_genai._common import (
 from langchain_google_genai._compat import (
     _classify_model_provider,
     _convert_from_v1_to_generativelanguage_v1beta,
+    _is_file_uri_supported,
 )
 from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
@@ -1163,6 +1164,55 @@ def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
     return not has_text and not _block_signature(block)
 
 
+def _content_block_file_uri(block: Any) -> Any:
+    """Return the file URI carried by any supported content-block shape.
+
+    Args:
+        block: Raw, standardized, or projected content block.
+
+    Returns:
+        The block's file URI or `None` when it has no file reference.
+    """
+    if not isinstance(block, Mapping):
+        return None
+    file_data = block.get("file_data")
+    if isinstance(file_data, Mapping):
+        return file_data.get("file_uri")
+    block_type = block.get("type")
+    if block_type in ("file_data", "media"):
+        return block.get("file_uri")
+    if block_type == "file":
+        return block.get("file_id") or block.get("url")
+    if block_type == "image":
+        return block.get("url")
+    return None
+
+
+def _drop_unsupported_file_references(
+    content: list[Any], *, use_vertexai: bool
+) -> list[Any]:
+    """Drop history file references that the target backend cannot consume.
+
+    Args:
+        content: Prepared AI-message content blocks.
+        use_vertexai: Whether the target is the Vertex AI backend.
+
+    Returns:
+        Content without backend-specific file references unsupported by the target.
+    """
+    filtered: list[Any] = []
+    for block in content:
+        file_uri = _content_block_file_uri(block)
+        if not _is_file_uri_supported(file_uri, use_vertexai=use_vertexai):
+            logger.warning(
+                "Dropping Google Cloud Storage file URI from chat history because "
+                "the target Gemini Developer API does not support gs:// references."
+            )
+            continue
+        filtered.append(block)
+    return filtered
+
+
 def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
     """Prepare `AIMessage` content for conversion when the message has tool calls.
 
@@ -1248,6 +1298,7 @@ def _convert_ai_message_content(
     model: str | None,
     *,
     exclude_function_calls: bool,
+    use_vertexai: bool,
 ) -> list[Part]:
     """Convert an AI message's non-authoritative content to Gemini parts.
 
@@ -1260,6 +1311,7 @@ def _convert_ai_message_content(
         model: The target model name, used for version-specific media behavior.
         exclude_function_calls: Whether function-call blocks should be omitted
             because they will be rebuilt from `message.tool_calls`.
+        use_vertexai: Whether the target is the Vertex AI backend.
 
     Returns:
         Converted Gemini parts.
@@ -1271,6 +1323,7 @@ def _convert_ai_message_content(
         content: list[Any] = _convert_from_v1_to_generativelanguage_v1beta(
             cast("list[types.ContentBlock]", message.content),
             message.response_metadata.get("model_provider"),
+            use_vertexai=use_vertexai,
         )
         if exclude_function_calls:
             content = [
@@ -1283,6 +1336,7 @@ def _convert_ai_message_content(
             [message.content] if isinstance(message.content, str) else message.content
         )
 
+    content = _drop_unsupported_file_references(content, use_vertexai=use_vertexai)
     convert = (
         _convert_to_parts if provider_kind == "native" else _convert_to_parts_lenient
     )
@@ -1293,6 +1347,8 @@ def _parse_chat_history(
     input_messages: Sequence[BaseMessage],
     convert_system_message_to_human: bool = False,
     model: str | None = None,
+    *,
+    use_vertexai: bool = False,
 ) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
@@ -1302,6 +1358,7 @@ def _parse_chat_history(
 
             Whether to convert the first system message into a `HumanMessage`.
         model: The model name, used for version-specific logic.
+        use_vertexai: Whether the target is the Vertex AI backend.
 
     Returns:
         A tuple containing:
@@ -1351,6 +1408,7 @@ def _parse_chat_history(
                     message,
                     model,
                     exclude_function_calls=True,
+                    use_vertexai=use_vertexai,
                 )
 
                 # Then, add function call parts
@@ -1398,6 +1456,7 @@ def _parse_chat_history(
                     message,
                     model,
                     exclude_function_calls=False,
+                    use_vertexai=use_vertexai,
                 )
             else:
                 # Prepare request content parts from message.content field
@@ -3510,6 +3569,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             filtered_messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
             model=self.model,
+            use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
         )
         if (
             _uses_fixed_sampling_and_disallows_prefill(self.model)

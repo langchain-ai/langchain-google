@@ -4092,7 +4092,9 @@ def test_parse_chat_history_tool_calls_normalizes_native_blocks(
         response_metadata={"model_provider": model_provider},
     )
 
-    _, formatted_messages = _parse_chat_history([message])
+    _, formatted_messages = _parse_chat_history(
+        [message], use_vertexai=model_provider == "google_vertexai"
+    )
 
     parts = formatted_messages[0].parts
     assert parts is not None
@@ -4103,6 +4105,74 @@ def test_parse_chat_history_tool_calls_normalizes_native_blocks(
     assert parts[1].function_call is not None
     assert parts[1].function_call.name == "search"
     assert parts[1].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_drops_vertex_gcs_for_gemini_backend() -> None:
+    """The source being Vertex does not make its GCS URI valid for Gemini API."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_prepare_request_checks_target_backend_for_vertex_gcs_history(
+    vertexai: bool,
+) -> None:
+    """Vertex GCS references replay only when the target is also Vertex AI."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    message = AIMessage(
+        content=[
+            {
+                "type": "image",
+                "url": "gs://bucket/image.png",
+                "mime_type": "image/png",
+            },
+            {
+                "type": "file",
+                "url": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            },
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_vertexai",
+            "output_version": "v1",
+        },
+    )
+
+    request = llm._prepare_request([message])
+
+    parts = request["contents"][0].parts
+    assert parts is not None
+    file_uris = [
+        part.file_data.file_uri for part in parts if part.file_data is not None
+    ]
+    expected_uris = (
+        ["gs://bucket/image.png", "gs://bucket/document.pdf"] if vertexai else []
+    )
+    assert file_uris == expected_uris
+    assert len([part for part in parts if part.function_call is not None]) == 1
 
 
 def test_parse_chat_history_tool_calls_preserves_native_media_block() -> None:

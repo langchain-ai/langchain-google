@@ -35,6 +35,48 @@ def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
     return "foreign"
 
 
+def _is_file_uri_supported(file_uri: Any, *, use_vertexai: bool) -> bool:
+    """Whether a file URI can be replayed through the target Google backend.
+
+    Args:
+        file_uri: File reference carried by a content block.
+        use_vertexai: Whether the target is the Vertex AI backend.
+
+    Returns:
+        `False` for a Google Cloud Storage URI sent to the Gemini Developer API;
+            otherwise `True`.
+    """
+    return not (
+        isinstance(file_uri, str) and file_uri.startswith("gs://") and not use_vertexai
+    )
+
+
+def _file_data_block(
+    file_uri: Any,
+    mime_type: Any,
+    *,
+    use_vertexai: bool,
+) -> dict[str, Any] | None:
+    """Build file data only when the target backend accepts its URI.
+
+    Args:
+        file_uri: File reference carried by a content block.
+        mime_type: MIME type carried by a content block.
+        use_vertexai: Whether the target is the Vertex AI backend.
+
+    Returns:
+        A Gemini file-data block, or `None` when the URI is target-specific and
+            unsupported.
+    """
+    if not _is_file_uri_supported(file_uri, use_vertexai=use_vertexai):
+        logger.warning(
+            "Dropping Google Cloud Storage file URI because the target Gemini "
+            "Developer API does not support gs:// references."
+        )
+        return None
+    return {"file_data": {"mime_type": mime_type, "file_uri": file_uri}}
+
+
 def translate_citations_to_grounding_metadata(
     citations: list[types.Citation], web_search_queries: list[str] | None = None
 ) -> dict[str, Any]:
@@ -154,13 +196,17 @@ def translate_citations_to_grounding_metadata(
 
 
 def _convert_from_v1_to_generativelanguage_v1beta(
-    content: list[types.ContentBlock], model_provider: str | None
+    content: list[types.ContentBlock],
+    model_provider: str | None,
+    *,
+    use_vertexai: bool = False,
 ) -> list[dict[str, Any]]:
     """Convert v1 content blocks to `generativelanguage_v1beta` `Content`.
 
     Args:
         content: List of v1 `ContentBlock` objects.
         model_provider: The model provider name that generated the v1 content.
+        use_vertexai: Whether the content will be sent to the Vertex AI backend.
 
     Returns:
         List of dictionaries in `generativelanguage_v1beta` `Content` format, ready to
@@ -245,13 +291,13 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 new_content.append(new_block)
             elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                new_block = {
-                    "file_data": {
-                        "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "file_uri": url,
-                    }
-                }
-                new_content.append(new_block)
+                new_block = _file_data_block(
+                    url,
+                    block_dict.get("mime_type", "image/jpeg"),
+                    use_vertexai=use_vertexai,
+                )
+                if new_block is not None:
+                    new_content.append(new_block)
 
         # TODO: AudioContentBlock -> audio once models support passing back in
 
@@ -274,26 +320,22 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 new_content.append(new_block)
             elif (file_id := block_dict.get("file_id")) and provider_kind != "foreign":
                 # File ID from uploaded file
-                new_block = {
-                    "file_data": {
-                        "mime_type": block_dict.get(
-                            "mime_type", "application/octet-stream"
-                        ),
-                        "file_uri": file_id,
-                    }
-                }
-                new_content.append(new_block)
+                new_block = _file_data_block(
+                    file_id,
+                    block_dict.get("mime_type", "application/octet-stream"),
+                    use_vertexai=use_vertexai,
+                )
+                if new_block is not None:
+                    new_content.append(new_block)
             elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                new_block = {
-                    "file_data": {
-                        "mime_type": block_dict.get(
-                            "mime_type", "application/octet-stream"
-                        ),
-                        "file_uri": url,
-                    }
-                }
-                new_content.append(new_block)
+                new_block = _file_data_block(
+                    url,
+                    block_dict.get("mime_type", "application/octet-stream"),
+                    use_vertexai=use_vertexai,
+                )
+                if new_block is not None:
+                    new_content.append(new_block)
 
         # ToolCall -> FunctionCall
         elif block_dict["type"] == "tool_call":
