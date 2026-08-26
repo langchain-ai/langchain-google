@@ -194,6 +194,87 @@ def test_tool_with_array_anyof_nullable_param() -> None:
     assert_property_type(items, Type.STRING, "array items")
 
 
+def test_tool_with_array_items_anyof_variants() -> None:
+    """Checks that ``anyOf`` inside array ``items`` is preserved.
+
+    Regression test: variants used to be silently dropped when the array was
+    nested under ``properties``, leaving an items schema with no fields.
+    """
+    oai_tool = {
+        "type": "function",
+        "function": {
+            "name": "submit_ops",
+            "description": "Submit a list of operations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ops": {
+                        "type": "array",
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "op": {"type": "string", "enum": ["add"]},
+                                        "item": {"type": "string"},
+                                    },
+                                    "required": ["op", "item"],
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "op": {"type": "string", "enum": ["remove"]}
+                                    },
+                                    "required": ["op"],
+                                },
+                            ]
+                        },
+                    }
+                },
+                "required": ["ops"],
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+    assert isinstance(genai_tool_dict, dict), "Expected a dict."
+
+    function_declarations = genai_tool_dict.get("function_declarations")
+    assert isinstance(function_declarations, list), "Expected a list."
+
+    fn_decl = function_declarations[0]
+    assert isinstance(fn_decl, dict), "Expected a dict."
+
+    parameters = fn_decl.get("parameters")
+    assert isinstance(parameters, dict), "Expected a dict."
+
+    properties = parameters.get("properties")
+    assert isinstance(properties, dict), "Expected a dict."
+
+    ops_property = properties.get("ops")
+    assert isinstance(ops_property, dict), "Expected a dict."
+    assert_property_type(ops_property, Type.ARRAY, "ops")
+
+    items = ops_property.get("items")
+    assert isinstance(items, dict), "Expected 'items' to be a dict."
+
+    variants = items.get("any_of")
+    assert isinstance(variants, list), "Expected 'any_of' variants to be preserved."
+    assert len(variants) == 2, "Expected both variants to survive conversion."
+
+    first_properties = variants[0].get("properties")
+    assert isinstance(first_properties, dict), "Expected variant properties."
+    assert set(first_properties) == {"op", "item"}
+    assert first_properties["op"].get("enum") == ["add"]
+    assert variants[0].get("required") == ["op", "item"]
+
+    second_properties = variants[1].get("properties")
+    assert isinstance(second_properties, dict), "Expected variant properties."
+    assert set(second_properties) == {"op"}
+    assert second_properties["op"].get("enum") == ["remove"]
+
+
 def test_tool_with_nested_object_anyof_nullable_param() -> None:
     """Checks an object parameter (`dict`) marked as optional.
 
