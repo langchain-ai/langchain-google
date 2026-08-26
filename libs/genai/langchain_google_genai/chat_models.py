@@ -1058,12 +1058,14 @@ def _convert_to_parts_dropping_unconvertible(
         ValueError: If `drop_unconvertible` is `False` and a block fails to
             convert.
     """
-    if not drop_unconvertible:
-        return _convert_to_parts(content, model=model)
+    # A batch that converts cleanly is the common case. When the batch raises,
+    # retry per block so that one unconvertible block does not discard the
+    # rest; in strict mode the failing block re-raises on its own retry.
     try:
         return _convert_to_parts(content, model=model)
     except ValueError:
-        # Retry per block so that one unconvertible block does not discard the rest.
+        if not drop_unconvertible:
+            raise
         parts: list[Part] = []
         for block in content:
             try:
@@ -1271,6 +1273,15 @@ def _parse_chat_history(
                     # `_convert_from_v1_to_generativelanguage_v1beta`, so these
                     # blocks carry no `type` key and need their own filter rather
                     # than `_prepare_content_for_tool_call_message`.
+                    #
+                    # `_compat` drops unconvertible foreign block types, but it
+                    # does not validate converted media payloads: another
+                    # provider's malformed `image`/`file` base64 still reaches
+                    # `Blob` here, so foreign v1 messages keep the tolerant
+                    # per-block dropping of the non-v1 branch. Native v1 content
+                    # stays strict -- a conversion failure there is malformed
+                    # input that must not be silently rewritten.
+                    model_provider = message.response_metadata.get("model_provider")
                     ai_message_parts.extend(
                         _convert_to_parts_dropping_unconvertible(
                             [
@@ -1279,11 +1290,10 @@ def _parse_chat_history(
                                 if not _is_redundant_v1beta_part(block)
                             ],
                             model=model,
-                            # v1 conversion in `_compat` already dropped
-                            # unconvertible blocks from other providers; what
-                            # remains is representable, so a failure here means
-                            # malformed content and must surface.
-                            drop_unconvertible=False,
+                            drop_unconvertible=(
+                                model_provider is None
+                                or model_provider not in _NATIVE_MODEL_PROVIDERS
+                            ),
                         )
                     )
                 else:

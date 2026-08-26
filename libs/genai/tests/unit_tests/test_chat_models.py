@@ -3550,6 +3550,60 @@ def test_parse_chat_history_tool_calls_v1_non_standard_block_dropped() -> None:
     assert parts[0].function_call is not None
 
 
+def test_parse_chat_history_tool_calls_v1_foreign_malformed_media_dropped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A foreign v1 media block with malformed base64 is dropped, not raised on.
+
+    `_compat` converts the block to an `inline_data` v1beta dict without
+    validating the base64 payload, so the failure only surfaces when the dict is
+    converted to a `Blob`. Foreign v1 messages keep the tolerant per-block
+    behavior of the non-v1 branch; the valid tool call must still be replayed.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "image", "base64": "not valid base64!!", "mime_type": "image/png"}
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+    assert "cannot be represented as a Gemini part" in caplog.text
+
+
+def test_parse_chat_history_tool_calls_v1_native_malformed_media_raises() -> None:
+    """A native v1 media block with malformed base64 must not be silently dropped.
+
+    Unlike foreign content, a malformed `google_genai` block is bad input, not an
+    expected foreign shape; dropping it would turn the request into a different
+    valid request without telling the caller.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "image", "base64": "not valid base64!!", "mime_type": "image/png"}
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with pytest.raises(ValueError, match="valid base64"):
+        _parse_chat_history([message])
+
+
 def test_convert_to_parts_still_raises_on_unknown_type() -> None:
     """Dropping `non_standard` must not weaken the guard on malformed blocks."""
     with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
