@@ -1253,24 +1253,28 @@ def _drop_unsupported_file_references(
     return filtered
 
 
-def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
-    """Prepare `AIMessage` content for conversion when the message has tool calls.
+def _prepare_ai_message_content(
+    message: AIMessage, *, exclude_function_calls: bool
+) -> list[Any]:
+    """Prepare non-v1 `AIMessage` content for provider-aware conversion.
 
-    Strips valid and invalid function-call content blocks (valid calls are rebuilt
-    from `message.tool_calls`) and normalizes another provider's blocks so that
-    conversion does not raise on shapes this package did not produce. Foreign
-    code-interpreter calls are retained; their results only when matched.
+    When function calls are rebuilt from `message.tool_calls`, strips their valid
+    and invalid content blocks. Normalizes another provider's blocks regardless of
+    whether the message has tool calls, so foreign signatures never reach Gemini.
+    Foreign code-interpreter calls are retained; their results only when matched.
 
     Args:
         message: The `AIMessage` whose content should be prepared.
+        exclude_function_calls: Whether function-call blocks should be omitted
+            because they will be rebuilt from `message.tool_calls`.
 
     Returns:
         The content to convert as a list, with provider-native blocks normalized as
-        needed, function-call blocks removed, another provider's signatures
-        stripped, unreplayable foreign server tool blocks dropped, and text/thought
-        blocks that carry neither text nor a signature dropped. String content is
-        wrapped in a list (empty string yields an empty list, per the empty-part
-        rule near the top of this module).
+        needed, function-call blocks optionally removed, another provider's
+        signatures stripped, unreplayable foreign server tool blocks dropped, and
+        text/thought blocks that carry neither text nor a signature dropped. String
+        content is wrapped in a list (empty string yields an empty list, per the
+        empty-part rule near the top of this module).
     """
     provider_kind = _classify_model_provider(
         message.response_metadata.get("model_provider")
@@ -1311,7 +1315,7 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
             filtered.append(block)
             continue
 
-        if _is_rebuilt_tool_call_block(block):
+        if exclude_function_calls and _is_rebuilt_tool_call_block(block):
             continue
         block_type = block.get("type")
         if is_foreign and block_type == "non_standard":
@@ -1322,7 +1326,7 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
                 value.get("type") if isinstance(value, Mapping) else None,
             )
             continue
-        if block_type == "function_call":
+        if exclude_function_calls and block_type == "function_call":
             # Raw Gemini function call: the equivalent part is rebuilt from
             # `message.tool_calls`, so the block must not be converted twice.
             continue
@@ -1377,8 +1381,10 @@ def _convert_ai_message_content(
             content = [
                 block for block in content if not _is_redundant_v1beta_part(block)
             ]
-    elif exclude_function_calls:
-        content = _prepare_content_for_tool_call_message(message)
+    elif exclude_function_calls or provider_kind == "foreign":
+        content = _prepare_ai_message_content(
+            message, exclude_function_calls=exclude_function_calls
+        )
     else:
         content = (
             [message.content] if isinstance(message.content, str) else message.content
@@ -1514,8 +1520,12 @@ def _parse_chat_history(
                     use_vertexai=use_vertexai,
                 )
             else:
-                # Prepare request content parts from message.content field
-                parts = _convert_to_parts(message.content, model=model)
+                parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=False,
+                    use_vertexai=use_vertexai,
+                )
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content, model=model)

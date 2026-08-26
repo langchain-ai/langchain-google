@@ -3527,6 +3527,33 @@ def test_parse_chat_history_tool_calls_non_standard_block_dropped(
     assert "non-standard content block" in caplog.text
 
 
+def test_parse_chat_history_without_tool_calls_drops_foreign_non_standard() -> None:
+    """Foreign provider payloads are filtered even without function calls."""
+    signature = base64.b64encode(b"anthropic_signature").decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Visible response."},
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "thinking",
+                    "thinking": "Private reasoning.",
+                    "signature": signature,
+                },
+            },
+        ],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == "Visible response."
+    assert parts[0].thought_signature is None
+
+
 def test_parse_chat_history_tool_calls_v1_non_standard_block_dropped() -> None:
     """Serialized v1 provider payloads are dropped before Gemini conversion."""
     message = AIMessage(
