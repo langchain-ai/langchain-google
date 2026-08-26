@@ -3848,6 +3848,35 @@ def test_parse_chat_history_tool_calls_foreign_text_signature_stripped() -> None
     assert parts[0].thought_signature is None
 
 
+def test_parse_chat_history_tool_calls_foreign_signature_only_block_dropped() -> None:
+    """A foreign block whose only payload is a signature must not emit an empty part.
+
+    The emptiness check must run after foreign signatures are stripped: the
+    signature makes the block look non-empty, but once stripped nothing remains,
+    and the Gemini API rejects the resulting empty text part.
+    """
+    message = AIMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "",
+                "extras": {
+                    "signature": base64.b64encode(b"openai_sig").decode("ascii")
+                },
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
 def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
     """A `tool_call_chunk` block must not duplicate the rebuilt function call."""
     message = AIMessage(

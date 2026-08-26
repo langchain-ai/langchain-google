@@ -1152,6 +1152,21 @@ def _prepare_content_for_tool_call_message(
             and block.get("tool_call_id") not in code_interpreter_call_ids
         ):
             continue
+        # Signatures from other providers are not meaningful to Google. Strip
+        # them before the emptiness check below: a block whose only payload is a
+        # foreign signature (e.g. an empty `text` block with `extras.signature`)
+        # would otherwise pass the check on the strength of that signature and
+        # then emit an empty part, which the Gemini API rejects.
+        if is_foreign and block_type in ("thinking", "text", "reasoning"):
+            stripped_block: dict[str, Any] = {
+                k: v for k, v in block.items() if k != "signature"
+            }
+            extras = stripped_block.get("extras")
+            if isinstance(extras, dict) and "signature" in extras:
+                stripped_block["extras"] = {
+                    k: v for k, v in extras.items() if k != "signature"
+                }
+            block = stripped_block
         # Blocks with no text are dropped because the Gemini API rejects empty
         # parts -- unless they carry a thought signature, which is itself the
         # payload Gemini requires to be echoed back on thinking-enabled turns.
@@ -1165,20 +1180,6 @@ def _prepare_content_for_tool_call_message(
             )
             and not _block_signature(block)
         ):
-            continue
-        # Signatures from other providers are not meaningful to Google. Strip them
-        # from reasoning blocks whether the block carries reasoning text or a
-        # summary.
-        if is_foreign and block_type in ("thinking", "text", "reasoning"):
-            sanitized_block: dict[str, Any] = {
-                k: v for k, v in block.items() if k != "signature"
-            }
-            extras = sanitized_block.get("extras")
-            if isinstance(extras, dict) and "signature" in extras:
-                sanitized_block["extras"] = {
-                    k: v for k, v in extras.items() if k != "signature"
-                }
-            filtered.append(sanitized_block)
             continue
         filtered.append(block)
     return filtered
