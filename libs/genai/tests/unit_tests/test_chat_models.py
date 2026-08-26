@@ -3879,17 +3879,14 @@ def test_convert_from_v1_keeps_base64_media_undecoded() -> None:
     Pre-encoding produced double-base64-encoded bytes on the wire.
     """
     converted = _convert_from_v1_to_generativelanguage_v1beta(
-        cast(
-            "list[Any]",
-            [{"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"}],
-        ),
+        [{"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"}],
         "google_genai",
     )
 
     assert converted == [
         {"inline_data": {"mime_type": "image/png", "data": "aGVsbG8="}}
     ]
-    assert Blob(**converted[0]["inline_data"]).data == b"hello"  # type: ignore[index]
+    assert Blob(**converted[0]["inline_data"]).data == b"hello"
 
 
 def test_parse_chat_history_tool_calls_foreign_signatures_not_leaked() -> None:
