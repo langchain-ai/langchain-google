@@ -291,13 +291,13 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 new_content.append(new_block)
             elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                new_block = _file_data_block(
+                file_data_block = _file_data_block(
                     url,
                     block_dict.get("mime_type", "image/jpeg"),
                     use_vertexai=use_vertexai,
                 )
-                if new_block is not None:
-                    new_content.append(new_block)
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
 
         # TODO: AudioContentBlock -> audio once models support passing back in
 
@@ -320,22 +320,22 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 new_content.append(new_block)
             elif (file_id := block_dict.get("file_id")) and provider_kind != "foreign":
                 # File ID from uploaded file
-                new_block = _file_data_block(
+                file_data_block = _file_data_block(
                     file_id,
                     block_dict.get("mime_type", "application/octet-stream"),
                     use_vertexai=use_vertexai,
                 )
-                if new_block is not None:
-                    new_content.append(new_block)
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
             elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                new_block = _file_data_block(
+                file_data_block = _file_data_block(
                     url,
                     block_dict.get("mime_type", "application/octet-stream"),
                     use_vertexai=use_vertexai,
                 )
-                if new_block is not None:
-                    new_content.append(new_block)
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
 
         # ToolCall -> FunctionCall
         elif block_dict["type"] == "tool_call":
