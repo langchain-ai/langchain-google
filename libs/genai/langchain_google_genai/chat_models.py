@@ -985,17 +985,16 @@ def _prepare_content_for_tool_call_message(
 ) -> str | list[Any]:
     """Prepare `AIMessage` content for conversion when the message has tool calls.
 
-    Strips content blocks that are rebuilt from `message.tool_calls` instead
-    (function calls must be emitted exactly once) and normalizes foreign-provider
-    reasoning blocks so conversion never crashes on shapes this package did not
-    produce.
+    Strips valid and invalid function-call content blocks (valid calls are rebuilt
+    from `message.tool_calls`) and normalizes foreign-provider reasoning blocks so
+    conversion never crashes on shapes this package did not produce.
 
     Args:
         message: The `AIMessage` whose content should be prepared.
 
     Returns:
-        The normalized message content, with `tool_call`/`tool_call_chunk` blocks
-        removed and unrepresentable reasoning blocks dropped.
+        The normalized message content, with function-call blocks removed and
+        unrepresentable reasoning blocks dropped.
     """
     model_provider = message.response_metadata.get("model_provider")
     is_foreign = model_provider is not None and model_provider != "google_genai"
@@ -1019,7 +1018,7 @@ def _prepare_content_for_tool_call_message(
             continue
 
         block_type = block.get("type")
-        if block_type in ("tool_call", "tool_call_chunk"):
+        if block_type in ("tool_call", "tool_call_chunk", "invalid_tool_call"):
             # Function-call parts are emitted from `message.tool_calls`; the
             # v1 converter also translates these blocks, so including them here
             # would duplicate each function call.

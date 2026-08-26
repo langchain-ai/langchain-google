@@ -3386,6 +3386,46 @@ def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
     assert parts[1].function_call.args == {"q": "x"}
 
 
+def test_parse_chat_history_tool_calls_drops_invalid_foreign_calls() -> None:
+    """Malformed foreign calls do not prevent valid calls from being replayed."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "function_call",
+                "name": "search",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+            {
+                "type": "function_call",
+                "name": "broken",
+                "arguments": "{",
+                "call_id": "call_bad",
+                "id": "fc_bad",
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        invalid_tool_calls=[
+            {
+                "name": "broken",
+                "args": "{",
+                "id": "call_bad",
+                "error": "Invalid JSON",
+            }
+        ],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+
+
 def test_parse_chat_history_tool_calls_non_standard_block_dropped(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
