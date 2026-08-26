@@ -482,7 +482,25 @@ def _convert_to_parts(
         if isinstance(part, str):
             parts.append(Part(text=part))
         elif isinstance(part, Mapping):
-            if "type" in part:
+            if part.get("thought") is True and "text" in part:
+                # `thought` part produced by
+                # `_convert_from_v1_to_generativelanguage_v1beta` when unpacking a
+                # v1 `reasoning` block (the `_parse_chat_history` tool-call branch
+                # routes v1-converted content through here).
+                thought_sig = None
+                sig = part.get("thought_signature")
+                if isinstance(sig, str):
+                    thought_sig = base64.b64decode(sig)
+                elif isinstance(sig, bytes):
+                    thought_sig = sig
+                parts.append(
+                    Part(
+                        text=part["text"],
+                        thought=True,
+                        thought_signature=thought_sig,
+                    )
+                )
+            elif "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
                     # Check if there's a signature attached to this text block
@@ -693,9 +711,23 @@ def _convert_to_parts(
                     if sig and isinstance(sig, str):
                         # Decode base64-encoded signature back to bytes
                         thought_sig = base64.b64decode(sig)
+                    reasoning_text = part.get("reasoning")
+                    if reasoning_text is None:
+                        # Foreign-provider reasoning block without a `reasoning`
+                        # key (e.g. OpenAI's `summary` shape). Extract summary
+                        # text when possible; otherwise drop the block.
+                        summary = part.get("summary")
+                        if isinstance(summary, list):
+                            reasoning_text = "".join(
+                                item.get("text", "")
+                                for item in summary
+                                if isinstance(item, dict)
+                            )
+                        else:
+                            continue
                     parts.append(
                         Part(
-                            text=part["reasoning"],
+                            text=reasoning_text,
                             thought=True,
                             thought_signature=thought_sig,
                         )
@@ -781,6 +813,20 @@ def _convert_to_parts(
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
+            elif set(part) <= {"text", "thought_signature"} and isinstance(
+                part.get("text"), str
+            ):
+                # `text` part produced by
+                # `_convert_from_v1_to_generativelanguage_v1beta` when unpacking
+                # v1 content blocks (no `type` key). The `_parse_chat_history`
+                # tool-call branch routes v1-converted content through here.
+                thought_sig = None
+                sig = part.get("thought_signature")
+                if isinstance(sig, str):
+                    thought_sig = base64.b64decode(sig)
+                elif isinstance(sig, bytes):
+                    thought_sig = sig
+                parts.append(Part(text=part["text"], thought_signature=thought_sig))
             else:
                 # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
@@ -886,6 +932,71 @@ DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
 )
 
 
+def _prepare_content_for_tool_call_message(
+    message: AIMessage,
+) -> str | list[Any]:
+    """Prepare `AIMessage` content for conversion when the message has tool calls.
+
+    Strips content blocks that are rebuilt from `message.tool_calls` instead
+    (function calls must be emitted exactly once) and normalizes foreign-provider
+    reasoning blocks so conversion never crashes on shapes this package did not
+    produce.
+
+    Args:
+        message: The `AIMessage` whose content should be prepared.
+
+    Returns:
+        The message content, with `tool_call`/`tool_call_chunk` blocks removed
+        and unrepresentable reasoning blocks dropped.
+    """
+    if not isinstance(message.content, list):
+        if isinstance(message.content, str) and not message.content:
+            # Normalize empty text to no content; it carries no information and
+            # the Gemini API rejects empty parts.
+            return []
+        return message.content
+
+    model_provider = message.response_metadata.get("model_provider")
+    is_foreign = model_provider is not None and model_provider != "google_genai"
+    filtered: list[Any] = []
+    for block in message.content:
+        if not isinstance(block, dict):
+            if isinstance(block, str) and not block:
+                # Skip empty text; it carries no information and the Gemini API
+                # rejects empty parts.
+                continue
+            filtered.append(block)
+            continue
+
+        block_type = block.get("type")
+        if block_type in ("tool_call", "tool_call_chunk"):
+            # Function-call parts are emitted from `message.tool_calls`; the
+            # v1 converter also translates these blocks, so including them here
+            # would duplicate each function call.
+            continue
+        if block_type == "reasoning" and "reasoning" not in block and not is_foreign:
+            # Reasoning block in a shape `_convert_to_parts` cannot represent
+            # (e.g. OpenAI's `summary` blocks on a message without provider
+            # metadata). Drop rather than crash. Foreign-provider messages get
+            # no filtering here so summary text can still be converted below.
+            continue
+        if is_foreign and (
+            block_type in ("thinking", "text")
+            or (
+                # A foreign reasoning block's signature is unusable by Google;
+                # strip it whether the block carries reasoning text or a summary.
+                block_type == "reasoning"
+            )
+        ):
+            # Signatures from other providers are not meaningful to Google.
+            block = {k: v for k, v in block.items() if k != "signature"}
+            extras = block.get("extras")
+            if isinstance(extras, dict) and "signature" in extras:
+                block["extras"] = {k: v for k, v in extras.items() if k != "signature"}
+        filtered.append(block)
+    return filtered
+
+
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage],
     convert_system_message_to_human: bool = False,
@@ -963,42 +1074,34 @@ def _parse_chat_history(
             if message.tool_calls:
                 ai_message_parts = []
 
-                # First, include thinking blocks from content if present.
+                # First, convert all non-function-call content (text, thinking,
+                # reasoning, media, etc.) through the unified conversion path.
                 # When include_thoughts=True, thinking blocks need to be preserved
                 # when passing messages back to the API.
-                if isinstance(message.content, list):
-                    for content_block in message.content:
-                        if isinstance(content_block, dict):
-                            block_type = content_block.get("type")
-                            if block_type == "thinking":
-                                # v0 output_format thinking block
-                                thought_sig = None
-                                if "signature" in content_block:
-                                    sig = content_block["signature"]
-                                    if sig and isinstance(sig, str):
-                                        thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["thinking"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
-                                    )
+                if message.response_metadata.get("output_version") == "v1":
+                    # Content was already converted to v1beta dicts above by
+                    # `_convert_from_v1_to_generativelanguage_v1beta`. Keep
+                    # non-function-call blocks (function calls are rebuilt from
+                    # `message.tool_calls` below so they are emitted exactly once).
+                    ai_message_parts.extend(
+                        _convert_to_parts(
+                            [
+                                block
+                                for block in message.content
+                                if not (
+                                    isinstance(block, dict) and "function_call" in block
                                 )
-                            elif block_type == "reasoning":
-                                # v1 output_format reasoning block
-                                # (Stored in extras, and different type key)
-                                extras = content_block.get("extras", {}) or {}
-                                sig = extras.get("signature")
-                                thought_sig = None
-                                if sig and isinstance(sig, str):
-                                    thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["reasoning"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
-                                    )
-                                )
+                            ],
+                            model=model,
+                        )
+                    )
+                else:
+                    ai_message_parts.extend(
+                        _convert_to_parts(
+                            _prepare_content_for_tool_call_message(message),
+                            model=model,
+                        )
+                    )
 
                 # Then, add function call parts
                 function_call_sigs: dict[Any, str] = message.additional_kwargs.get(

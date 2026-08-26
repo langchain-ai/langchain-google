@@ -3221,6 +3221,235 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
     assert function_part.thought_signature == sig_bytes
 
 
+def test_parse_chat_history_tool_calls_preserves_string_content() -> None:
+    """AIMessage with string content + tool calls keeps the text.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1706.
+    """
+    message = AIMessage(
+        content="Let me look that up.",
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    model_content = formatted_messages[0]
+    assert model_content.role == "model"
+    parts = model_content.parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Let me look that up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_preserves_text_block_content() -> None:
+    """AIMessage with a text content block + tool calls keeps the text.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1706.
+    """
+    message = AIMessage(
+        content=[{"type": "text", "text": "One moment."}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "One moment."
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_preserves_thinking_block() -> None:
+    """v0 `thinking` blocks are kept as thought parts alongside tool calls."""
+    sig_bytes = b"thinking_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
+        ],  # type: ignore[list-item]
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "Let me think."
+    assert parts[0].thought_signature == sig_bytes
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_preserves_v1_reasoning_block() -> None:
+    """v1 `reasoning` blocks are kept as thought parts alongside tool calls."""
+    sig_bytes = b"reasoning_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "reasoning": "I should search.",
+                "extras": {"signature": sig_b64},
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "I should search."
+    assert parts[0].thought_signature == sig_bytes
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
+    """Native thinking + tool call AIMessage projected through v1 content blocks.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1964.
+    """
+    sig_bytes = b"thinking_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
+        ],  # type: ignore[list-item]
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+    # Project through v1 content blocks as when `output_version="v1"` is used
+    v1_message = message.model_copy(
+        update={
+            "content": message.content_blocks,
+            "response_metadata": {
+                **message.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+    # Sanity check: the projection produced a reasoning block and a tool_call block
+    assert v1_message.content[0]["type"] == "reasoning"  # type: ignore[index, call-overload]
+    assert any(
+        isinstance(block, dict) and block.get("type") == "tool_call"
+        for block in v1_message.content  # type: ignore[union-attr]
+    )
+
+    _, formatted_messages = _parse_chat_history([v1_message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    # Exactly one thought part and exactly one function call part (no duplicates)
+    assert len(parts) == 2
+    thought_parts = [part for part in parts if part.thought]
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(thought_parts) == 1
+    assert len(function_call_parts) == 1
+    assert thought_parts[0].text == "Let me think."
+    assert thought_parts[0].thought_signature == sig_bytes
+    assert function_call_parts[0].function_call.name == "search"
+    assert function_call_parts[0].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
+    """OpenAI-style `summary` reasoning blocks don't crash history parsing.
+
+    Regression test for https://github.com/langchain-ai/langchain-google/issues/1603.
+    """
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "I should search."}],
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    # The reasoning text is converted from the summary; the function call is kept
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "I should search."
+    assert parts[0].thought_signature is None
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_foreign_signatures_not_leaked() -> None:
+    """Signatures from other providers are stripped before sending to Google."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "reasoning": "I should search.",
+                "extras": {
+                    "signature": base64.b64encode(b"openai_sig").decode("ascii")
+                },
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "I should search."
+    # Signature is from another provider and must not be echoed to Google
+    assert parts[0].thought_signature is None
+
+
+def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
+    """v1-projected messages emit exactly one FunctionCall part per tool call."""
+    message = AIMessage(
+        content="Searching now.",
+        tool_calls=[
+            {"name": "search", "args": {"q": "a"}, "id": "call_1"},
+            {"name": "search", "args": {"q": "b"}, "id": "call_2"},
+        ],
+        response_metadata={"model_provider": "google_genai"},
+    )
+    v1_message = message.model_copy(
+        update={
+            "content": message.content_blocks,
+            "response_metadata": {
+                **message.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+    # Content blocks carry the tool calls AND `message.tool_calls` is set; the
+    # function calls must still be emitted exactly once each.
+    assert any(
+        isinstance(block, dict) and block.get("type") == "tool_call"
+        for block in v1_message.content  # type: ignore[union-attr]
+    )
+
+    _, formatted_messages = _parse_chat_history([v1_message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(function_call_parts) == 2
+    assert function_call_parts[0].function_call.args == {"q": "a"}
+    assert function_call_parts[1].function_call.args == {"q": "b"}
+    # Text content is preserved too
+    assert [part for part in parts if part.text == "Searching now."]
+
+
 def test_system_message_only_raises_error() -> None:
     """Test that invoking with only a `SystemMessage` raises a helpful error."""
     llm = ChatGoogleGenerativeAI(
