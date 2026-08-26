@@ -1379,6 +1379,21 @@ def _parse_chat_history(
         # Final step; assemble the Content object to pass to the API
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
+        if role == "model" and not parts:
+            if isinstance(message.content, list) and message.content:
+                logger.warning(
+                    "AI message at index %d converted to no Gemini parts after all "
+                    "%d content block(s) were dropped; using an empty text part.",
+                    i,
+                    len(message.content),
+                )
+            else:
+                logger.warning(
+                    "AI message at index %d converted to no Gemini parts; using an "
+                    "empty text part.",
+                    i,
+                )
+            parts = [Part(text="")]
         formatted_messages.append(Content(role=role, parts=parts))
 
     # Enforce thought signatures for new Gemini models

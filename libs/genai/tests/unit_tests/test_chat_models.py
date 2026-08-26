@@ -176,7 +176,7 @@ def test_integration_initialization() -> None:
 def test_empty_ai_message_content_is_normalized_for_vertex(
     response_metadata: dict[str, str], vertexai: bool
 ) -> None:
-    """Test empty AI content lists become empty text parts for Vertex only."""
+    """Test empty AI content lists never produce a partless model turn."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -194,11 +194,8 @@ def test_empty_ai_message_content_is_normalized_for_vertex(
     empty_ai_content = request["contents"][1]
     assert empty_ai_content.role == "model"
     assert empty_ai_content.parts is not None
-    if vertexai:
-        assert len(empty_ai_content.parts) == 1
-        assert empty_ai_content.parts[0].text == ""
-    else:
-        assert empty_ai_content.parts == []
+    assert len(empty_ai_content.parts) == 1
+    assert empty_ai_content.parts[0].text == ""
 
 
 def test_seed_initialization() -> None:
@@ -3544,6 +3541,131 @@ def test_parse_chat_history_drops_malformed_foreign_media(
     assert len(parts) == 1
     assert parts[0].function_call is not None
     assert "Dropping" in caplog.text
+
+
+def test_parse_chat_history_falls_back_for_foreign_server_tools(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Avoid a partless model turn when every foreign server-tool block is dropped."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "server_tool_call",
+                "name": "web_search",
+                "id": "srv_1",
+                "args": {"query": "x"},
+            },
+            {
+                "type": "server_tool_result",
+                "tool_call_id": "srv_1",
+                "status": "success",
+                "output": {},
+            },
+        ],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history(
+            [HumanMessage("hi"), message, HumanMessage("again")],
+            model=MODEL_NAME,
+        )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+    assert "AI message at index 1" in caplog.text
+    assert "2 content block(s) were dropped" in caplog.text
+
+
+def test_parse_chat_history_falls_back_for_unsupported_vertex_gcs() -> None:
+    """Avoid a partless model turn when Developer API replay drops Vertex GCS."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            }
+        ],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_parse_chat_history_falls_back_for_unsigned_v1_reasoning() -> None:
+    """Avoid a partless model turn when v1 reasoning has no thought signature."""
+    message = AIMessage(
+        content=[{"type": "reasoning", "reasoning": "hmm"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_parse_chat_history_falls_back_for_invalid_unknown_provider_media() -> None:
+    """Avoid a partless model turn when the only unknown-provider block is invalid."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "mime_type": "image/png",
+                "data": "not valid base64!!",
+            }
+        ]
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_filter_messages_empty_foreign_vertex_model_turn_remains_replayable() -> None:
+    """Preserve the Vertex empty-content workaround through foreign block filtering."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    message = AIMessage(
+        content=[],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    request = llm._prepare_request([HumanMessage("hi"), message, HumanMessage("again")])
+
+    parts = request["contents"][1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
 
 
 @pytest.mark.parametrize(
