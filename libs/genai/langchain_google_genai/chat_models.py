@@ -3345,11 +3345,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             # Merge with tool_config if it exists
             if normalized_config:
-                # Merge: take function_calling_config from choice_config
-                # and other fields from normalized_config
-                return ToolConfig(
-                    function_calling_config=choice_config.function_calling_config,
-                    retrieval_config=normalized_config.retrieval_config,
+                # Overlay `function_calling_config` onto the caller's config rather
+                # than rebuilding it from an enumerated field list, so fields this
+                # method doesn't know about (e.g.
+                # `include_server_side_tool_invocations`) survive the merge. The
+                # conflict check above guarantees
+                # `normalized_config.function_calling_config` is None here.
+                return normalized_config.model_copy(
+                    update={
+                        "function_calling_config": choice_config.function_calling_config
+                    }
                 )
             return choice_config
 

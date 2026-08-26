@@ -17,6 +17,7 @@ from google.genai.types import (
     Content,
     FinishReason,
     FunctionCall,
+    FunctionCallingConfigMode,
     FunctionResponse,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
@@ -24,8 +25,11 @@ from google.genai.types import (
     HttpRetryOptions,
     Language,
     Part,
+    RetrievalConfig,
     ThinkingConfig,
     ThinkingLevel,
+    Tool,
+    ToolConfig,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -69,6 +73,9 @@ from langchain_google_genai import (
 )
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
+)
+from langchain_google_genai._function_utils import (
+    convert_to_genai_function_declarations,
 )
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
@@ -6535,3 +6542,63 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def _mixed_builtin_and_function_tools() -> list[Tool]:
+    """A server-side built-in tool bound alongside a client-side function."""
+    return convert_to_genai_function_declarations(
+        [
+            {"google_search": {}},
+            {
+                "type": "function",
+                "function": {
+                    "name": "my_tool",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+        ]
+    )
+
+
+def test_process_tool_config_merge_preserves_unenumerated_fields() -> None:
+    """`tool_choice` must not discard other fields the caller set on `tool_config`.
+
+    The Gemini Developer API rejects requests that mix built-in tools with function
+    declarations unless `include_server_side_tool_invocations` is set, so dropping it
+    while merging turns a request the caller had already made valid into a 400.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    result = llm._process_tool_config(
+        "any",
+        {"include_server_side_tool_invocations": True},
+        _mixed_builtin_and_function_tools(),
+    )
+
+    assert result is not None
+    assert result.include_server_side_tool_invocations is True
+    assert result.function_calling_config is not None
+    assert result.function_calling_config.mode == FunctionCallingConfigMode.ANY
+    assert result.function_calling_config.allowed_function_names == ["my_tool"]
+
+
+def test_process_tool_config_merge_preserves_retrieval_config() -> None:
+    """Merging `tool_choice` keeps the caller's `retrieval_config`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    retrieval_config = RetrievalConfig(language_code="en-US")
+
+    result = llm._process_tool_config(
+        "any",
+        ToolConfig(retrieval_config=retrieval_config),
+        _mixed_builtin_and_function_tools(),
+    )
+
+    assert result is not None
+    assert result.retrieval_config == retrieval_config
+    assert result.function_calling_config is not None
