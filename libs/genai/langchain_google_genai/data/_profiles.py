@@ -775,8 +775,8 @@ _PROFILES: dict[str, dict[str, Any]] = {
     },
     "gemini-flash-latest": {
         "name": "Gemini Flash Latest",
-        "release_date": "2026-05-19",
-        "last_updated": "2026-05-19",
+        "release_date": "2026-08-13",
+        "last_updated": "2026-08-13",
         "open_weights": False,
         "max_input_tokens": 1048576,
         "max_output_tokens": 65536,
@@ -800,8 +800,8 @@ _PROFILES: dict[str, dict[str, Any]] = {
     },
     "gemini-flash-lite-latest": {
         "name": "Gemini Flash-Lite Latest",
-        "release_date": "2026-05-07",
-        "last_updated": "2026-05-07",
+        "release_date": "2026-07-21",
+        "last_updated": "2026-07-21",
         "open_weights": False,
         "max_input_tokens": 1048576,
         "max_output_tokens": 65536,
