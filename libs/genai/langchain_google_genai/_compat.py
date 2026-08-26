@@ -300,6 +300,8 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 )
 
         elif block_dict["type"] == "non_standard":
-            new_content.append(block_dict["value"])
+            # Opaque provider payloads cannot be represented by Gemini. Unwrapping
+            # them would send an unknown block type into the Gemini part converter.
+            continue
 
     return new_content

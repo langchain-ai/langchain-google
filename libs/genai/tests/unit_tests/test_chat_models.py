@@ -3413,6 +3413,30 @@ def test_parse_chat_history_tool_calls_non_standard_block_dropped(
     assert "non-standard content block" in caplog.text
 
 
+def test_parse_chat_history_tool_calls_v1_non_standard_block_dropped() -> None:
+    """Serialized v1 provider payloads are dropped before Gemini conversion."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "non_standard",
+                "value": {"type": "redacted_thinking", "data": "encrypted"},
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "anthropic",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
 def test_convert_to_parts_still_raises_on_unknown_type() -> None:
     """Dropping `non_standard` must not weaken the guard on malformed blocks."""
     with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
