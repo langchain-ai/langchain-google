@@ -3437,9 +3437,7 @@ def test_parse_chat_history_tool_calls_drops_foreign_web_search_pair() -> None:
                 "action": {
                     "type": "search",
                     "query": "weather",
-                    "sources": [
-                        {"type": "url", "url": "https://example.com/weather"}
-                    ],
+                    "sources": [{"type": "url", "url": "https://example.com/weather"}],
                 },
             },
             {
