@@ -11,7 +11,14 @@ import re
 import uuid
 import warnings
 import wave
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Container,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -122,6 +129,7 @@ from langchain_google_genai._common import (
     get_user_agent,
 )
 from langchain_google_genai._compat import (
+    _NATIVE_MODEL_PROVIDERS,
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai._function_utils import (
@@ -315,13 +323,49 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
-#: Providers whose content blocks and thought signatures this package can consume
-#: directly. Vertex AI serves the same Gemini models, so its signatures are valid
-#: here and must not be stripped.
-_NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
+# THE EMPTY-PART RULE, referenced throughout this module: the Gemini API rejects a
+# part that carries no payload, and on thinking-enabled turns the thought signature
+# *is* the payload it requires to be echoed back. A signature-only block is
+# therefore kept; a genuinely empty one is not.
+# (`ChatGoogleGenerativeAI._filter_messages` deliberately sends an empty text part
+# for Vertex AI, which is a separate, endpoint-specific allowance.)
 
 
-def _block_signature(block: Mapping[str, Any]) -> Any:
+def _decode_signature(sig: Any) -> bytes | None:
+    """Decode a thought signature to the raw bytes the Gemini API expects.
+
+    Signatures cross process boundaries base64-encoded (that is how they survive
+    JSON serialization in a checkpoint) but reach the API as bytes.
+
+    Args:
+        sig: A base64-encoded `str`, raw `bytes`, or any other value.
+
+    Returns:
+        The signature as bytes, or `None` if there is no usable signature.
+
+    Raises:
+        binascii.Error: If `sig` is a `str` that is not valid base64.
+    """
+    if isinstance(sig, str):
+        return base64.b64decode(sig) or None
+    if isinstance(sig, bytes):
+        return sig or None
+    return None
+
+
+def _drop_none(mapping: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return `mapping` without its `None` values, for splatting into a `Part` field.
+
+    Args:
+        mapping: The mapping to filter, or `None`.
+
+    Returns:
+        A new dict holding only the entries whose value is not `None`.
+    """
+    return {k: v for k, v in (mapping or {}).items() if v is not None}
+
+
+def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
     """Return the thought signature carried by a content block, if any.
 
     Signatures live at the top level on v0 `thinking` blocks and under `extras`
@@ -343,10 +387,9 @@ def _is_redundant_v1beta_part(block: Any) -> bool:
     """Whether an already-converted v1beta part must be dropped before conversion.
 
     Function calls are rebuilt from `message.tool_calls` so that they are emitted
-    exactly once, and the Gemini API rejects text parts that carry neither text
-    nor a thought signature. A part whose text is empty but which carries a
-    signature is kept: the signature is the payload Gemini requires to be echoed
-    back on thinking-enabled turns.
+    exactly once. Text parts are dropped per the empty-part rule near the top of
+    this module, so a part whose text is empty but which carries a signature is
+    kept.
 
     Args:
         block: A block from an `AIMessage` whose content was already projected to
@@ -366,6 +409,56 @@ def _is_redundant_v1beta_part(block: Any) -> bool:
         "thought",
         "thought_signature",
     } and not block.get("thought_signature")
+
+
+def _v1beta_dict_to_part(part: Mapping[str, Any]) -> Part | None:
+    """Convert an already-projected `generativelanguage_v1beta` dict to a `Part`.
+
+    `_convert_from_v1_to_generativelanguage_v1beta` projects v1 content blocks to
+    plain v1beta dicts, which carry no `type` key and so are identified by which
+    keys they hold. The `_parse_chat_history` tool-call branch routes v1-converted
+    content through here.
+
+    Args:
+        part: A mapping with no `type` key, as emitted by
+            `_convert_from_v1_to_generativelanguage_v1beta`.
+
+    Returns:
+        The corresponding `Part`, or `None` if `part` is not one of the shapes that
+        function emits.
+    """
+    if part.get("thought") is True and "text" in part:
+        # Projected from a v1 `reasoning` block.
+        return Part(
+            text=part["text"],
+            thought=True,
+            thought_signature=_decode_signature(part.get("thought_signature")),
+        )
+    if "inline_data" in part:
+        # Projected from a v1 `image`/`file` block carrying base64 data.
+        return Part(inline_data=Blob(**_drop_none(part["inline_data"])))
+    if "file_data" in part:
+        # Projected from a v1 `image`/`file` block carrying a URI.
+        return Part(file_data=FileData(**_drop_none(part["file_data"])))
+    if "executable_code" in part:
+        # Projected from a v1 `server_tool_call` (code_interpreter) block.
+        return Part(
+            executable_code=ExecutableCode(**_drop_none(part["executable_code"]))
+        )
+    if "code_execution_result" in part:
+        # Projected from a v1 `server_tool_result` (code_execution_result) block.
+        return Part(
+            code_execution_result=CodeExecutionResult(
+                **_drop_none(part["code_execution_result"])
+            )
+        )
+    if set(part) <= {"text", "thought_signature"} and isinstance(part.get("text"), str):
+        # Projected from a v1 `text` block, optionally carrying a signature.
+        return Part(
+            text=part["text"],
+            thought_signature=_decode_signature(part.get("thought_signature")),
+        )
+    return None
 
 
 def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
@@ -535,40 +628,15 @@ def _convert_to_parts(
         if isinstance(part, str):
             parts.append(Part(text=part))
         elif isinstance(part, Mapping):
-            if part.get("thought") is True and "text" in part:
-                # `thought` part produced by
-                # `_convert_from_v1_to_generativelanguage_v1beta` when unpacking a
-                # v1 `reasoning` block (the `_parse_chat_history` tool-call branch
-                # routes v1-converted content through here).
-                thought_sig = None
-                sig = part.get("thought_signature")
-                if isinstance(sig, str):
-                    thought_sig = base64.b64decode(sig)
-                elif isinstance(sig, bytes):
-                    thought_sig = sig
-                parts.append(
-                    Part(
-                        text=part["text"],
-                        thought=True,
-                        thought_signature=thought_sig,
-                    )
-                )
-            elif "type" in part:
+            if "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
-                    # Check if there's a signature attached to this text block
-                    thought_sig = None
-                    if "extras" in part and isinstance(part["extras"], dict):
-                        sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            # Decode base64-encoded signature back to bytes
-                            thought_sig = base64.b64decode(sig)
-                    if thought_sig:
-                        parts.append(
-                            Part(text=part["text"], thought_signature=thought_sig)
+                    parts.append(
+                        Part(
+                            text=part["text"],
+                            thought_signature=_decode_signature(_block_signature(part)),
                         )
-                    else:
-                        parts.append(Part(text=part["text"]))
+                    )
                 elif part.get("type") == "file" and "file_id" in part:
                     # Handle FileContentBlock with file_id (uploaded file reference)
                     mime_type = part.get("mime_type", "application/octet-stream")
@@ -743,27 +811,16 @@ def _convert_to_parts(
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
-                    thought_sig = None
-                    if "signature" in part:
-                        sig = part["signature"]
-                        if sig and isinstance(sig, str):
-                            # Decode base64-encoded signature back to bytes
-                            thought_sig = base64.b64decode(sig)
                     parts.append(
                         Part(
                             text=part["thinking"],
                             thought=True,
-                            thought_signature=thought_sig,
+                            thought_signature=_decode_signature(_block_signature(part)),
                         )
                     )
                 elif part["type"] == "reasoning":
                     # ReasoningContentBlock (when output_version = "v1")
-                    extras = part.get("extras", {}) or {}
-                    sig = extras.get("signature")
-                    thought_sig = None
-                    if sig and isinstance(sig, str):
-                        # Decode base64-encoded signature back to bytes
-                        thought_sig = base64.b64decode(sig)
+                    thought_sig = _decode_signature(_block_signature(part))
                     reasoning_text = part.get("reasoning")
                     if reasoning_text is None:
                         # Foreign-provider reasoning block without a `reasoning`
@@ -881,53 +938,8 @@ def _convert_to_parts(
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
-            elif "inline_data" in part or "file_data" in part:
-                # `inline_data`/`file_data` part produced by
-                # `_convert_from_v1_to_generativelanguage_v1beta` when unpacking
-                # v1 image/file content blocks (the `_parse_chat_history`
-                # tool-call branch routes v1-converted content through here).
-                media_data = part.get("inline_data") or part.get("file_data")
-                data_kwargs: dict[str, Any] = {
-                    k: v for k, v in (media_data or {}).items() if v is not None
-                }
-                if "inline_data" in part:
-                    parts.append(Part(inline_data=Blob(**data_kwargs)))
-                else:
-                    parts.append(Part(file_data=FileData(**data_kwargs)))
-            elif "executable_code" in part:
-                # Same already-converted v1beta shape, for `server_tool_call`
-                # (code_interpreter) blocks.
-                exec_kwargs: dict[str, Any] = {
-                    k: v
-                    for k, v in (part.get("executable_code") or {}).items()
-                    if v is not None
-                }
-                parts.append(Part(executable_code=ExecutableCode(**exec_kwargs)))
-            elif "code_execution_result" in part:
-                # Same already-converted v1beta shape, for `server_tool_result`
-                # (code_execution_result) blocks.
-                result_kwargs: dict[str, Any] = {
-                    k: v
-                    for k, v in (part.get("code_execution_result") or {}).items()
-                    if v is not None
-                }
-                parts.append(
-                    Part(code_execution_result=CodeExecutionResult(**result_kwargs))
-                )
-            elif set(part) <= {"text", "thought_signature"} and isinstance(
-                part.get("text"), str
-            ):
-                # `text` part produced by
-                # `_convert_from_v1_to_generativelanguage_v1beta` when unpacking
-                # v1 content blocks (no `type` key). The `_parse_chat_history`
-                # tool-call branch routes v1-converted content through here.
-                thought_sig = None
-                sig = part.get("thought_signature")
-                if isinstance(sig, str):
-                    thought_sig = base64.b64decode(sig)
-                elif isinstance(sig, bytes):
-                    thought_sig = sig
-                parts.append(Part(text=part["text"], thought_signature=thought_sig))
+            elif (v1beta_part := _v1beta_dict_to_part(part)) is not None:
+                parts.append(v1beta_part)
             else:
                 # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
@@ -1033,104 +1045,245 @@ DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
 )
 
 
-def _convert_to_parts_dropping_unconvertible(
+def _convert_to_parts_lenient(
     content: list[Any],
     model: str | None = None,
-    *,
-    drop_unconvertible: bool = True,
 ) -> list[Part]:
-    """Convert content to parts, dropping blocks that have no Gemini equivalent.
+    """Convert content to parts, dropping any block that fails to convert.
+
+    For content that may carry another provider's blocks, where an unconvertible
+    block is an expected occurrence in a multi-provider history rather than a
+    programming error. Native content is converted with `_convert_to_parts`
+    directly, so that a failure surfaces instead of silently changing the request.
+
+    Each block is converted on its own so that one unconvertible block does not
+    discard its neighbors. Note that a whole-list attempt cannot be used as a fast
+    path here: `_convert_to_parts` fetches remote media, so retrying after a
+    failure would re-download every image preceding the failing block.
 
     Args:
         content: The content blocks to convert.
         model: The model name, used for version-specific logic.
-        drop_unconvertible: Whether a block that fails to convert is dropped with a
-            warning (`True`, for content that may carry another provider's blocks,
-            where such a block is an expected occurrence rather than a programming
-            error) or raises `ValueError` (`False`, for native content, where a
-            conversion failure means malformed input that must not be silently
-            turned into a different request).
 
     Returns:
         The convertible blocks as parts, in their original order.
-
-    Raises:
-        ValueError: If `drop_unconvertible` is `False` and a block fails to
-            convert.
     """
-    # A batch that converts cleanly is the common case. When the batch raises,
-    # retry per block so that one unconvertible block does not discard the
-    # rest; in strict mode the failing block re-raises on its own retry.
-    try:
-        return _convert_to_parts(content, model=model)
-    except ValueError:
-        if not drop_unconvertible:
-            raise
-        parts: list[Part] = []
-        for block in content:
-            try:
-                parts.extend(_convert_to_parts([block], model=model))
-            except ValueError:
-                logger.warning(
-                    "Dropping content block that cannot be represented as a "
-                    "Gemini part (type: %s).",
-                    block.get("type") if isinstance(block, Mapping) else type(block),
-                )
-        return parts
+    parts: list[Part] = []
+    for block in content:
+        try:
+            parts.extend(_convert_to_parts([block], model=model))
+        except (ValueError, ChatGoogleGenerativeAIError) as exc:
+            # `ValueError` covers both the unrecognized-part-type error and the
+            # `pydantic.ValidationError`/`binascii.Error` raised by a malformed
+            # payload; `ChatGoogleGenerativeAIError` covers a block that is
+            # neither a string nor a mapping. The cause is logged because it is
+            # not always "Gemini has no equivalent" -- it may be an actionable
+            # message from media loading (e.g. a rejected local file path).
+            logger.warning(
+                "Dropping content block that cannot be represented as a Gemini "
+                "part (type: %s): %s",
+                block.get("type") if isinstance(block, Mapping) else type(block),
+                exc,
+            )
+    return parts
 
 
-def _prepare_content_for_tool_call_message(
-    message: AIMessage,
-) -> str | list[Any]:
+def _is_foreign_provider(message: AIMessage) -> bool:
+    """Whether `message` came from a provider whose blocks Gemini cannot consume.
+
+    A message with no `model_provider` is *not* foreign: hand-built messages and
+    checkpoints serialized before core stamped the field may hold Google's own
+    block shapes, and reading them as foreign would discard genuine signatures.
+    Contrast `_may_hold_foreign_blocks`, which deliberately answers the opposite
+    way for that case.
+
+    Args:
+        message: The message to classify.
+
+    Returns:
+        `True` if the message records a provider other than Google's.
+    """
+    model_provider = message.response_metadata.get("model_provider")
+    return model_provider is not None and model_provider not in _NATIVE_MODEL_PROVIDERS
+
+
+def _may_hold_foreign_blocks(message: AIMessage) -> bool:
+    """Whether conversion failures for `message` should be dropped rather than raised.
+
+    Answers `True` where `_is_foreign_provider` answers `False` for a message with
+    no `model_provider`: such a message is read as native (to preserve signatures)
+    but cannot be *trusted* to be native, so a conversion failure is dropped rather
+    than turned into an error the caller cannot act on.
+
+    Args:
+        message: The message to classify.
+
+    Returns:
+        `True` if the message is not known to have come from Google.
+    """
+    return message.response_metadata.get("model_provider") not in (
+        _NATIVE_MODEL_PROVIDERS
+    )
+
+
+def _has_provider_native_blocks(message: AIMessage) -> bool:
+    """Whether native `message` content holds raw Gemini block shapes.
+
+    Args:
+        message: The message to inspect.
+
+    Returns:
+        `True` if the content carries `function_call`/`file_data` blocks, which the
+        provider translator normalizes to standard tool-call and file blocks.
+    """
+    return isinstance(message.content, list) and any(
+        isinstance(block, dict) and block.get("type") in ("function_call", "file_data")
+        for block in message.content
+    )
+
+
+def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
+    """Whether `block` is a function call that is rebuilt from `message.tool_calls`.
+
+    `_convert_to_parts` has no `tool_call` branch, so leaving these in would raise;
+    they would also duplicate every call. Foreign messages reach the filter via
+    `content_blocks`, which can include these blocks.
+
+    Args:
+        block: The content block to test.
+
+    Returns:
+        `True` if the block must be dropped.
+    """
+    return block.get("type") in ("tool_call", "tool_call_chunk", "invalid_tool_call")
+
+
+def _is_unsupported_foreign_server_tool(
+    block: Mapping[str, Any], code_interpreter_call_ids: Container[str]
+) -> bool:
+    """Whether `block` is another provider's server tool that Gemini cannot replay.
+
+    Code interpreter calls map onto Gemini's `executable_code`; nothing else does.
+    A result is kept only when its call was kept, so no orphan result is sent.
+
+    Args:
+        block: The content block to test.
+        code_interpreter_call_ids: Ids of the code-interpreter calls being kept.
+
+    Returns:
+        `True` if the block must be dropped.
+    """
+    block_type = block.get("type")
+    if block_type == "server_tool_call":
+        return block.get("name") != "code_interpreter"
+    if block_type == "server_tool_result":
+        return block.get("tool_call_id") not in code_interpreter_call_ids
+    return False
+
+
+def _strip_foreign_signature(block: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return `block` without any thought signature another provider attached.
+
+    Signatures from other providers are not meaningful to Google. Stripping must
+    happen before the empty-block check: a block whose only payload is a foreign
+    signature would otherwise survive on the strength of that signature and then
+    emit an empty part. See the empty-part rule near the top of this module.
+
+    Args:
+        block: The content block to strip.
+
+    Returns:
+        `block` unchanged if it carries no signature, otherwise a stripped copy.
+    """
+    extras = block.get("extras")
+    extras_has_signature = isinstance(extras, dict) and "signature" in extras
+    if "signature" not in block and not extras_has_signature:
+        return block
+    stripped: dict[str, Any] = {k: v for k, v in block.items() if k != "signature"}
+    if extras_has_signature:
+        stripped["extras"] = {
+            k: v for k, v in cast("dict[str, Any]", extras).items() if k != "signature"
+        }
+    return stripped
+
+
+def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
+    """Whether `block` is a text/thought block with no payload at all.
+
+    Args:
+        block: The content block to test.
+
+    Returns:
+        `True` if the block carries neither text nor a thought signature, and so
+        must be dropped per the empty-part rule near the top of this module.
+    """
+    if block.get("type") not in ("text", "thinking", "reasoning"):
+        return False
+    has_text = (
+        block.get("text")
+        or block.get("thinking")
+        or block.get("reasoning")
+        or block.get("summary")
+    )
+    return not has_text and not _block_signature(block)
+
+
+def _as_gemini_file_block(block: Mapping[str, Any]) -> dict[str, Any]:
+    """Re-tag a standard file URL block as a Gemini file reference.
+
+    The native block translator represents Gemini `file_data` as a standard file
+    URL. Preserve the provider-owned URI as a file reference rather than trying to
+    download it as public HTTP content.
+
+    Args:
+        block: A `file` block carrying a `url`.
+
+    Returns:
+        The equivalent `media` block.
+    """
+    return {
+        "type": "media",
+        "file_uri": block["url"],
+        "mime_type": block.get("mime_type", "application/octet-stream"),
+    }
+
+
+def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
     """Prepare `AIMessage` content for conversion when the message has tool calls.
 
     Strips valid and invalid function-call content blocks (valid calls are rebuilt
     from `message.tool_calls`) and normalizes another provider's blocks so that
-    conversion never crashes on shapes this package did not produce. Foreign server
-    tools are retained only for matched code-interpreter call/result pairs.
+    conversion does not raise on shapes this package did not produce. Foreign
+    code-interpreter calls are retained; their results only when matched.
 
     Args:
         message: The `AIMessage` whose content should be prepared.
 
     Returns:
-        The content to convert, with provider-native blocks normalized as needed,
-        function-call blocks removed, another provider's signatures stripped,
-        unmatched foreign server tool blocks dropped, and text/thought blocks that
-        carry neither text nor a signature dropped.
+        The content to convert as a list, with provider-native blocks normalized as
+        needed, function-call blocks removed, another provider's signatures
+        stripped, unreplayable foreign server tool blocks dropped, and text/thought
+        blocks that carry neither text nor a signature dropped. String content is
+        wrapped in a list (empty string yields an empty list, per the empty-part
+        rule near the top of this module).
     """
-    model_provider = message.response_metadata.get("model_provider")
-    is_foreign = (
-        model_provider is not None and model_provider not in _NATIVE_MODEL_PROVIDERS
+    is_foreign = _is_foreign_provider(message)
+    is_native = message.response_metadata.get("model_provider") in (
+        _NATIVE_MODEL_PROVIDERS
     )
-    is_native = model_provider in _NATIVE_MODEL_PROVIDERS
-    has_provider_native_blocks = (
-        is_native
-        and isinstance(message.content, list)
-        and any(
-            isinstance(block, dict)
-            and block.get("type") in ("function_call", "file_data")
-            for block in message.content
-        )
-    )
-    # Messages with no `model_provider` (hand-built messages, checkpoints serialized
-    # before core stamped the field) may hold either shape. Read `content` rather
-    # than `content_blocks` for those: core projects Google's own `thinking` and
-    # `media` blocks to `non_standard`, which would discard genuine signatures.
-    # Native Gemini `function_call` and `file_data` blocks are the exception: the
-    # provider translator normalizes them to standard tool-call and file blocks.
-    # `_convert_to_parts_dropping_unconvertible` handles any foreign block instead.
-    content = (
-        message.content_blocks
-        if is_foreign or has_provider_native_blocks
-        else message.content
-    )
+    # Read `content` rather than `content_blocks` for native and unstamped
+    # messages: core projects Google's own `thinking` and `media` blocks to
+    # `non_standard`, which would discard genuine signatures. Native Gemini
+    # `function_call` and `file_data` blocks are the exception -- the provider
+    # translator normalizes those to standard tool-call and file blocks.
+    read_blocks = is_foreign or (is_native and _has_provider_native_blocks(message))
+    content = message.content_blocks if read_blocks else message.content
 
     if not isinstance(content, list):
-        if isinstance(content, str) and not content:
-            # Normalize empty text to no content; it carries no information and
-            # the Gemini API rejects empty parts.
-            return []
-        return content
+        # A bare string is returned as a single-element list so that callers never
+        # have to re-handle the scalar case (iterating a `str` would yield one part
+        # per character). Empty text carries no information and is dropped.
+        return [content] if content else []
 
     code_interpreter_call_ids: set[str] = set()
     if is_foreign:
@@ -1147,70 +1300,23 @@ def _prepare_content_for_tool_call_message(
     for block in content:
         if not isinstance(block, dict):
             if isinstance(block, str) and not block:
-                # Skip empty text; it carries no information and the Gemini API
-                # rejects empty parts.
                 continue
             filtered.append(block)
             continue
 
-        block_type = block.get("type")
-        if block_type in ("tool_call", "tool_call_chunk", "invalid_tool_call"):
-            # Function calls are rebuilt from `message.tool_calls` below.
-            # `_convert_to_parts` has no `tool_call` branch, so leaving these in
-            # would raise; they would also duplicate every call. Foreign messages
-            # reach here via `content_blocks`, which does include these blocks.
+        if _is_rebuilt_tool_call_block(block):
             continue
-        if is_native and block_type == "file" and "url" in block:
-            # The native block translator represents Gemini `file_data` as a
-            # standard file URL. Preserve the provider-owned URI as a file reference
-            # rather than trying to download it as public HTTP content.
-            filtered.append(
-                {
-                    "type": "media",
-                    "file_uri": block["url"],
-                    "mime_type": block.get("mime_type", "application/octet-stream"),
-                }
-            )
+        if is_native and block.get("type") == "file" and "url" in block:
+            filtered.append(_as_gemini_file_block(block))
             continue
-        if is_foreign and block_type == "server_tool_call":
-            if block.get("name") != "code_interpreter":
+        candidate: Mapping[str, Any] = block
+        if is_foreign:
+            if _is_unsupported_foreign_server_tool(block, code_interpreter_call_ids):
                 continue
-        if (
-            is_foreign
-            and block_type == "server_tool_result"
-            and block.get("tool_call_id") not in code_interpreter_call_ids
-        ):
+            candidate = _strip_foreign_signature(block)
+        if _is_empty_content_block(candidate):
             continue
-        # Signatures from other providers are not meaningful to Google. Strip
-        # them before the emptiness check below: a block whose only payload is a
-        # foreign signature (e.g. an empty `text` block with `extras.signature`)
-        # would otherwise pass the check on the strength of that signature and
-        # then emit an empty part, which the Gemini API rejects.
-        if is_foreign and block_type in ("thinking", "text", "reasoning"):
-            stripped_block: dict[str, Any] = {
-                k: v for k, v in block.items() if k != "signature"
-            }
-            extras = stripped_block.get("extras")
-            if isinstance(extras, dict) and "signature" in extras:
-                stripped_block["extras"] = {
-                    k: v for k, v in extras.items() if k != "signature"
-                }
-            block = stripped_block
-        # Blocks with no text are dropped because the Gemini API rejects empty
-        # parts -- unless they carry a thought signature, which is itself the
-        # payload Gemini requires to be echoed back on thinking-enabled turns.
-        if (
-            block_type in ("text", "thinking", "reasoning")
-            and not (
-                block.get("text")
-                or block.get("thinking")
-                or block.get("reasoning")
-                or block.get("summary")
-            )
-            and not _block_signature(block)
-        ):
-            continue
-        filtered.append(block)
+        filtered.append(candidate)
     return filtered
 
 
@@ -1308,33 +1414,30 @@ def _parse_chat_history(
                     # per-block dropping of the non-v1 branch. Native v1 content
                     # stays strict -- a conversion failure there is malformed
                     # input that must not be silently rewritten.
-                    model_provider = message.response_metadata.get("model_provider")
-                    ai_message_parts.extend(
-                        _convert_to_parts_dropping_unconvertible(
-                            [
-                                block
-                                for block in message.content
-                                if not _is_redundant_v1beta_part(block)
-                            ],
-                            model=model,
-                            drop_unconvertible=(
-                                model_provider is None
-                                or model_provider not in _NATIVE_MODEL_PROVIDERS
-                            ),
-                        )
+                    v1_blocks = [
+                        block
+                        for block in message.content
+                        if not _is_redundant_v1beta_part(block)
+                    ]
+                    convert = (
+                        _convert_to_parts_lenient
+                        if _may_hold_foreign_blocks(message)
+                        else _convert_to_parts
                     )
+                    ai_message_parts.extend(convert(v1_blocks, model=model))
                 else:
-                    model_provider = message.response_metadata.get("model_provider")
+                    # Only another provider's blocks may fail to convert; a block
+                    # from a message known to be Google's is malformed input, and
+                    # must surface rather than silently change the request.
+                    convert = (
+                        _convert_to_parts_lenient
+                        if _may_hold_foreign_blocks(message)
+                        else _convert_to_parts
+                    )
                     ai_message_parts.extend(
-                        _convert_to_parts_dropping_unconvertible(
-                            _prepare_content_for_tool_call_message(message),  # type: ignore[arg-type]
+                        convert(
+                            _prepare_content_for_tool_call_message(message),
                             model=model,
-                            # Only another provider's blocks may fail to convert;
-                            # a native block that fails is malformed input.
-                            drop_unconvertible=(
-                                model_provider is None
-                                or model_provider not in _NATIVE_MODEL_PROVIDERS
-                            ),
                         )
                     )
 

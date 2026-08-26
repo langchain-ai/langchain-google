@@ -1,9 +1,20 @@
 """Go from v1 content blocks to generativelanguage_v1beta format."""
 
 import json
+import logging
 from typing import Any, cast
 
 from langchain_core.messages import content as types
+
+logger = logging.getLogger(__name__)
+
+#: Providers whose content blocks and thought signatures Gemini can consume
+#: directly. Vertex AI serves the same Gemini models, so its signatures are valid
+#: here and must not be stripped.
+#:
+#: Defined here rather than in `chat_models` because `chat_models` imports this
+#: module; `chat_models` re-exports it for use on the non-v1 path.
+_NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
 
 
 def translate_citations_to_grounding_metadata(
@@ -136,10 +147,21 @@ def _convert_from_v1_to_generativelanguage_v1beta(
     Returns:
         List of dictionaries in `generativelanguage_v1beta` `Content` format, ready to
             be sent to the API.
+
+    Note:
+        Every shape emitted here must have a matching branch in
+        `chat_models._convert_to_parts`, which converts these dicts to `Part`
+        objects. The tool-call history path converts native content strictly, so
+        adding an emitted shape without a converter branch turns it into a hard
+        `ValueError` rather than a dropped block.
     """
     new_content: list = []
     for block in content:
         if not isinstance(block, dict) or "type" not in block:
+            logger.warning(
+                "Dropping v1 content block that is not a typed mapping (got: %s).",
+                type(block) if not isinstance(block, dict) else "dict without 'type'",
+            )
             continue
 
         block_dict = dict(block)  # (For typing)
@@ -149,40 +171,53 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             new_block = {"text": block_dict.get("text", "")}
             if (
                 thought_signature := (block_dict.get("extras") or {}).get("signature")  # type: ignore[attr-defined]
-            ) and model_provider == "google_genai":
+            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
                 new_block["thought_signature"] = thought_signature
             new_content.append(new_block)
             # Citations are only handled on output. Can't pass them back :/
 
         # ReasoningContentBlock -> thinking
-        elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
+        elif (
+            block_dict["type"] == "reasoning"
+            and model_provider in _NATIVE_MODEL_PROVIDERS
+        ):
             # Google requires passing back the thought_signature when available.
             # Signatures are only provided when function calling is enabled.
-            if "extras" in block_dict and isinstance(block_dict["extras"], dict):
-                extras = block_dict["extras"]
-                if "signature" in extras:
-                    new_block = {
-                        "thought": True,
-                        "text": block_dict.get("reasoning", ""),
-                        "thought_signature": extras["signature"],
-                    }
-                    new_content.append(new_block)
-                # else: skip reasoning blocks without signatures
-                # TODO: log a warning?
-            # else: skip reasoning blocks without extras
-            # TODO: log a warning?
+            extras = block_dict.get("extras")
+            signature = extras.get("signature") if isinstance(extras, dict) else None
+            if signature:
+                new_block = {
+                    "thought": True,
+                    "text": block_dict.get("reasoning", ""),
+                    "thought_signature": signature,
+                }
+                new_content.append(new_block)
+            else:
+                # An unsigned reasoning block cannot be echoed back: Gemini
+                # rejects a thought part with no signature. The text goes with it.
+                logger.warning(
+                    "Dropping v1 reasoning block with no thought signature; "
+                    "its text will not be sent back to the model."
+                )
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
-            if base64 := block_dict.get("base64"):
+            # `Blob.data` accepts a base64 `str` and decodes it (the field sets
+            # `val_json_bytes="base64"`), so pass it through untouched. Named
+            # `b64_data` rather than `base64`: the latter shadows the stdlib
+            # module name and previously caused this payload to be corrupted by
+            # a stray `base64.encode("utf-8")` call.
+            if b64_data := block_dict.get("base64"):
                 new_block = {
                     "inline_data": {
                         "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "data": base64,
+                        "data": b64_data,
                     }
                 }
                 new_content.append(new_block)
-            elif (url := block_dict.get("url")) and model_provider == "google_genai":
+            elif (
+                url := block_dict.get("url")
+            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
                 # Google file service
                 new_block = {
                     "file_data": {
@@ -196,20 +231,24 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         # FileContentBlock (documents)
         elif block_dict["type"] == "file":
-            if base64 := block_dict.get("base64"):
+            # `Blob.data` accepts a base64 `str` and decodes it (the field sets
+            # `val_json_bytes="base64"`), so pass it through untouched. Named
+            # `b64_data` rather than `base64`: the latter shadows the stdlib
+            # module name and previously caused this payload to be corrupted by
+            # a stray `base64.encode("utf-8")` call.
+            if b64_data := block_dict.get("base64"):
                 new_block = {
                     "inline_data": {
                         "mime_type": block_dict.get(
                             "mime_type", "application/octet-stream"
                         ),
-                        "data": base64,
+                        "data": b64_data,
                     }
                 }
                 new_content.append(new_block)
-            elif (file_id := block_dict.get("file_id")) and model_provider in (
-                "google_genai",
-                "google_vertexai",
-            ):
+            elif (
+                file_id := block_dict.get("file_id")
+            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
                 # File ID from uploaded file
                 new_block = {
                     "file_data": {
@@ -220,7 +259,9 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif (url := block_dict.get("url")) and model_provider == "google_genai":
+            elif (
+                url := block_dict.get("url")
+            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
                 # Google file service
                 new_block = {
                     "file_data": {
@@ -305,6 +346,21 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         elif block_dict["type"] == "non_standard":
             # Opaque provider payloads cannot be represented by Gemini. Unwrapping
             # them would send an unknown block type into the Gemini part converter.
-            continue
+            # `chat_models._convert_to_parts` logs the same drop on the v0 path.
+            value = block_dict.get("value")
+            logger.warning(
+                "Dropping non-standard v1 content block that cannot be "
+                "represented as a Gemini part (inner type: %s).",
+                value.get("type") if isinstance(value, dict) else None,
+            )
+
+        else:
+            # No branch matched. A block type this whitelist does not know is
+            # dropped, which is right for another provider's blocks but is a bug
+            # signal for a newly added core block type -- hence the warning.
+            logger.warning(
+                "Dropping v1 content block with no Gemini equivalent (type: %s).",
+                block_dict["type"],
+            )
 
     return new_content

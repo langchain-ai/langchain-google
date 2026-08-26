@@ -78,6 +78,7 @@ from langchain_google_genai.chat_models import (
     GoogleContextOverflowError,
     _convert_to_parts,
     _convert_tool_message_to_parts,
+    _decode_signature,
     _get_ai_message_tool_messages_parts,
     _handle_client_error,
     _handle_server_error,
@@ -3579,7 +3580,7 @@ def test_parse_chat_history_tool_calls_v1_foreign_malformed_media_dropped(
     assert len(parts) == 1
     assert parts[0].function_call is not None
     assert parts[0].function_call.name == "search"
-    assert "cannot be represented as a Gemini part" in caplog.text
+    assert "Dropping content block that cannot" in caplog.text
 
 
 def test_parse_chat_history_tool_calls_v1_native_malformed_media_raises() -> None:
@@ -3704,7 +3705,7 @@ def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
     assert parts[0].text == "Let me look that up."
     assert parts[1].function_call is not None
     assert parts[1].function_call.name == "search"
-    assert "cannot be represented as a Gemini part" in caplog.text
+    assert "Dropping content block that cannot" in caplog.text
 
 
 def test_parse_chat_history_tool_calls_native_invalid_media_raises() -> None:
@@ -3754,13 +3755,16 @@ def test_parse_chat_history_tool_calls_foreign_malformed_media_still_dropped(
     assert "Dropping non-standard content block" in caplog.text
 
 
-def test_parse_chat_history_tool_calls_vertexai_signature_preserved() -> None:
+@pytest.mark.parametrize("model_provider", ["google_genai", "google_vertexai"])
+def test_parse_chat_history_tool_calls_native_v0_signature_preserved(
+    model_provider: str,
+) -> None:
     """Vertex AI serves the same Gemini models, so its signatures stay valid."""
     signature = base64.b64encode(b"vertex_sig").decode("ascii")
     message = AIMessage(
         content=[{"type": "thinking", "thinking": "Thinking.", "signature": signature}],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "google_vertexai"},
+        response_metadata={"model_provider": model_provider},
     )
 
     _, formatted_messages = _parse_chat_history([message])
@@ -3770,6 +3774,47 @@ def test_parse_chat_history_tool_calls_vertexai_signature_preserved() -> None:
     assert len(parts) == 2
     assert parts[0].thought is True
     assert parts[0].thought_signature == b"vertex_sig"
+
+
+@pytest.mark.parametrize("model_provider", ["google_genai", "google_vertexai"])
+def test_parse_chat_history_tool_calls_native_v1_signature_preserved(
+    model_provider: str,
+) -> None:
+    """Both native providers keep reasoning text and signatures on the v1 path.
+
+    Regression guard: `_compat` used to gate v1 signature handling on
+    `google_genai` alone, so a Vertex AI turn lost its reasoning block entirely
+    and had its text signature stripped. The signature then fell through to
+    `DUMMY_THOUGHT_SIGNATURE`, silently degrading thinking continuity.
+    """
+    signature = base64.b64encode(b"vertex_sig").decode("ascii")
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "reasoning": "Thinking.",
+                "extras": {"signature": signature},
+            },
+            {"type": "text", "text": "Answer.", "extras": {"signature": signature}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": model_provider,
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 3
+    assert parts[0].thought is True
+    assert parts[0].text == "Thinking."
+    assert parts[0].thought_signature == b"vertex_sig"
+    assert parts[1].text == "Answer."
+    assert parts[1].thought_signature == b"vertex_sig"
+    assert parts[2].function_call is not None
 
 
 def test_parse_chat_history_tool_calls_summary_reasoning_kept_without_metadata() -> (
@@ -7575,3 +7620,271 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+# --- Gap coverage for tool-call history conversion helpers --------------------
+
+
+@pytest.mark.parametrize(
+    ("sig", "expected"),
+    [
+        (base64.b64encode(b"sig").decode("ascii"), b"sig"),
+        (b"raw_bytes", b"raw_bytes"),
+        ("", None),
+        (b"", None),
+        (None, None),
+        (123, None),
+    ],
+)
+def test_decode_signature(sig: Any, expected: bytes | None) -> None:
+    """Both wire shapes decode, and every empty form normalizes to `None`.
+
+    The empty-string case matters: returning `b""` instead of `None` would emit a
+    part with a zero-length signature, which is not the same as no signature.
+    """
+    assert _decode_signature(sig) == expected
+
+
+def test_convert_to_parts_decodes_bytes_thought_signature() -> None:
+    """A v1beta thought part may carry raw bytes rather than base64."""
+    parts = _convert_to_parts(
+        [{"thought": True, "text": "Thinking.", "thought_signature": b"raw_sig"}]
+    )
+
+    assert len(parts) == 1
+    assert parts[0].thought is True
+    assert parts[0].thought_signature == b"raw_sig"
+
+
+def test_convert_to_parts_typed_block_wins_over_thought_key() -> None:
+    """An explicit `type` takes precedence over the type-less `thought` sniffing.
+
+    Regression guard: the `thought` branch used to run before the `type` chain, so
+    a block carrying both was silently reinterpreted as a thought part.
+    """
+    parts = _convert_to_parts(
+        [{"type": "text", "text": "Not a thought.", "thought": True}]
+    )
+
+    assert len(parts) == 1
+    assert parts[0].text == "Not a thought."
+    assert parts[0].thought is not True
+
+
+def test_convert_to_parts_empty_inline_data_is_not_a_file_part() -> None:
+    """An empty-but-present `inline_data` must not fall through to `file_data`.
+
+    Regression guard: the branch resolved the payload with
+    `part.get("inline_data") or part.get("file_data")`, so a falsy `inline_data`
+    was emitted as a `file_data` part.
+    """
+    parts = _convert_to_parts([{"inline_data": {}}])
+
+    assert len(parts) == 1
+    assert parts[0].inline_data is not None
+    assert parts[0].file_data is None
+
+
+@pytest.mark.parametrize(
+    ("block", "attr"),
+    [
+        ({"inline_data": {"mime_type": None, "data": "aGk="}}, "inline_data"),
+        ({"file_data": {"mime_type": None, "file_uri": "gs://b/o"}}, "file_data"),
+        ({"executable_code": {"language": None, "code": "x=1"}}, "executable_code"),
+        (
+            {"code_execution_result": {"outcome": None, "output": "1"}},
+            "code_execution_result",
+        ),
+    ],
+)
+def test_convert_to_parts_v1beta_shapes_tolerate_none_valued_keys(
+    block: dict[str, Any], attr: str
+) -> None:
+    """A `None`-valued key converts rather than failing validation.
+
+    `_compat` fills these fields with defaults, so `None` should not occur; this
+    pins the tolerance so that a stricter `google-genai` release surfaces here
+    rather than as a dropped media block in production.
+    """
+    parts = _convert_to_parts([block])
+
+    assert len(parts) == 1
+    assert getattr(parts[0], attr) is not None
+
+
+def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
+    """Function-call blocks are stripped even on the strict native path.
+
+    Native content is converted strictly, so a leftover `tool_call` block would
+    raise `Unrecognized message part type` rather than be dropped. The tolerant
+    path hides this, which is why this test pins a native provider.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Looking it up."},
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+            {"type": "invalid_tool_call", "name": "search", "args": "{bad"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Looking it up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_foreign_server_tool_filtered_silently() -> None:
+    """A foreign non-code-interpreter server tool is filtered before conversion.
+
+    It must be dropped by the content filter, not by `_convert_to_parts`'s
+    warn-and-skip: reaching the latter means an unexpected `UserWarning` on every
+    turn of a multi-provider conversation.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Searching."},
+            {
+                "type": "server_tool_call",
+                "name": "web_search",
+                "id": "srv_1",
+                "args": {"query": "x"},
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Searching."
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> None:
+    """Non-dict list entries pass through; empty strings are dropped."""
+    message = AIMessage(
+        content=["Hello.", "", {"type": "text", "text": "World."}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert [part.text for part in parts[:2]] == ["Hello.", "World."]
+    assert parts[2].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_string_content_is_not_split() -> None:
+    """Scalar string content becomes one text part, not one part per character."""
+    message = AIMessage(
+        content="Hi there",
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Hi there"
+
+
+def test_convert_to_parts_joins_multi_segment_summary() -> None:
+    """Every `summary` segment is concatenated, and non-dict entries are skipped.
+
+    Guards against silently truncating a multi-segment reasoning summary to its
+    first element.
+    """
+    parts = _convert_to_parts(
+        [
+            {
+                "type": "reasoning",
+                "summary": [
+                    {"type": "summary_text", "text": "First. "},
+                    "not a dict",
+                    {"type": "summary_text", "text": "Second."},
+                ],
+            }
+        ]
+    )
+
+    assert len(parts) == 1
+    assert parts[0].text == "First. Second."
+    assert parts[0].thought is True
+
+
+def test_lenient_conversion_logs_the_underlying_cause(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The dropped block's actual error is reported, not just "no equivalent".
+
+    Media loading raises actionable errors (e.g. a rejected local file path) that
+    the tolerant path would otherwise discard.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Here it is."},
+            {"type": "image_url", "image_url": {"url": "./secrets/local.png"}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts[0].text == "Here it is."
+    assert "Dropping content block that cannot" in caplog.text
+    # The actionable cause reaches the log, not just "Gemini has no equivalent".
+    # Media loading rejects unusable sources with remediation text; discarding it
+    # would tell the caller only that Gemini cannot represent an image, which is
+    # both false and unfixable-sounding.
+    assert "./secrets/local.png" in caplog.text
+    assert "Media string must be one of" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_fragment"),
+    [
+        ([{"type": "brand_new_core_block"}], "no Gemini equivalent"),
+        (
+            [{"type": "non_standard", "value": {"type": "redacted_thinking"}}],
+            "non-standard v1 content block",
+        ),
+        ([{"type": "reasoning", "reasoning": "Unsigned."}], "no thought signature"),
+        (["not a mapping"], "not a typed mapping"),
+    ],
+)
+def test_convert_from_v1_logs_dropped_blocks(
+    content: list[Any],
+    expected_fragment: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Every v1 drop is diagnosable.
+
+    The v1 tool-call path converts native content strictly on the assumption that
+    `_compat` already removed anything unrepresentable, so a silent drop here is
+    the only trace of lost content.
+    """
+    with caplog.at_level(logging.WARNING):
+        result = _convert_from_v1_to_generativelanguage_v1beta(
+            cast("Any", content), "google_genai"
+        )
+
+    assert result == []
+    assert expected_fragment in caplog.text
