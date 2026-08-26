@@ -128,7 +128,9 @@ from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
     _ToolChoiceType,
     _ToolDict,
+    coerce_json_encoded_args,
     convert_to_genai_function_declarations,
+    get_container_arg_types,
     is_basemodel_subclass_safe,
     tool_to_dict,
 )
@@ -1157,6 +1159,7 @@ def _parse_response_candidate(
     model_name: str | None = None,
     *,
     model_name_for_content: str | None = None,
+    container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
 ) -> AIMessage:
     """Parse a response candidate from Google into an `AIMessage`.
 
@@ -1170,6 +1173,9 @@ def _parse_response_candidate(
             For Gemini 3+, this determines whether to use list-based content blocks
             or string content. Must be consistent across all streaming chunks to
             enable proper concatenation. If not provided, falls back to `model_name`.
+        container_arg_types: Array- and object-typed args declared by the tools sent
+            with the request, as returned by `get_container_arg_types`. Used to
+            decode container args the model returned as JSON strings.
 
     Returns:
         The parsed `AIMessage` or `AIMessageChunk`.
@@ -1317,8 +1323,13 @@ def _parse_response_candidate(
         if part.function_call:
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            # Convert function call args to dict first, then fix integer-like floats
+            # Convert function call args to dict first, then decode container args
+            # the model JSON-encoded, then fix integer-like floats
             args_dict = dict(part.function_call.args) if part.function_call.args else {}
+            args_dict = coerce_json_encoded_args(
+                args_dict,
+                (container_arg_types or {}).get(part.function_call.name or ""),
+            )
             function_call_args_dict = _convert_integer_like_floats(args_dict)
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
@@ -1406,10 +1417,26 @@ def _parse_response_candidate(
     )
 
 
+def _container_arg_types_from_request(
+    request: dict[str, Any],
+) -> dict[str, dict[str, str]]:
+    """Collect the array/object args declared by the tools sent with a request.
+
+    Args:
+        request: The prepared request, as returned by `_prepare_request`.
+
+    Returns:
+        Mapping of function name to `{arg name: 'ARRAY' | 'OBJECT'}`.
+    """
+    return get_container_arg_types(getattr(request.get("config"), "tools", None))
+
+
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
     prev_usage: UsageMetadata | None = None,
+    *,
+    container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
 ) -> ChatResult:
     """Converts a Google AI response into a LangChain `ChatResult`."""
     llm_output = (
@@ -1497,6 +1524,7 @@ def _response_to_result(
             streaming=stream,
             model_name=model_name_for_metadata,  # None for intermediate chunks
             model_name_for_content=response.model_version,  # Always set
+            container_arg_types=container_arg_types,
         )
 
         if not hasattr(message, "response_metadata"):
@@ -3511,7 +3539,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ServerError as e:
             _handle_server_error(e)
 
-        return _response_to_result(response)
+        return _response_to_result(
+            response,
+            container_arg_types=_container_arg_types_from_request(request),
+        )
 
     async def _agenerate(
         self,
@@ -3555,7 +3586,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         except ServerError as e:
             _handle_server_error(e)
 
-        return _response_to_result(response)
+        return _response_to_result(
+            response,
+            container_arg_types=_container_arg_types_from_request(request),
+        )
 
     def _stream(
         self,
@@ -3594,13 +3628,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         )
 
+        container_arg_types = _container_arg_types_from_request(request)
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
         for chunk in _classified_stream(response, request):
             if chunk:
                 _chat_result = _response_to_result(
-                    chunk, stream=True, prev_usage=prev_usage_metadata
+                    chunk,
+                    stream=True,
+                    prev_usage=prev_usage_metadata,
+                    container_arg_types=container_arg_types,
                 )
                 gen = cast("ChatGenerationChunk", _chat_result.generations[0])
                 message = cast("AIMessageChunk", gen.message)
@@ -3656,6 +3694,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+        container_arg_types = _container_arg_types_from_request(request)
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
@@ -3665,7 +3704,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         async for chunk in _aclassified_stream(stream, request):
             _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
+                chunk,
+                stream=True,
+                prev_usage=prev_usage_metadata,
+                container_arg_types=container_arg_types,
             )
             gen = cast("ChatGenerationChunk", _chat_result.generations[0])
             message = cast("AIMessageChunk", gen.message)
