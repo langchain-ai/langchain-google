@@ -4040,6 +4040,47 @@ def test_parse_chat_history_tool_calls_normalizes_native_blocks(
     assert parts[1].function_call.args == {"q": "x"}
 
 
+def test_parse_chat_history_tool_calls_preserves_native_media_block() -> None:
+    """A native `media` block mixed with a raw `function_call` is not dropped.
+
+    Core's google translator has no `media` case, so projecting the message
+    through `content_blocks` would turn the block into `non_standard` and lose it.
+    Reading raw `content` and normalizing only the function-call block preserves
+    the media part.
+    """
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "file_uri": "https://generativelanguage.googleapis.com/v1beta/files/abc",
+                "mime_type": "audio/mpeg",
+            },
+            {
+                "type": "function_call",
+                "name": "transcribe",
+                "args": {},
+                "id": "call_1",
+            },
+        ],
+        tool_calls=[{"name": "transcribe", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert (
+        parts[0].file_data.file_uri
+        == "https://generativelanguage.googleapis.com/v1beta/files/abc"
+    )
+    assert parts[0].file_data.mime_type == "audio/mpeg"
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "transcribe"
+
+
 def test_parse_chat_history_tool_calls_v1_file_id_becomes_file_data() -> None:
     """A v1 `file` block carrying a `file_id` converts to a `file_data` part."""
     message = AIMessage(

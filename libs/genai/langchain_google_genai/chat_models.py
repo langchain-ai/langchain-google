@@ -1126,20 +1126,23 @@ def _may_hold_foreign_blocks(message: AIMessage) -> bool:
     )
 
 
-def _has_provider_native_blocks(message: AIMessage) -> bool:
-    """Whether native `message` content holds raw Gemini block shapes.
+def _as_gemini_media_block(block: Mapping[str, Any]) -> dict[str, Any]:
+    """Re-tag a raw Gemini `file_data` block as a `media` block.
+
+    `_convert_to_parts` has no `file_data` branch; the `media` shape with
+    `file_uri` is the Gemini-native equivalent it converts.
 
     Args:
-        message: The message to inspect.
+        block: A raw `file_data` block carrying a `file_uri`.
 
     Returns:
-        `True` if the content carries `function_call`/`file_data` blocks, which the
-        provider translator normalizes to standard tool-call and file blocks.
+        The equivalent `media` block.
     """
-    return isinstance(message.content, list) and any(
-        isinstance(block, dict) and block.get("type") in ("function_call", "file_data")
-        for block in message.content
-    )
+    return {
+        "type": "media",
+        "file_uri": block["file_uri"],
+        "mime_type": block.get("mime_type", "application/octet-stream"),
+    }
 
 
 def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
@@ -1228,26 +1231,6 @@ def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
     return not has_text and not _block_signature(block)
 
 
-def _as_gemini_file_block(block: Mapping[str, Any]) -> dict[str, Any]:
-    """Re-tag a standard file URL block as a Gemini file reference.
-
-    The native block translator represents Gemini `file_data` as a standard file
-    URL. Preserve the provider-owned URI as a file reference rather than trying to
-    download it as public HTTP content.
-
-    Args:
-        block: A `file` block carrying a `url`.
-
-    Returns:
-        The equivalent `media` block.
-    """
-    return {
-        "type": "media",
-        "file_uri": block["url"],
-        "mime_type": block.get("mime_type", "application/octet-stream"),
-    }
-
-
 def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
     """Prepare `AIMessage` content for conversion when the message has tool calls.
 
@@ -1268,16 +1251,15 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
         rule near the top of this module).
     """
     is_foreign = _is_foreign_provider(message)
-    is_native = message.response_metadata.get("model_provider") in (
-        _NATIVE_MODEL_PROVIDERS
-    )
-    # Read `content` rather than `content_blocks` for native and unstamped
-    # messages: core projects Google's own `thinking` and `media` blocks to
-    # `non_standard`, which would discard genuine signatures. Native Gemini
-    # `function_call` and `file_data` blocks are the exception -- the provider
-    # translator normalizes those to standard tool-call and file blocks.
-    read_blocks = is_foreign or (is_native and _has_provider_native_blocks(message))
-    content = message.content_blocks if read_blocks else message.content
+    # Only foreign messages are read from `content_blocks`: they need core's
+    # standardization to shapes `_convert_to_parts` understands, and anything
+    # core cannot standardize is safe to drop because it is not Google's.
+    # Native and unstamped messages are read from raw `content`: core projects
+    # Google's own `thinking` and `media` blocks to `non_standard`, which would
+    # discard genuine signatures and silently drop media blocks mixed with
+    # native function calls. Raw `function_call`/`file_data` blocks are
+    # normalized individually below.
+    content = message.content_blocks if is_foreign else message.content
 
     if not isinstance(content, list):
         # A bare string is returned as a single-element list so that callers never
@@ -1306,8 +1288,14 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
 
         if _is_rebuilt_tool_call_block(block):
             continue
-        if is_native and block.get("type") == "file" and "url" in block:
-            filtered.append(_as_gemini_file_block(block))
+        block_type = block.get("type")
+        if block_type == "function_call":
+            # Raw Gemini function call: the equivalent part is rebuilt from
+            # `message.tool_calls`, so the block must not be converted twice.
+            continue
+        if block_type == "file_data" and "file_uri" in block:
+            # Raw Gemini file reference: re-tag so `_convert_to_parts` handles it.
+            filtered.append(_as_gemini_media_block(block))
             continue
         candidate: Mapping[str, Any] = block
         if is_foreign:
