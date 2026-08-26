@@ -3358,6 +3358,33 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
     assert function_call_parts[0].function_call.args == {"q": "x"}
 
 
+def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
+    """Anthropic `tool_use` content is normalized before Google conversion."""
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Let me look that up."},
+            {
+                "type": "tool_use",
+                "id": "call_1",
+                "name": "search",
+                "input": {"q": "x"},
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Let me look that up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert parts[1].function_call.args == {"q": "x"}
+
+
 def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
     """OpenAI-style `summary` reasoning blocks don't crash history parsing.
 

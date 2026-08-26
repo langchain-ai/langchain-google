@@ -979,20 +979,22 @@ def _prepare_content_for_tool_call_message(
         message: The `AIMessage` whose content should be prepared.
 
     Returns:
-        The message content, with `tool_call`/`tool_call_chunk` blocks removed
-        and unrepresentable reasoning blocks dropped.
+        The normalized message content, with `tool_call`/`tool_call_chunk` blocks
+        removed and unrepresentable reasoning blocks dropped.
     """
-    if not isinstance(message.content, list):
-        if isinstance(message.content, str) and not message.content:
+    model_provider = message.response_metadata.get("model_provider")
+    is_foreign = model_provider is not None and model_provider != "google_genai"
+    content = message.content_blocks if is_foreign else message.content
+
+    if not isinstance(content, list):
+        if isinstance(content, str) and not content:
             # Normalize empty text to no content; it carries no information and
             # the Gemini API rejects empty parts.
             return []
-        return message.content
+        return content
 
-    model_provider = message.response_metadata.get("model_provider")
-    is_foreign = model_provider is not None and model_provider != "google_genai"
     filtered: list[Any] = []
-    for block in message.content:
+    for block in content:
         if not isinstance(block, dict):
             if isinstance(block, str) and not block:
                 # Skip empty text; it carries no information and the Gemini API
@@ -1031,10 +1033,16 @@ def _prepare_content_for_tool_call_message(
             )
         ):
             # Signatures from other providers are not meaningful to Google.
-            block = {k: v for k, v in block.items() if k != "signature"}
-            extras = block.get("extras")
+            sanitized_block: dict[str, Any] = {
+                k: v for k, v in block.items() if k != "signature"
+            }
+            extras = sanitized_block.get("extras")
             if isinstance(extras, dict) and "signature" in extras:
-                block["extras"] = {k: v for k, v in extras.items() if k != "signature"}
+                sanitized_block["extras"] = {
+                    k: v for k, v in extras.items() if k != "signature"
+                }
+            filtered.append(sanitized_block)
+            continue
         filtered.append(block)
     return filtered
 
