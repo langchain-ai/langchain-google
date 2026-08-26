@@ -129,7 +129,7 @@ from langchain_google_genai._common import (
     get_user_agent,
 )
 from langchain_google_genai._compat import (
-    _NATIVE_MODEL_PROVIDERS,
+    _classify_model_provider,
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai._function_utils import (
@@ -353,18 +353,6 @@ def _decode_signature(sig: Any) -> bytes | None:
     return None
 
 
-def _drop_none(mapping: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Return `mapping` without its `None` values, for splatting into a `Part` field.
-
-    Args:
-        mapping: The mapping to filter, or `None`.
-
-    Returns:
-        A new dict holding only the entries whose value is not `None`.
-    """
-    return {k: v for k, v in (mapping or {}).items() if v is not None}
-
-
 def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
     """Return the thought signature carried by a content block, if any.
 
@@ -427,38 +415,9 @@ def _v1beta_dict_to_part(part: Mapping[str, Any]) -> Part | None:
         The corresponding `Part`, or `None` if `part` is not one of the shapes that
         function emits.
     """
-    if part.get("thought") is True and "text" in part:
-        # Projected from a v1 `reasoning` block.
-        return Part(
-            text=part["text"],
-            thought=True,
-            thought_signature=_decode_signature(part.get("thought_signature")),
-        )
-    if "inline_data" in part:
-        # Projected from a v1 `image`/`file` block carrying base64 data.
-        return Part(inline_data=Blob(**_drop_none(part["inline_data"])))
-    if "file_data" in part:
-        # Projected from a v1 `image`/`file` block carrying a URI.
-        return Part(file_data=FileData(**_drop_none(part["file_data"])))
-    if "executable_code" in part:
-        # Projected from a v1 `server_tool_call` (code_interpreter) block.
-        return Part(
-            executable_code=ExecutableCode(**_drop_none(part["executable_code"]))
-        )
-    if "code_execution_result" in part:
-        # Projected from a v1 `server_tool_result` (code_execution_result) block.
-        return Part(
-            code_execution_result=CodeExecutionResult(
-                **_drop_none(part["code_execution_result"])
-            )
-        )
-    if set(part) <= {"text", "thought_signature"} and isinstance(part.get("text"), str):
-        # Projected from a v1 `text` block, optionally carrying a signature.
-        return Part(
-            text=part["text"],
-            thought_signature=_decode_signature(part.get("thought_signature")),
-        )
-    return None
+    if not set(part).intersection(Part.model_fields):
+        return None
+    return Part.model_validate(part)
 
 
 def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
@@ -828,11 +787,14 @@ def _convert_to_parts(
                         # text when possible; otherwise drop the block.
                         summary = part.get("summary")
                         if isinstance(summary, list):
-                            reasoning_text = "".join(
-                                item.get("text", "")
+                            summary_texts = [
+                                text.strip()
                                 for item in summary
                                 if isinstance(item, dict)
-                            )
+                                and isinstance((text := item.get("text")), str)
+                                and text.strip()
+                            ]
+                            reasoning_text = " ".join(summary_texts)
                         if not reasoning_text:
                             continue
                     parts.append(
@@ -1088,44 +1050,6 @@ def _convert_to_parts_lenient(
     return parts
 
 
-def _is_foreign_provider(message: AIMessage) -> bool:
-    """Whether `message` came from a provider whose blocks Gemini cannot consume.
-
-    A message with no `model_provider` is *not* foreign: hand-built messages and
-    checkpoints serialized before core stamped the field may hold Google's own
-    block shapes, and reading them as foreign would discard genuine signatures.
-    Contrast `_may_hold_foreign_blocks`, which deliberately answers the opposite
-    way for that case.
-
-    Args:
-        message: The message to classify.
-
-    Returns:
-        `True` if the message records a provider other than Google's.
-    """
-    model_provider = message.response_metadata.get("model_provider")
-    return model_provider is not None and model_provider not in _NATIVE_MODEL_PROVIDERS
-
-
-def _may_hold_foreign_blocks(message: AIMessage) -> bool:
-    """Whether conversion failures for `message` should be dropped rather than raised.
-
-    Answers `True` where `_is_foreign_provider` answers `False` for a message with
-    no `model_provider`: such a message is read as native (to preserve signatures)
-    but cannot be *trusted* to be native, so a conversion failure is dropped rather
-    than turned into an error the caller cannot act on.
-
-    Args:
-        message: The message to classify.
-
-    Returns:
-        `True` if the message is not known to have come from Google.
-    """
-    return message.response_metadata.get("model_provider") not in (
-        _NATIVE_MODEL_PROVIDERS
-    )
-
-
 def _as_gemini_media_block(block: Mapping[str, Any]) -> dict[str, Any]:
     """Re-tag a raw Gemini `file_data` block as a `media` block.
 
@@ -1250,7 +1174,10 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
         wrapped in a list (empty string yields an empty list, per the empty-part
         rule near the top of this module).
     """
-    is_foreign = _is_foreign_provider(message)
+    provider_kind = _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    )
+    is_foreign = provider_kind == "foreign"
     # Only foreign messages are read from `content_blocks`: they need core's
     # standardization to shapes `_convert_to_parts` understands, and anything
     # core cannot standardize is safe to drop because it is not Google's.
@@ -1308,6 +1235,52 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
     return filtered
 
 
+def _convert_ai_message_content(
+    message: AIMessage,
+    model: str | None,
+    *,
+    exclude_function_calls: bool,
+) -> list[Part]:
+    """Convert an AI message's non-authoritative content to Gemini parts.
+
+    `message.tool_calls` is the authoritative function-call representation. V1
+    content is first projected to Gemini-compatible dictionaries; other content
+    uses the provider-aware normalization path when function calls must be removed.
+
+    Args:
+        message: The AI message to convert.
+        model: The target model name, used for version-specific media behavior.
+        exclude_function_calls: Whether function-call blocks should be omitted
+            because they will be rebuilt from `message.tool_calls`.
+
+    Returns:
+        Converted Gemini parts.
+    """
+    provider_kind = _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    )
+    if message.response_metadata.get("output_version") == "v1":
+        content: list[Any] = _convert_from_v1_to_generativelanguage_v1beta(
+            cast("list[types.ContentBlock]", message.content),
+            message.response_metadata.get("model_provider"),
+        )
+        if exclude_function_calls:
+            content = [
+                block for block in content if not _is_redundant_v1beta_part(block)
+            ]
+    elif exclude_function_calls:
+        content = _prepare_content_for_tool_call_message(message)
+    else:
+        content = (
+            [message.content] if isinstance(message.content, str) else message.content
+        )
+
+    convert = (
+        _convert_to_parts if provider_kind == "native" else _convert_to_parts_lenient
+    )
+    return convert(content, model=model)
+
+
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage],
     convert_system_message_to_human: bool = False,
@@ -1337,27 +1310,6 @@ def _parse_chat_history(
             DeprecationWarning,
             stacklevel=2,
         )
-    input_messages = list(input_messages)  # Make a mutable copy
-
-    # Case where content was serialized to v1 format
-    for idx, message in enumerate(input_messages):
-        if (
-            isinstance(message, AIMessage)
-            and message.response_metadata.get("output_version") == "v1"
-        ):
-            # Unpack known v1 content to v1beta format for the request
-            #
-            # Old content types and any previously serialized messages passed back in to
-            # history will skip this, but hit and processed in `_convert_to_parts`
-            input_messages[idx] = message.model_copy(
-                update={
-                    "content": _convert_from_v1_to_generativelanguage_v1beta(
-                        cast("list[types.ContentBlock]", message.content),
-                        message.response_metadata.get("model_provider"),
-                    )
-                }
-            )
-
     formatted_messages: list[Content] = []
 
     system_instruction: Content | None = None
@@ -1383,57 +1335,21 @@ def _parse_chat_history(
         if isinstance(message, AIMessage):
             role = "model"
             if message.tool_calls:
-                ai_message_parts = []
-
                 # First, convert all non-function-call content (text, thinking,
                 # reasoning, media, etc.) through the unified conversion path.
                 # When include_thoughts=True, thinking blocks need to be preserved
                 # when passing messages back to the API.
-                if message.response_metadata.get("output_version") == "v1":
-                    # Content was already converted to v1beta dicts above by
-                    # `_convert_from_v1_to_generativelanguage_v1beta`, so these
-                    # blocks carry no `type` key and need their own filter rather
-                    # than `_prepare_content_for_tool_call_message`.
-                    #
-                    # `_compat` drops unconvertible foreign block types, but it
-                    # does not validate converted media payloads: another
-                    # provider's malformed `image`/`file` base64 still reaches
-                    # `Blob` here, so foreign v1 messages keep the tolerant
-                    # per-block dropping of the non-v1 branch. Native v1 content
-                    # stays strict -- a conversion failure there is malformed
-                    # input that must not be silently rewritten.
-                    v1_blocks = [
-                        block
-                        for block in message.content
-                        if not _is_redundant_v1beta_part(block)
-                    ]
-                    convert = (
-                        _convert_to_parts_lenient
-                        if _may_hold_foreign_blocks(message)
-                        else _convert_to_parts
-                    )
-                    ai_message_parts.extend(convert(v1_blocks, model=model))
-                else:
-                    # Only another provider's blocks may fail to convert; a block
-                    # from a message known to be Google's is malformed input, and
-                    # must surface rather than silently change the request.
-                    convert = (
-                        _convert_to_parts_lenient
-                        if _may_hold_foreign_blocks(message)
-                        else _convert_to_parts
-                    )
-                    ai_message_parts.extend(
-                        convert(
-                            _prepare_content_for_tool_call_message(message),
-                            model=model,
-                        )
-                    )
+                ai_message_parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=True,
+                )
 
                 # Then, add function call parts
                 function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
                     _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
                 )
-                for tool_call_idx, tool_call in enumerate(message.tool_calls):
+                for tool_call in message.tool_calls:
                     function_call = FunctionCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
@@ -1470,8 +1386,11 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             elif message.response_metadata.get("output_version") == "v1":
-                # Already converted to v1beta format above
-                parts = message.content  # type: ignore[assignment]
+                parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=False,
+                )
             else:
                 # Prepare request content parts from message.content field
                 parts = _convert_to_parts(message.content, model=model)

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from langchain_core.messages import content as types
 
@@ -12,9 +12,27 @@ logger = logging.getLogger(__name__)
 #: directly. Vertex AI serves the same Gemini models, so its signatures are valid
 #: here and must not be stripped.
 #:
-#: Defined here rather than in `chat_models` because `chat_models` imports this
-#: module; `chat_models` re-exports it for use on the non-v1 path.
+#: Defined here because both v1 projection and chat-history replay use the same
+#: provider classification rules.
 _NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
+_ModelProviderKind = Literal["native", "foreign", "unknown"]
+
+
+def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
+    """Classify a model provider for content-block replay.
+
+    Args:
+        model_provider: Provider recorded on the source message, if known.
+
+    Returns:
+        Whether the message is native to Gemini, known to be foreign, or lacks
+        provider metadata.
+    """
+    if model_provider is None:
+        return "unknown"
+    if model_provider in _NATIVE_MODEL_PROVIDERS:
+        return "native"
+    return "foreign"
 
 
 def translate_citations_to_grounding_metadata(
@@ -149,12 +167,11 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             be sent to the API.
 
     Note:
-        Every shape emitted here must have a matching branch in
+        Every shape emitted here must be accepted by
         `chat_models._convert_to_parts`, which converts these dicts to `Part`
-        objects. The tool-call history path converts native content strictly, so
-        adding an emitted shape without a converter branch turns it into a hard
-        `ValueError` rather than a dropped block.
+        objects.
     """
+    provider_kind = _classify_model_provider(model_provider)
     new_content: list = []
     for block in content:
         if not isinstance(block, dict) or "type" not in block:
@@ -171,34 +188,41 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             new_block = {"text": block_dict.get("text", "")}
             if (
                 thought_signature := (block_dict.get("extras") or {}).get("signature")  # type: ignore[attr-defined]
-            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
+            ) and provider_kind != "foreign":
                 new_block["thought_signature"] = thought_signature
             new_content.append(new_block)
             # Citations are only handled on output. Can't pass them back :/
 
         # ReasoningContentBlock -> thinking
-        elif (
-            block_dict["type"] == "reasoning"
-            and model_provider in _NATIVE_MODEL_PROVIDERS
-        ):
-            # Google requires passing back the thought_signature when available.
-            # Signatures are only provided when function calling is enabled.
+        elif block_dict["type"] == "reasoning":
             extras = block_dict.get("extras")
             signature = extras.get("signature") if isinstance(extras, dict) else None
-            if signature:
-                new_block = {
-                    "thought": True,
-                    "text": block_dict.get("reasoning", ""),
-                    "thought_signature": signature,
-                }
-                new_content.append(new_block)
-            else:
-                # An unsigned reasoning block cannot be echoed back: Gemini
-                # rejects a thought part with no signature. The text goes with it.
+            if provider_kind == "native" and not signature:
                 logger.warning(
                     "Dropping v1 reasoning block with no thought signature; "
                     "its text will not be sent back to the model."
                 )
+                continue
+            reasoning_text = block_dict.get("reasoning")
+            summary = block_dict.get("summary")
+            if reasoning_text is None and isinstance(summary, list):
+                summary_texts = [
+                    text.strip()
+                    for item in summary
+                    if isinstance(item, dict)
+                    and isinstance((text := item.get("text")), str)
+                    and text.strip()
+                ]
+                reasoning_text = " ".join(summary_texts)
+            if not reasoning_text and not (signature and provider_kind != "foreign"):
+                continue
+            new_block = {
+                "thought": True,
+                "text": reasoning_text or "",
+            }
+            if signature and provider_kind != "foreign":
+                new_block["thought_signature"] = signature
+            new_content.append(new_block)
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
@@ -215,9 +239,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif (
-                url := block_dict.get("url")
-            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
+            elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
                 new_block = {
                     "file_data": {
@@ -246,9 +268,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif (
-                file_id := block_dict.get("file_id")
-            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
+            elif (file_id := block_dict.get("file_id")) and provider_kind != "foreign":
                 # File ID from uploaded file
                 new_block = {
                     "file_data": {
@@ -259,9 +279,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     }
                 }
                 new_content.append(new_block)
-            elif (
-                url := block_dict.get("url")
-            ) and model_provider in _NATIVE_MODEL_PROVIDERS:
+            elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
                 new_block = {
                     "file_data": {
@@ -344,15 +362,19 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 )
 
         elif block_dict["type"] == "non_standard":
-            # Opaque provider payloads cannot be represented by Gemini. Unwrapping
-            # them would send an unknown block type into the Gemini part converter.
-            # `chat_models._convert_to_parts` logs the same drop on the v0 path.
             value = block_dict.get("value")
-            logger.warning(
-                "Dropping non-standard v1 content block that cannot be "
-                "represented as a Gemini part (inner type: %s).",
-                value.get("type") if isinstance(value, dict) else None,
-            )
+            if provider_kind != "foreign" and isinstance(value, dict):
+                # Core wraps provider-native blocks it cannot standardize (for
+                # example Gemini's `media` block) as `non_standard`. Preserve the
+                # raw value for native and provider-less checkpoints; the caller
+                # converts native content strictly and unknown content leniently.
+                new_content.append(value)
+            else:
+                logger.warning(
+                    "Dropping non-standard v1 content block that cannot be "
+                    "represented as a Gemini part (inner type: %s).",
+                    value.get("type") if isinstance(value, dict) else None,
+                )
 
         else:
             # No branch matched. A block type this whitelist does not know is

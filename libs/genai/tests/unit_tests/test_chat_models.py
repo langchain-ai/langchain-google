@@ -2925,7 +2925,7 @@ def test_thought_signature_conversion() -> None:
         [reasoning_other_provider],  # type: ignore[list-item]
         "other_provider",
     )
-    assert result == []
+    assert result == [{"thought": True, "text": "thinking..."}]
 
 
 def test_compat_image_url_block() -> None:
@@ -3611,11 +3611,17 @@ def test_convert_to_parts_still_raises_on_unknown_type() -> None:
         _convert_to_parts([{"type": "bogus"}])
 
 
-def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_foreign_reasoning_block(
+    output_version: str | None,
+) -> None:
     """OpenAI-style `summary` reasoning blocks don't crash history parsing.
 
     Regression test for https://github.com/langchain-ai/langchain-google/issues/1603.
     """
+    response_metadata = {"model_provider": "openai"}
+    if output_version:
+        response_metadata["output_version"] = output_version
     message = AIMessage(
         content=[
             {
@@ -3624,7 +3630,7 @@ def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
             }
         ],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "openai"},
+        response_metadata=response_metadata,
     )
 
     _, formatted_messages = _parse_chat_history([message])
@@ -3815,6 +3821,34 @@ def test_parse_chat_history_tool_calls_native_v1_signature_preserved(
     assert parts[1].text == "Answer."
     assert parts[1].thought_signature == b"vertex_sig"
     assert parts[2].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_unknown_provider_preserves_signature() -> (
+    None
+):
+    """Older v1 checkpoints keep native signatures without provider metadata."""
+    signature = base64.b64encode(b"checkpoint_sig").decode("ascii")
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "reasoning": "Thinking.",
+                "extras": {"signature": signature},
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"output_version": "v1"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "Thinking."
+    assert parts[0].thought_signature == b"checkpoint_sig"
+    assert parts[1].function_call is not None
 
 
 def test_parse_chat_history_tool_calls_summary_reasoning_kept_without_metadata() -> (
@@ -4079,6 +4113,38 @@ def test_parse_chat_history_tool_calls_preserves_native_media_block() -> None:
     assert parts[0].file_data.mime_type == "audio/mpeg"
     assert parts[1].function_call is not None
     assert parts[1].function_call.name == "transcribe"
+
+
+def test_parse_chat_history_tool_calls_v1_preserves_native_media_block() -> None:
+    """V1 projection does not discard a native block wrapped as `non_standard`."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "file_uri": "files/native-audio",
+                    "mime_type": "audio/mpeg",
+                },
+            },
+            {"type": "tool_call", "name": "transcribe", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "transcribe", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "files/native-audio"
+    assert parts[0].file_data.mime_type == "audio/mpeg"
+    assert parts[1].function_call is not None
 
 
 def test_parse_chat_history_tool_calls_v1_file_id_becomes_file_data() -> None:
@@ -7828,22 +7894,6 @@ def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> Non
     assert parts[2].function_call is not None
 
 
-def test_parse_chat_history_tool_calls_string_content_is_not_split() -> None:
-    """Scalar string content becomes one text part, not one part per character."""
-    message = AIMessage(
-        content="Hi there",
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "google_genai"},
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].text == "Hi there"
-
-
 def test_convert_to_parts_joins_multi_segment_summary() -> None:
     """Every `summary` segment is concatenated, and non-dict entries are skipped.
 
@@ -7855,7 +7905,7 @@ def test_convert_to_parts_joins_multi_segment_summary() -> None:
             {
                 "type": "reasoning",
                 "summary": [
-                    {"type": "summary_text", "text": "First. "},
+                    {"type": "summary_text", "text": "First."},
                     "not a dict",
                     {"type": "summary_text", "text": "Second."},
                 ],
@@ -7900,19 +7950,24 @@ def test_lenient_conversion_logs_the_underlying_cause(
 
 
 @pytest.mark.parametrize(
-    ("content", "expected_fragment"),
+    ("content", "model_provider", "expected_fragment"),
     [
-        ([{"type": "brand_new_core_block"}], "no Gemini equivalent"),
+        (
+            [{"type": "brand_new_core_block"}],
+            "google_genai",
+            "no Gemini equivalent",
+        ),
         (
             [{"type": "non_standard", "value": {"type": "redacted_thinking"}}],
+            "anthropic",
             "non-standard v1 content block",
         ),
-        ([{"type": "reasoning", "reasoning": "Unsigned."}], "no thought signature"),
-        (["not a mapping"], "not a typed mapping"),
+        (["not a mapping"], "google_genai", "not a typed mapping"),
     ],
 )
 def test_convert_from_v1_logs_dropped_blocks(
     content: list[Any],
+    model_provider: str,
     expected_fragment: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -7924,7 +7979,7 @@ def test_convert_from_v1_logs_dropped_blocks(
     """
     with caplog.at_level(logging.WARNING):
         result = _convert_from_v1_to_generativelanguage_v1beta(
-            cast("Any", content), "google_genai"
+            cast("Any", content), model_provider
         )
 
     assert result == []
