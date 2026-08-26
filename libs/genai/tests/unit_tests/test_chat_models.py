@@ -3706,6 +3706,149 @@ def test_convert_to_parts_still_raises_on_unknown_type() -> None:
         _convert_to_parts([{"type": "bogus"}])
 
 
+@pytest.mark.parametrize(
+    ("message_type", "content"),
+    [
+        pytest.param(
+            HumanMessage,
+            [{"text": "hi", "index": 0}],
+            id="human-index",
+        ),
+        pytest.param(
+            HumanMessage,
+            [{"text": "hi", "id": "x"}],
+            id="human-id",
+        ),
+        pytest.param(
+            SystemMessage,
+            [{"text": "hi", "index": 0}],
+            id="system-index",
+        ),
+        pytest.param(
+            SystemMessage,
+            [{"text": "hi", "id": "x"}],
+            id="system-id",
+        ),
+    ],
+)
+def test_parse_chat_history_tolerates_extra_keys_in_typeless_parts(
+    message_type: type[HumanMessage] | type[SystemMessage],
+    content: list[str | dict[Any, Any]],
+) -> None:
+    """Keep permissive typeless-dict fallback for human and system messages."""
+    system_instruction, formatted_messages = _parse_chat_history(
+        [message_type(content=content)]
+    )
+
+    if message_type is SystemMessage:
+        assert system_instruction is not None
+        parts = system_instruction.parts
+    else:
+        parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts == [Part(text=str(content[0]))]
+
+
+def test_convert_to_parts_accepts_projected_typeless_text() -> None:
+    """Keep valid projected text dictionaries on the v1beta conversion path."""
+    parts = _convert_to_parts(
+        [{"text": "hi"}],
+        allow_v1beta_dicts=True,
+    )
+
+    assert parts == [Part(text="hi")]
+
+
+def test_parse_chat_history_v1_projected_parts_round_trip() -> None:
+    """Convert every projected v1beta replay shape into a real Gemini part."""
+    projected_content = [
+        {"text": "hi", "thought_signature": "c2ln"},
+        {"inline_data": {"mime_type": "image/png", "data": "aW1hZ2U="}},
+        {
+            "file_data": {
+                "mime_type": "application/pdf",
+                "file_uri": "files/document",
+            }
+        },
+        {"thought": True, "text": "Thinking."},
+    ]
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with patch(
+        "langchain_google_genai.chat_models."
+        "_convert_from_v1_to_generativelanguage_v1beta",
+        return_value=projected_content,
+    ):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 4
+    assert parts[0].text == "hi"
+    assert parts[0].thought_signature == b"sig"
+    assert parts[1].inline_data == Blob(mime_type="image/png", data=b"image")
+    assert parts[2].file_data is not None
+    assert parts[2].file_data.mime_type == "application/pdf"
+    assert parts[2].file_data.file_uri == "files/document"
+    assert parts[3].thought is True
+    assert parts[3].text == "Thinking."
+
+
+def test_parse_chat_history_rejects_malformed_native_v1beta_projection() -> None:
+    """Surface invalid projected dictionaries during strict native v1 replay."""
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with (
+        patch(
+            "langchain_google_genai.chat_models."
+            "_convert_from_v1_to_generativelanguage_v1beta",
+            return_value=[{"text": "hi", "index": 0}],
+        ),
+        pytest.raises(ValidationError),
+    ):
+        _parse_chat_history([message])
+
+
+def test_parse_chat_history_drops_malformed_foreign_v1beta_projection(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drop invalid projected dictionaries during lenient foreign v1 replay."""
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    with (
+        patch(
+            "langchain_google_genai.chat_models."
+            "_convert_from_v1_to_generativelanguage_v1beta",
+            return_value=[{"text": "hi", "id": "x"}],
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts == [Part(text="")]
+    assert "Dropping content block that cannot be represented" in caplog.text
+
+
 def test_parse_chat_history_preserves_human_non_standard_media() -> None:
     message = HumanMessage(
         content_blocks=[

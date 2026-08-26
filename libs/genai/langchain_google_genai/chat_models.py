@@ -528,6 +528,8 @@ def _validate_video_metadata(video_metadata: object) -> None:
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
     model: str | None = None,
+    *,
+    allow_v1beta_dicts: bool = False,
 ) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
@@ -535,6 +537,14 @@ def _convert_to_parts(
 
     Handles both legacy (pre-v1) dict-based content blocks and v1 `ContentBlock`
     objects.
+
+    Args:
+        raw_content: Message content to convert.
+        model: Model name used for version-specific conversion behavior.
+        allow_v1beta_dicts: Whether to validate type-less projected v1beta mappings.
+
+    Returns:
+        Gemini parts representing the message content.
     """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -849,7 +859,13 @@ def _convert_to_parts(
                         # Core wraps Gemini-native blocks it cannot standardize.
                         # Unwrap only known shapes; malformed native values must
                         # still raise rather than silently changing the request.
-                        parts.extend(_convert_to_parts([dict(value)], model=model))
+                        parts.extend(
+                            _convert_to_parts(
+                                [dict(value)],
+                                model=model,
+                                allow_v1beta_dicts=allow_v1beta_dicts,
+                            )
+                        )
                     else:
                         logger.warning(
                             "Dropping non-standard content block that cannot be "
@@ -859,7 +875,10 @@ def _convert_to_parts(
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
-            elif (v1beta_part := _v1beta_dict_to_part(part)) is not None:
+            elif (
+                allow_v1beta_dicts
+                and (v1beta_part := _v1beta_dict_to_part(part)) is not None
+            ):
                 parts.append(v1beta_part)
             else:
                 # Yolo. The input message content doesn't have a `type` key
@@ -969,16 +988,32 @@ DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
 def _convert_to_parts_lenient(
     content: list[Any],
     model: str | None = None,
+    *,
+    allow_v1beta_dicts: bool = False,
 ) -> list[Part]:
     """Convert foreign content one block at a time, dropping invalid blocks.
 
     Per-block conversion preserves valid neighbors without retrying media downloads
     that occurred before a failing block.
+
+    Args:
+        content: Message content blocks to convert.
+        model: Model name used for version-specific conversion behavior.
+        allow_v1beta_dicts: Whether to validate type-less projected v1beta mappings.
+
+    Returns:
+        Valid Gemini parts from the supplied content.
     """
     parts: list[Part] = []
     for block in content:
         try:
-            parts.extend(_convert_to_parts([block], model=model))
+            parts.extend(
+                _convert_to_parts(
+                    [block],
+                    model=model,
+                    allow_v1beta_dicts=allow_v1beta_dicts,
+                )
+            )
         except (ValueError, ChatGoogleGenerativeAIError) as exc:
             logger.warning(
                 "Dropping content block that cannot be represented as a Gemini "
@@ -1208,7 +1243,8 @@ def _convert_ai_message_content(
     provider_kind = _classify_model_provider(
         message.response_metadata.get("model_provider")
     )
-    if message.response_metadata.get("output_version") == "v1":
+    is_v1_content = message.response_metadata.get("output_version") == "v1"
+    if is_v1_content:
         content: list[Any] = _convert_from_v1_to_generativelanguage_v1beta(
             cast("list[types.ContentBlock]", message.content),
             message.response_metadata.get("model_provider"),
@@ -1231,7 +1267,11 @@ def _convert_ai_message_content(
     convert = (
         _convert_to_parts if provider_kind == "native" else _convert_to_parts_lenient
     )
-    return convert(content, model=model)
+    return convert(
+        content,
+        model=model,
+        allow_v1beta_dicts=is_v1_content,
+    )
 
 
 def _parse_chat_history(

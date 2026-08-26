@@ -30,7 +30,8 @@ def test_decode_signature(signature: Any, expected: bytes | None) -> None:
 
 def test_convert_to_parts_decodes_bytes_thought_signature() -> None:
     parts = _convert_to_parts(
-        [{"thought": True, "text": "Thinking.", "thought_signature": b"raw_sig"}]
+        [{"thought": True, "text": "Thinking.", "thought_signature": b"raw_sig"}],
+        allow_v1beta_dicts=True,
     )
 
     assert len(parts) == 1
@@ -51,7 +52,7 @@ def test_convert_to_parts_typed_block_wins_over_thought_key() -> None:
 
 def test_convert_to_parts_empty_inline_data_is_not_a_file_part() -> None:
     """Do not reinterpret present-but-empty inline data as file data."""
-    parts = _convert_to_parts([{"inline_data": {}}])
+    parts = _convert_to_parts([{"inline_data": {}}], allow_v1beta_dicts=True)
 
     assert len(parts) == 1
     assert parts[0].inline_data is not None
@@ -73,7 +74,7 @@ def test_convert_to_parts_empty_inline_data_is_not_a_file_part() -> None:
 def test_convert_to_parts_v1beta_shapes_tolerate_none_valued_keys(
     block: dict[str, Any], attr: str
 ) -> None:
-    parts = _convert_to_parts([block])
+    parts = _convert_to_parts([block], allow_v1beta_dicts=True)
 
     assert len(parts) == 1
     assert getattr(parts[0], attr) is not None
