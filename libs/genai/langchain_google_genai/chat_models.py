@@ -810,6 +810,21 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
+                elif part["type"] == "non_standard":
+                    # Provider-specific payload that LangChain core could not map
+                    # to a standard content block (e.g. Anthropic's
+                    # `redacted_thinking`). Such payloads are only meaningful to
+                    # the provider that produced them, so there is nothing Gemini
+                    # can do with them. Drop rather than raise: an unconvertible
+                    # block from another provider is an expected occurrence in a
+                    # multi-provider history, not a programming error.
+                    logger.warning(
+                        "Dropping non-standard content block that cannot be "
+                        "represented as a Gemini part (inner type: %s).",
+                        (part.get("value") or {}).get("type")
+                        if isinstance(part.get("value"), Mapping)
+                        else None,
+                    )
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)

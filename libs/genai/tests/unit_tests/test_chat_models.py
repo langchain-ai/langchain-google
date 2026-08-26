@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 import os
 import warnings
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -3383,6 +3384,39 @@ def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
     assert parts[1].function_call is not None
     assert parts[1].function_call.name == "search"
     assert parts[1].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_tool_calls_non_standard_block_dropped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Provider payloads core cannot standardize are dropped, not raised on.
+
+    LangChain core wraps content it has no standard block for (e.g. Anthropic's
+    `redacted_thinking`) in a `non_standard` block. Gemini cannot represent
+    another provider's opaque payload, so it must be skipped with a warning
+    rather than aborting the whole request.
+    """
+    message = AIMessage(
+        content=[{"type": "redacted_thinking", "data": "encrypted"}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    # Only the function call survives; the opaque payload is dropped
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert "non-standard content block" in caplog.text
+
+
+def test_convert_to_parts_still_raises_on_unknown_type() -> None:
+    """Dropping `non_standard` must not weaken the guard on malformed blocks."""
+    with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
+        _convert_to_parts([{"type": "bogus"}])
 
 
 def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
