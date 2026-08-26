@@ -3456,6 +3456,11 @@ def test_parse_chat_history_tool_calls_v1_preserves_media_and_code_parts() -> No
                 "mime_type": "image/png",
             },
             {
+                "type": "file",
+                "base64": "d29ybGQ=",
+                "mime_type": "text/plain",
+            },
+            {
                 "type": "server_tool_call",
                 "name": "code_interpreter",
                 "args": {"code": "print(1)", "language": "python"},
@@ -3479,17 +3484,22 @@ def test_parse_chat_history_tool_calls_v1_preserves_media_and_code_parts() -> No
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    assert len(parts) == 4
+    assert len(parts) == 5
     image_part = parts[0]
     assert image_part.inline_data is not None
     assert image_part.inline_data.mime_type == "image/png"
-    assert image_part.inline_data.data == b"aGVsbG8="
+    assert image_part.inline_data.data == b"hello"
     assert image_part.text is None
-    executable_part = parts[1]
+    file_part = parts[1]
+    assert file_part.inline_data is not None
+    assert file_part.inline_data.mime_type == "text/plain"
+    assert file_part.inline_data.data == b"world"
+    assert file_part.text is None
+    executable_part = parts[2]
     assert executable_part.executable_code is not None
     assert executable_part.executable_code.code == "print(1)"
     assert executable_part.executable_code.language == Language.PYTHON
-    result_part = parts[2]
+    result_part = parts[3]
     assert result_part.code_execution_result is not None
     assert result_part.code_execution_result.output == "1"
     assert result_part.code_execution_result.outcome == (

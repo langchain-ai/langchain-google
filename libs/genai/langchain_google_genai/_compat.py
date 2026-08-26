@@ -178,9 +178,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 new_block = {
                     "inline_data": {
                         "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "data": base64.encode("utf-8")
-                        if isinstance(base64, str)
-                        else base64,
+                        "data": base64,
                     }
                 }
                 new_content.append(new_block)
@@ -204,9 +202,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                         "mime_type": block_dict.get(
                             "mime_type", "application/octet-stream"
                         ),
-                        "data": base64.encode("utf-8")
-                        if isinstance(base64, str)
-                        else base64,
+                        "data": base64,
                     }
                 }
                 new_content.append(new_block)
