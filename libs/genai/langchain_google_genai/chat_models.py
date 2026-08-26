@@ -1114,7 +1114,8 @@ def _function_call_signatures_from_content(
     ) == "foreign" or not isinstance(message.content, list):
         return {}
     signatures: dict[int, str | bytes] = {}
-    for content_index, block in enumerate(message.content):
+    signature_ordinal = 0
+    for block in message.content:
         if (
             not isinstance(block, Mapping)
             or block.get("type") != "function_call_signature"
@@ -1123,7 +1124,11 @@ def _function_call_signatures_from_content(
         signature = block.get("signature")
         if not isinstance(signature, (str, bytes)) or not signature:
             continue
-        tool_call_index = block.get("index", content_index)
+        # Early signature sidecars did not include an index and were appended after
+        # other content. Their position in the full content list therefore does not
+        # identify the corresponding entry in `message.tool_calls`.
+        tool_call_index = block.get("index", signature_ordinal)
+        signature_ordinal += 1
         if isinstance(tool_call_index, int):
             signatures[tool_call_index] = signature
     return signatures
