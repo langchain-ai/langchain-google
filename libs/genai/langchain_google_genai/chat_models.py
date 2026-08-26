@@ -155,6 +155,9 @@ _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
+_GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
+    {"media", "thinking", "executable_code", "code_execution_result"}
+)
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
@@ -887,20 +890,21 @@ def _convert_to_parts(
                     )
                     parts.append(code_execution_result_part)
                 elif part["type"] == "non_standard":
-                    # Provider-specific payload that LangChain core could not map
-                    # to a standard content block (e.g. Anthropic's
-                    # `redacted_thinking`). Such payloads are only meaningful to
-                    # the provider that produced them, so there is nothing Gemini
-                    # can do with them. Drop rather than raise: an unconvertible
-                    # block from another provider is an expected occurrence in a
-                    # multi-provider history, not a programming error.
-                    logger.warning(
-                        "Dropping non-standard content block that cannot be "
-                        "represented as a Gemini part (inner type: %s).",
-                        (part.get("value") or {}).get("type")
-                        if isinstance(part.get("value"), Mapping)
-                        else None,
-                    )
+                    value = part.get("value")
+                    if (
+                        isinstance(value, Mapping)
+                        and value.get("type") in _GEMINI_NATIVE_NON_STANDARD_TYPES
+                    ):
+                        # Core wraps Gemini-native blocks it cannot standardize.
+                        # Unwrap only known shapes; malformed native values must
+                        # still raise rather than silently changing the request.
+                        parts.extend(_convert_to_parts([dict(value)], model=model))
+                    else:
+                        logger.warning(
+                            "Dropping non-standard content block that cannot be "
+                            "represented as a Gemini part (inner type: %s).",
+                            value.get("type") if isinstance(value, Mapping) else None,
+                        )
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
@@ -1310,6 +1314,14 @@ def _prepare_content_for_tool_call_message(message: AIMessage) -> list[Any]:
         if _is_rebuilt_tool_call_block(block):
             continue
         block_type = block.get("type")
+        if is_foreign and block_type == "non_standard":
+            value = block.get("value")
+            logger.warning(
+                "Dropping non-standard content block that cannot be represented "
+                "as a Gemini part (inner type: %s).",
+                value.get("type") if isinstance(value, Mapping) else None,
+            )
+            continue
         if block_type == "function_call":
             # Raw Gemini function call: the equivalent part is rebuilt from
             # `message.tool_calls`, so the block must not be converted twice.

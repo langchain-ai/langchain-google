@@ -3611,6 +3611,79 @@ def test_convert_to_parts_still_raises_on_unknown_type() -> None:
         _convert_to_parts([{"type": "bogus"}])
 
 
+def test_parse_chat_history_preserves_human_non_standard_media() -> None:
+    """Core-wrapped Gemini media on a human message is unwrapped and sent."""
+    message = HumanMessage(
+        content_blocks=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "mime_type": "image/png",
+                    "data": base64.b64encode(b"image data").decode("ascii"),
+                },
+            }
+        ]
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == "image/png"
+    assert parts[0].inline_data.data == b"image data"
+
+
+def test_parse_chat_history_preserves_native_ai_non_standard_media() -> None:
+    """Native AI media is unwrapped even without v1 output metadata."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "mime_type": "audio/mpeg",
+                    "file_uri": "files/native-audio",
+                },
+            }
+        ],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.mime_type == "audio/mpeg"
+    assert parts[0].file_data.file_uri == "files/native-audio"
+
+
+def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> None:
+    """Provider-aware filtering still rejects another provider's opaque media."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "mime_type": "image/png",
+                "data": base64.b64encode(b"foreign image").decode("ascii"),
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
 @pytest.mark.parametrize("output_version", [None, "v1"])
 def test_parse_chat_history_tool_calls_foreign_reasoning_block(
     output_version: str | None,
