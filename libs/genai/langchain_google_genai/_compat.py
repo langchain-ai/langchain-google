@@ -186,9 +186,11 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         # TextContentBlock
         if block_dict["type"] == "text":
             new_block = {"text": block_dict.get("text", "")}
-            if (
-                thought_signature := (block_dict.get("extras") or {}).get("signature")  # type: ignore[attr-defined]
-            ) and provider_kind != "foreign":
+            extras = block_dict.get("extras")
+            thought_signature = block_dict.get("thought_signature") or (
+                extras.get("signature") if isinstance(extras, dict) else None
+            )
+            if thought_signature and provider_kind != "foreign":
                 new_block["thought_signature"] = thought_signature
             new_content.append(new_block)
             # Citations are only handled on output. Can't pass them back :/
@@ -196,7 +198,9 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         # ReasoningContentBlock -> thinking
         elif block_dict["type"] == "reasoning":
             extras = block_dict.get("extras")
-            signature = extras.get("signature") if isinstance(extras, dict) else None
+            signature = block_dict.get("thought_signature") or (
+                extras.get("signature") if isinstance(extras, dict) else None
+            )
             if provider_kind == "native" and not signature:
                 logger.warning(
                     "Dropping v1 reasoning block with no thought signature; "

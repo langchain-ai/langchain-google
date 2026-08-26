@@ -3823,6 +3823,37 @@ def test_parse_chat_history_tool_calls_native_v1_signature_preserved(
     assert parts[2].function_call is not None
 
 
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_vertex_text_thought_signature_preserved(
+    output_version: str | None,
+) -> None:
+    """Vertex's top-level text signature survives both history paths."""
+    signature = base64.b64encode(b"vertex_sig").decode("ascii")
+    response_metadata = {"model_provider": "google_vertexai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[
+            {
+                "type": "text",
+                "text": "Answer.",
+                "thought_signature": signature,
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Answer."
+    assert parts[0].thought_signature == b"vertex_sig"
+    assert parts[1].function_call is not None
+
+
 def test_parse_chat_history_tool_calls_v1_unknown_provider_preserves_signature() -> (
     None
 ):

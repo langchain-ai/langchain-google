@@ -356,8 +356,9 @@ def _decode_signature(sig: Any) -> bytes | None:
 def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
     """Return the thought signature carried by a content block, if any.
 
-    Signatures live at the top level on v0 `thinking` blocks and under `extras`
-    on v1 `reasoning` and `text` blocks.
+    Signatures live under `thought_signature` on Vertex text blocks, at the top
+    level under `signature` on v0 `thinking` blocks, and under `extras` on v1
+    `reasoning` and `text` blocks.
 
     Args:
         block: The content block to inspect.
@@ -366,8 +367,10 @@ def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
         The signature value, or `None` if the block carries none.
     """
     extras = block.get("extras")
-    return block.get("signature") or (
-        extras.get("signature") if isinstance(extras, Mapping) else None
+    return (
+        block.get("thought_signature")
+        or block.get("signature")
+        or (extras.get("signature") if isinstance(extras, Mapping) else None)
     )
 
 
@@ -1124,9 +1127,14 @@ def _strip_foreign_signature(block: Mapping[str, Any]) -> Mapping[str, Any]:
     """
     extras = block.get("extras")
     extras_has_signature = isinstance(extras, dict) and "signature" in extras
-    if "signature" not in block and not extras_has_signature:
+    if (
+        not {"signature", "thought_signature"}.intersection(block)
+        and not extras_has_signature
+    ):
         return block
-    stripped: dict[str, Any] = {k: v for k, v in block.items() if k != "signature"}
+    stripped: dict[str, Any] = {
+        k: v for k, v in block.items() if k not in ("signature", "thought_signature")
+    }
     if extras_has_signature:
         stripped["extras"] = {
             k: v for k, v in cast("dict[str, Any]", extras).items() if k != "signature"
