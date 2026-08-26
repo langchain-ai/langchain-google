@@ -363,6 +363,11 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             }
             new_content.append(function_call)
 
+        elif block_dict["type"] == "function_call_signature":
+            # The caller extracts this legacy sidecar before v1 projection and
+            # attaches it to the function call rebuilt from `message.tool_calls`.
+            continue
+
         elif block_dict["type"] == "server_tool_call":
             if block_dict.get("name") == "code_interpreter":
                 # LangChain v0 format

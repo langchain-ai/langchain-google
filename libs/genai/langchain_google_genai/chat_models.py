@@ -1086,7 +1086,43 @@ def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
     Returns:
         `True` if the block must be dropped.
     """
-    return block.get("type") in ("tool_call", "tool_call_chunk", "invalid_tool_call")
+    return block.get("type") in (
+        "tool_call",
+        "tool_call_chunk",
+        "invalid_tool_call",
+        "function_call_signature",
+    )
+
+
+def _function_call_signatures_from_content(
+    message: AIMessage,
+) -> dict[int, str | bytes]:
+    """Extract legacy function-call signature sidecars from message content.
+
+    Args:
+        message: AI message whose tool calls are being rebuilt.
+
+    Returns:
+        Signature values keyed by their corresponding tool-call index.
+    """
+    if _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    ) == "foreign" or not isinstance(message.content, list):
+        return {}
+    signatures: dict[int, str | bytes] = {}
+    for content_index, block in enumerate(message.content):
+        if (
+            not isinstance(block, Mapping)
+            or block.get("type") != "function_call_signature"
+        ):
+            continue
+        signature = block.get("signature")
+        if not isinstance(signature, (str, bytes)) or not signature:
+            continue
+        tool_call_index = block.get("index", content_index)
+        if isinstance(tool_call_index, int):
+            signatures[tool_call_index] = signature
+    return signatures
 
 
 def _is_unsupported_foreign_server_tool(
@@ -1412,21 +1448,28 @@ def _parse_chat_history(
                 )
 
                 # Then, add function call parts
-                function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
-                    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                function_call_sigs: dict[Any, str | bytes] = (
+                    message.additional_kwargs.get(
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                    )
                 )
-                for tool_call in message.tool_calls:
+                indexed_function_call_sigs = _function_call_signatures_from_content(
+                    message
+                )
+                for tool_call_index, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
                     )
                     # Check if there's a signature for this function call
-                    sig = function_call_sigs.get(tool_call.get("id"))
+                    sig = function_call_sigs.get(
+                        tool_call.get("id")
+                    ) or indexed_function_call_sigs.get(tool_call_index)
                     if sig:
                         ai_message_parts.append(
                             Part(
                                 function_call=function_call,
-                                thought_signature=_base64_to_bytes(sig),
+                                thought_signature=_decode_signature(sig),
                             )
                         )
                     else:

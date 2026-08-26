@@ -4063,6 +4063,38 @@ def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
     assert len([p for p in parts if p.function_call]) == 1
 
 
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_consumes_legacy_function_call_signature(
+    output_version: str | None,
+) -> None:
+    """Legacy signature sidecars are attached to rebuilt function calls."""
+    signature = base64.b64encode(b"legacy_sig").decode("ascii")
+    response_metadata = {"model_provider": "google_vertexai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Calling a tool."},
+            {
+                "type": "function_call_signature",
+                "signature": signature,
+                "index": 0,
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Calling a tool."
+    assert parts[1].function_call is not None
+    assert parts[1].thought_signature == b"legacy_sig"
+
+
 @pytest.mark.parametrize(
     ("model_provider", "file_uri"),
     [
