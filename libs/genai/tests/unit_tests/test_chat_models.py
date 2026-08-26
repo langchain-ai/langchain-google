@@ -3953,6 +3953,48 @@ def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
     assert len([p for p in parts if p.function_call]) == 1
 
 
+@pytest.mark.parametrize(
+    ("model_provider", "file_uri"),
+    [
+        ("google_genai", "files/abc"),
+        ("google_vertexai", "gs://bucket/document.pdf"),
+    ],
+)
+def test_parse_chat_history_tool_calls_normalizes_native_blocks(
+    model_provider: str, file_uri: str
+) -> None:
+    """Provider-native file and function-call blocks replay without duplication."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": file_uri,
+                "mime_type": "application/pdf",
+            },
+            {
+                "type": "function_call",
+                "name": "search",
+                "args": {"q": "x"},
+                "id": "call_1",
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": model_provider},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == file_uri
+    assert parts[0].file_data.mime_type == "application/pdf"
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert parts[1].function_call.args == {"q": "x"}
+
+
 def test_parse_chat_history_tool_calls_v1_file_id_becomes_file_data() -> None:
     """A v1 `file` block carrying a `file_id` converts to a `file_data` part."""
     message = AIMessage(

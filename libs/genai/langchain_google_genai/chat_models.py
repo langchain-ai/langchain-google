@@ -1093,22 +1093,37 @@ def _prepare_content_for_tool_call_message(
         message: The `AIMessage` whose content should be prepared.
 
     Returns:
-        The content to convert -- `message.content_blocks` for messages from
-        another provider, otherwise `message.content` -- with function-call blocks
-        removed, another provider's signatures stripped, unmatched foreign server
-        tool blocks dropped, and text/thought blocks that carry neither text nor a
-        signature dropped.
+        The content to convert, with provider-native blocks normalized as needed,
+        function-call blocks removed, another provider's signatures stripped,
+        unmatched foreign server tool blocks dropped, and text/thought blocks that
+        carry neither text nor a signature dropped.
     """
     model_provider = message.response_metadata.get("model_provider")
     is_foreign = (
         model_provider is not None and model_provider not in _NATIVE_MODEL_PROVIDERS
     )
+    is_native = model_provider in _NATIVE_MODEL_PROVIDERS
+    has_provider_native_blocks = (
+        is_native
+        and isinstance(message.content, list)
+        and any(
+            isinstance(block, dict)
+            and block.get("type") in ("function_call", "file_data")
+            for block in message.content
+        )
+    )
     # Messages with no `model_provider` (hand-built messages, checkpoints serialized
     # before core stamped the field) may hold either shape. Read `content` rather
     # than `content_blocks` for those: core projects Google's own `thinking` and
     # `media` blocks to `non_standard`, which would discard genuine signatures.
+    # Native Gemini `function_call` and `file_data` blocks are the exception: the
+    # provider translator normalizes them to standard tool-call and file blocks.
     # `_convert_to_parts_dropping_unconvertible` handles any foreign block instead.
-    content = message.content_blocks if is_foreign else message.content
+    content = (
+        message.content_blocks
+        if is_foreign or has_provider_native_blocks
+        else message.content
+    )
 
     if not isinstance(content, list):
         if isinstance(content, str) and not content:
@@ -1144,6 +1159,18 @@ def _prepare_content_for_tool_call_message(
             # `_convert_to_parts` has no `tool_call` branch, so leaving these in
             # would raise; they would also duplicate every call. Foreign messages
             # reach here via `content_blocks`, which does include these blocks.
+            continue
+        if is_native and block_type == "file" and "url" in block:
+            # The native block translator represents Gemini `file_data` as a
+            # standard file URL. Preserve the provider-owned URI as a file reference
+            # rather than trying to download it as public HTTP content.
+            filtered.append(
+                {
+                    "type": "media",
+                    "file_uri": block["url"],
+                    "mime_type": block.get("mime_type", "application/octet-stream"),
+                }
+            )
             continue
         if is_foreign and block_type == "server_tool_call":
             if block.get("name") != "code_interpreter":
