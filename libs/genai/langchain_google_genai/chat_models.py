@@ -1230,6 +1230,11 @@ def _content_block_file_uri(block: Any) -> Any:
         return block.get("file_id") or block.get("url")
     if block_type == "image":
         return block.get("url")
+    if block_type == "image_url":
+        image_url = block.get("image_url")
+        if isinstance(image_url, Mapping):
+            return image_url.get("url")
+        return image_url
     return None
 
 

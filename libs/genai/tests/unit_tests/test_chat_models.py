@@ -4287,6 +4287,27 @@ def test_parse_chat_history_drops_vertex_gcs_for_gemini_backend() -> None:
     assert parts[0].function_call is not None
 
 
+def test_parse_chat_history_drops_nested_vertex_gcs_for_gemini_backend() -> None:
+    """Nested Chat Completions image URLs receive the same backend filtering."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": "gs://bucket/image.png"},
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message], use_vertexai=False)
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
 @pytest.mark.parametrize("vertexai", [False, True])
 def test_prepare_request_checks_target_backend_for_vertex_gcs_history(
     vertexai: bool,
