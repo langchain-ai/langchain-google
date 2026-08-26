@@ -3653,6 +3653,53 @@ def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
     assert "cannot be represented as a Gemini part" in caplog.text
 
 
+def test_parse_chat_history_tool_calls_native_invalid_media_raises() -> None:
+    """A native block that fails validation must not be silently dropped.
+
+    A malformed media block on a `google_genai` message is bad input, not an
+    expected foreign shape; dropping it would turn the request into a different
+    valid request without telling the caller.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "media", "mime_type": "image/png", "data": "not valid base64!!"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    with pytest.raises(ValueError, match="valid base64"):
+        _parse_chat_history([message])
+
+
+def test_parse_chat_history_tool_calls_foreign_malformed_media_still_dropped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Another provider's malformed block is dropped, not raised on.
+
+    Only native content regains strict validation; multi-provider histories keep
+    the tolerant behavior since unconvertible foreign blocks are expected.
+    """
+    message = AIMessage(
+        content=[
+            {"type": "media", "mime_type": "image/png", "data": "not valid base64!!"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    # Core projects an unknown provider's `media` block to `non_standard`; the
+    # tolerant path drops it with a warning instead of failing the request.
+    assert "Dropping non-standard content block" in caplog.text
+
+
 def test_parse_chat_history_tool_calls_vertexai_signature_preserved() -> None:
     """Vertex AI serves the same Gemini models, so its signatures stay valid."""
     signature = base64.b64encode(b"vertex_sig").decode("ascii")

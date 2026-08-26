@@ -1034,22 +1034,32 @@ DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
 
 
 def _convert_to_parts_dropping_unconvertible(
-    content: list[Any], model: str | None = None
+    content: list[Any],
+    model: str | None = None,
+    *,
+    drop_unconvertible: bool = True,
 ) -> list[Part]:
     """Convert content to parts, dropping blocks that have no Gemini equivalent.
-
-    Used for `AIMessage`s that may carry another provider's content blocks. Such a
-    block is an expected occurrence in a multi-provider history rather than a
-    programming error, so it is dropped with a warning instead of raising. Blocks
-    that do convert are unaffected.
 
     Args:
         content: The content blocks to convert.
         model: The model name, used for version-specific logic.
+        drop_unconvertible: Whether a block that fails to convert is dropped with a
+            warning (`True`, for content that may carry another provider's blocks,
+            where such a block is an expected occurrence rather than a programming
+            error) or raises `ValueError` (`False`, for native content, where a
+            conversion failure means malformed input that must not be silently
+            turned into a different request).
 
     Returns:
         The convertible blocks as parts, in their original order.
+
+    Raises:
+        ValueError: If `drop_unconvertible` is `False` and a block fails to
+            convert.
     """
+    if not drop_unconvertible:
+        return _convert_to_parts(content, model=model)
     try:
         return _convert_to_parts(content, model=model)
     except ValueError:
@@ -1268,13 +1278,25 @@ def _parse_chat_history(
                                 if not _is_redundant_v1beta_part(block)
                             ],
                             model=model,
+                            # v1 conversion in `_compat` already dropped
+                            # unconvertible blocks from other providers; what
+                            # remains is representable, so a failure here means
+                            # malformed content and must surface.
+                            drop_unconvertible=False,
                         )
                     )
                 else:
+                    model_provider = message.response_metadata.get("model_provider")
                     ai_message_parts.extend(
                         _convert_to_parts_dropping_unconvertible(
                             _prepare_content_for_tool_call_message(message),  # type: ignore[arg-type]
                             model=model,
+                            # Only another provider's blocks may fail to convert;
+                            # a native block that fails is malformed input.
+                            drop_unconvertible=(
+                                model_provider is None
+                                or model_provider not in _NATIVE_MODEL_PROVIDERS
+                            ),
                         )
                     )
 
