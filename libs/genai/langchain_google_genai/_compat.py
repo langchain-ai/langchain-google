@@ -8,26 +8,13 @@ from langchain_core.messages import content as types
 
 logger = logging.getLogger(__name__)
 
-#: Providers whose content blocks and thought signatures Gemini can consume
-#: directly. Vertex AI serves the same Gemini models, so its signatures are valid
-#: here and must not be stripped.
-#:
-#: Defined here because both v1 projection and chat-history replay use the same
-#: provider classification rules.
+# Vertex and the Gemini Developer API share content and signature formats.
 _NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
 _ModelProviderKind = Literal["native", "foreign", "unknown"]
 
 
 def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
-    """Classify a model provider for content-block replay.
-
-    Args:
-        model_provider: Provider recorded on the source message, if known.
-
-    Returns:
-        Whether the message is native to Gemini, known to be foreign, or lacks
-        provider metadata.
-    """
+    """Classify a source provider for Gemini content replay."""
     if model_provider is None:
         return "unknown"
     if model_provider in _NATIVE_MODEL_PROVIDERS:
@@ -36,15 +23,10 @@ def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
 
 
 def _is_file_uri_supported(file_uri: Any, *, use_vertexai: bool) -> bool:
-    """Whether a file URI can be replayed through the target Google backend.
+    """Check whether the target Google backend accepts a file URI.
 
-    Args:
-        file_uri: File reference carried by a content block.
-        use_vertexai: Whether the target is the Vertex AI backend.
-
-    Returns:
-        `False` for a Google Cloud Storage URI sent to the Gemini Developer API;
-            otherwise `True`.
+    Google Cloud Storage references are supported by Vertex AI but not by the
+    Gemini Developer API.
     """
     return not (
         isinstance(file_uri, str) and file_uri.startswith("gs://") and not use_vertexai
@@ -57,17 +39,7 @@ def _file_data_block(
     *,
     use_vertexai: bool,
 ) -> dict[str, Any] | None:
-    """Build file data only when the target backend accepts its URI.
-
-    Args:
-        file_uri: File reference carried by a content block.
-        mime_type: MIME type carried by a content block.
-        use_vertexai: Whether the target is the Vertex AI backend.
-
-    Returns:
-        A Gemini file-data block, or `None` when the URI is target-specific and
-            unsupported.
-    """
+    """Build file data when the target backend accepts its URI."""
     if not _is_file_uri_supported(file_uri, use_vertexai=use_vertexai):
         logger.warning(
             "Dropping Google Cloud Storage file URI because the target Gemini "
@@ -276,11 +248,7 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
-            # `Blob.data` accepts a base64 `str` and decodes it (the field sets
-            # `val_json_bytes="base64"`), so pass it through untouched. Named
-            # `b64_data` rather than `base64`: the latter shadows the stdlib
-            # module name and previously caused this payload to be corrupted by
-            # a stray `base64.encode("utf-8")` call.
+            # SDK validation decodes base64 strings; do not pre-encode them.
             if b64_data := block_dict.get("base64"):
                 new_block = {
                     "inline_data": {
@@ -303,11 +271,6 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         # FileContentBlock (documents)
         elif block_dict["type"] == "file":
-            # `Blob.data` accepts a base64 `str` and decodes it (the field sets
-            # `val_json_bytes="base64"`), so pass it through untouched. Named
-            # `b64_data` rather than `base64`: the latter shadows the stdlib
-            # module name and previously caused this payload to be corrupted by
-            # a stray `base64.encode("utf-8")` call.
             if b64_data := block_dict.get("base64"):
                 new_block = {
                     "inline_data": {

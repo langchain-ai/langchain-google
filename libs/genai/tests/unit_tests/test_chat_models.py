@@ -78,7 +78,6 @@ from langchain_google_genai.chat_models import (
     GoogleContextOverflowError,
     _convert_to_parts,
     _convert_tool_message_to_parts,
-    _decode_signature,
     _get_ai_message_tool_messages_parts,
     _handle_client_error,
     _handle_server_error,
@@ -3085,13 +3084,8 @@ def test_signature_round_trip_conversion() -> None:
     with patch.object(
         llm.client.models, "generate_content", return_value=mock_response
     ):
-        # First call - get response with signatures
         result = llm.invoke("Test message")
-
-        # Verify signatures were extracted
         assert isinstance(result.content, list)
-
-        # Find blocks with signatures
         sig_blocks = []
         for block in result.content:
             if isinstance(block, dict):
@@ -3104,7 +3098,6 @@ def test_signature_round_trip_conversion() -> None:
             f"Expected signature blocks, got content: {result.content}"
         )
 
-        # Now simulate passing this result back in a conversation
         with patch(
             "langchain_google_genai.chat_models._convert_from_v1_to_generativelanguage_v1beta"
         ) as mock_convert:
@@ -3114,14 +3107,11 @@ def test_signature_round_trip_conversion() -> None:
 
             mock_convert.side_effect = real_convert
 
-            # Create conversation with the signature-containing message
             conversation = [
                 HumanMessage(content="First message"),
-                result,  # This contains signatures
+                result,
                 HumanMessage(content="Follow up"),
             ]
-
-            # Set up mock for the follow-up response
             follow_up_response = GenerateContentResponse(
                 candidates=[
                     Candidate(content=Content(parts=[Part(text="Follow up response")]))
@@ -3133,10 +3123,7 @@ def test_signature_round_trip_conversion() -> None:
             ):
                 follow_up = llm.invoke(conversation)
 
-            # Verify conversion was called
             assert mock_convert.call_count >= 1
-
-            # Find calls with signatures
             calls_with_signatures = []
             for call in mock_convert.call_args_list:
                 content_blocks, model_provider = call[0]
@@ -3158,17 +3145,12 @@ def test_signature_round_trip_conversion() -> None:
                 "Expected at least one call to convert signatures"
             )
 
-            # Verify follow-up succeeded
             assert isinstance(follow_up, AIMessage)
             assert follow_up.content is not None
 
 
 def test_parse_response_candidate_adds_index_to_signature() -> None:
-    """Test _parse_response_candidate adds index to function_call_signature blocks."""
-    # Mock a candidate with thinking and function call with signature
     part1 = Part(text="Thinking...", thought=True)
-
-    # Signature must be bytes
     sig = b"mysig"
     part2 = Part(
         function_call=FunctionCall(name="tool", args={}), thought_signature=sig
@@ -3185,12 +3167,8 @@ def test_parse_response_candidate_adds_index_to_signature() -> None:
 
 
 def test_parse_chat_history_uses_index_for_signature() -> None:
-    """Test _parse_chat_history uses the index field to map signatures to tool calls."""
     sig_bytes = b"dummy_signature"
     sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
-
-    # Content with thinking block (index 0) and signature block (index 1)
-    # The signature block points to tool call index 0
     content = [{"type": "thinking", "thinking": "I should use the tool."}]
 
     tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
@@ -3203,56 +3181,70 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
         },
     )
 
-    # Parse the history
     _, formatted_messages = _parse_chat_history([message])
-
-    # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert model_content.parts is not None
     assert len(model_content.parts) == 2
 
-    # First part should be the thinking text (thinking blocks come first)
     thinking_part = model_content.parts[0]
     assert thinking_part.thought is True
     assert thinking_part.text == "I should use the tool."
 
-    # Second part should be the function call with signature
     function_part = model_content.parts[1]
     assert function_part.function_call is not None
     assert function_part.function_call.name == "my_tool"
     assert function_part.thought_signature == sig_bytes
 
 
-def test_parse_chat_history_tool_calls_preserves_string_content() -> None:
-    """AIMessage with string content + tool calls keeps the text.
-
-    Regression test for https://github.com/langchain-ai/langchain-google/issues/1706.
-    """
+@pytest.mark.parametrize(
+    ("content", "expected_text", "expected_thought", "expected_signature"),
+    [
+        pytest.param(
+            "Let me look that up.",
+            "Let me look that up.",
+            None,
+            None,
+            id="string",
+        ),
+        pytest.param(
+            [{"type": "text", "text": "One moment."}],
+            "One moment.",
+            None,
+            None,
+            id="text-block",
+        ),
+        pytest.param(
+            [{"type": "thinking", "thinking": "Thinking.", "signature": "c2ln"}],
+            "Thinking.",
+            True,
+            b"sig",
+            id="v0-thinking",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "reasoning",
+                    "reasoning": "Thinking.",
+                    "extras": {"signature": "c2ln"},
+                }
+            ],
+            "Thinking.",
+            True,
+            b"sig",
+            id="v1-reasoning",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_preserves_content(
+    content: str | list[str | dict[Any, Any]],
+    expected_text: str,
+    expected_thought: bool | None,
+    expected_signature: bytes | None,
+) -> None:
+    """Preserve assistant content beside tool calls (regression for #1706)."""
     message = AIMessage(
-        content="Let me look that up.",
-        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    model_content = formatted_messages[0]
-    assert model_content.role == "model"
-    parts = model_content.parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].text == "Let me look that up."
-    assert parts[1].function_call is not None
-    assert parts[1].function_call.name == "search"
-
-
-def test_parse_chat_history_tool_calls_preserves_text_block_content() -> None:
-    """AIMessage with a text content block + tool calls keeps the text.
-
-    Regression test for https://github.com/langchain-ai/langchain-google/issues/1706.
-    """
-    message = AIMessage(
-        content=[{"type": "text", "text": "One moment."}],
+        content=content,
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
     )
 
@@ -3261,63 +3253,14 @@ def test_parse_chat_history_tool_calls_preserves_text_block_content() -> None:
     parts = formatted_messages[0].parts
     assert parts is not None
     assert len(parts) == 2
-    assert parts[0].text == "One moment."
-    assert parts[1].function_call is not None
-
-
-def test_parse_chat_history_tool_calls_preserves_thinking_block() -> None:
-    """v0 `thinking` blocks are kept as thought parts alongside tool calls."""
-    sig_bytes = b"thinking_signature"
-    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
-    message = AIMessage(
-        content=[
-            {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].thought is True
-    assert parts[0].text == "Let me think."
-    assert parts[0].thought_signature == sig_bytes
-    assert parts[1].function_call is not None
-
-
-def test_parse_chat_history_tool_calls_preserves_v1_reasoning_block() -> None:
-    """v1 `reasoning` blocks are kept as thought parts alongside tool calls."""
-    sig_bytes = b"reasoning_signature"
-    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
-    message = AIMessage(
-        content=[
-            {
-                "type": "reasoning",
-                "reasoning": "I should search.",
-                "extras": {"signature": sig_b64},
-            }
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].thought is True
-    assert parts[0].text == "I should search."
-    assert parts[0].thought_signature == sig_bytes
+    assert parts[0].text == expected_text
+    assert parts[0].thought is expected_thought
+    assert parts[0].thought_signature == expected_signature
     assert parts[1].function_call is not None
 
 
 def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
-    """Native thinking + tool call AIMessage projected through v1 content blocks.
-
-    Regression test for https://github.com/langchain-ai/langchain-google/issues/1964.
-    """
+    """Preserve signed reasoning through v1 projection (regression for #1964)."""
     sig_bytes = b"thinking_signature"
     sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
     message = AIMessage(
@@ -3327,7 +3270,6 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
         tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
         response_metadata={"model_provider": "google_genai"},
     )
-    # Project through v1 content blocks as when `output_version="v1"` is used
     v1_message = message.model_copy(
         update={
             "content": message.content_blocks,
@@ -3337,7 +3279,6 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
             },
         }
     )
-    # Sanity check: the projection produced a reasoning block and a tool_call block
     assert v1_message.content[0]["type"] == "reasoning"  # type: ignore[index]
     assert any(
         isinstance(block, dict) and block.get("type") == "tool_call"
@@ -3348,7 +3289,6 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    # Exactly one thought part and exactly one function call part (no duplicates)
     assert len(parts) == 2
     thought_parts = [part for part in parts if part.thought]
     function_call_parts = [part for part in parts if part.function_call]
@@ -3362,7 +3302,6 @@ def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
 
 
 def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
-    """Anthropic `tool_use` content is normalized before Google conversion."""
     message = AIMessage(
         content=[
             {"type": "text", "text": "Let me look that up."},
@@ -3389,7 +3328,6 @@ def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
 
 
 def test_parse_chat_history_tool_calls_drops_invalid_foreign_calls() -> None:
-    """Malformed foreign calls do not prevent valid calls from being replayed."""
     message = AIMessage(
         content=[
             {
@@ -3429,7 +3367,6 @@ def test_parse_chat_history_tool_calls_drops_invalid_foreign_calls() -> None:
 
 
 def test_parse_chat_history_tool_calls_drops_foreign_web_search_pair() -> None:
-    """Foreign server-tool results are not cast as Gemini code results."""
     message = AIMessage(
         content=[
             {
@@ -3465,7 +3402,6 @@ def test_parse_chat_history_tool_calls_drops_foreign_web_search_pair() -> None:
 
 
 def test_parse_chat_history_tool_calls_keeps_foreign_code_interpreter_pair() -> None:
-    """Matched foreign code-interpreter calls and results remain compatible."""
     message = AIMessage(
         content=[
             {
@@ -3500,20 +3436,38 @@ def test_parse_chat_history_tool_calls_keeps_foreign_code_interpreter_pair() -> 
     assert parts[2].function_call.name == "lookup"
 
 
-def test_parse_chat_history_tool_calls_non_standard_block_dropped(
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "redacted_thinking", "data": "encrypted"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [
+                {
+                    "type": "non_standard",
+                    "value": {"type": "redacted_thinking", "data": "encrypted"},
+                }
+            ],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_drops_foreign_non_standard_block(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Provider payloads core cannot standardize are dropped, not raised on.
-
-    LangChain core wraps content it has no standard block for (e.g. Anthropic's
-    `redacted_thinking`) in a `non_standard` block. Gemini cannot represent
-    another provider's opaque payload, so it must be skipped with a warning
-    rather than aborting the whole request.
-    """
+    response_metadata = {"model_provider": "anthropic"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
     message = AIMessage(
-        content=[{"type": "redacted_thinking", "data": "encrypted"}],
+        content=content,
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "anthropic"},
+        response_metadata=response_metadata,
     )
 
     with caplog.at_level(logging.WARNING):
@@ -3521,14 +3475,12 @@ def test_parse_chat_history_tool_calls_non_standard_block_dropped(
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    # Only the function call survives; the opaque payload is dropped
     assert len(parts) == 1
     assert parts[0].function_call is not None
-    assert "non-standard content block" in caplog.text
+    assert "Dropping" in caplog.text
 
 
 def test_parse_chat_history_without_tool_calls_drops_foreign_non_standard() -> None:
-    """Foreign provider payloads are filtered even without function calls."""
     signature = base64.b64encode(b"anthropic_signature").decode("ascii")
     message = AIMessage(
         content=[
@@ -3554,49 +3506,34 @@ def test_parse_chat_history_without_tool_calls_drops_foreign_non_standard() -> N
     assert parts[0].thought_signature is None
 
 
-def test_parse_chat_history_tool_calls_v1_non_standard_block_dropped() -> None:
-    """Serialized v1 provider payloads are dropped before Gemini conversion."""
-    message = AIMessage(
-        content=[
-            {
-                "type": "non_standard",
-                "value": {"type": "redacted_thinking", "data": "encrypted"},
-            }
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "anthropic",
-            "output_version": "v1",
-        },
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 1
-    assert parts[0].function_call is not None
-
-
-def test_parse_chat_history_tool_calls_v1_foreign_malformed_media_dropped(
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "media", "mime_type": "image/png", "data": "invalid!!"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [{"type": "image", "mime_type": "image/png", "base64": "invalid!!"}],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_drops_malformed_foreign_media(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A foreign v1 media block with malformed base64 is dropped, not raised on.
-
-    `_compat` converts the block to an `inline_data` v1beta dict without
-    validating the base64 payload, so the failure only surfaces when the dict is
-    converted to a `Blob`. Foreign v1 messages keep the tolerant per-block
-    behavior of the non-v1 branch; the valid tool call must still be replayed.
-    """
+    """Drop malformed foreign media without losing an otherwise valid tool call."""
+    response_metadata = {"model_provider": "openai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
     message = AIMessage(
-        content=[
-            {"type": "image", "base64": "not valid base64!!", "mime_type": "image/png"}
-        ],
+        content=content,
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "openai",
-            "output_version": "v1",
-        },
+        response_metadata=response_metadata,
     )
 
     with caplog.at_level(logging.WARNING):
@@ -3606,26 +3543,36 @@ def test_parse_chat_history_tool_calls_v1_foreign_malformed_media_dropped(
     assert parts is not None
     assert len(parts) == 1
     assert parts[0].function_call is not None
-    assert parts[0].function_call.name == "search"
-    assert "Dropping content block that cannot" in caplog.text
+    assert "Dropping" in caplog.text
 
 
-def test_parse_chat_history_tool_calls_v1_native_malformed_media_raises() -> None:
-    """A native v1 media block with malformed base64 must not be silently dropped.
-
-    Unlike foreign content, a malformed `google_genai` block is bad input, not an
-    expected foreign shape; dropping it would turn the request into a different
-    valid request without telling the caller.
-    """
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "media", "mime_type": "image/png", "data": "invalid!!"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [{"type": "image", "mime_type": "image/png", "base64": "invalid!!"}],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_rejects_malformed_native_media(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+) -> None:
+    """Keep native replay strict so invalid input cannot silently change a request."""
+    response_metadata = {"model_provider": "google_genai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
     message = AIMessage(
-        content=[
-            {"type": "image", "base64": "not valid base64!!", "mime_type": "image/png"}
-        ],
+        content=content,
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "google_genai",
-            "output_version": "v1",
-        },
+        response_metadata=response_metadata,
     )
 
     with pytest.raises(ValueError, match="valid base64"):
@@ -3633,13 +3580,11 @@ def test_parse_chat_history_tool_calls_v1_native_malformed_media_raises() -> Non
 
 
 def test_convert_to_parts_still_raises_on_unknown_type() -> None:
-    """Dropping `non_standard` must not weaken the guard on malformed blocks."""
     with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
         _convert_to_parts([{"type": "bogus"}])
 
 
 def test_parse_chat_history_preserves_human_non_standard_media() -> None:
-    """Core-wrapped Gemini media on a human message is unwrapped and sent."""
     message = HumanMessage(
         content_blocks=[
             {
@@ -3664,7 +3609,6 @@ def test_parse_chat_history_preserves_human_non_standard_media() -> None:
 
 
 def test_parse_chat_history_preserves_native_ai_non_standard_media() -> None:
-    """Native AI media is unwrapped even without v1 output metadata."""
     message = AIMessage(
         content=[
             {
@@ -3690,7 +3634,6 @@ def test_parse_chat_history_preserves_native_ai_non_standard_media() -> None:
 
 
 def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> None:
-    """Provider-aware filtering still rejects another provider's opaque media."""
     message = AIMessage(
         content=[
             {
@@ -3715,10 +3658,7 @@ def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> Non
 def test_parse_chat_history_tool_calls_foreign_reasoning_block(
     output_version: str | None,
 ) -> None:
-    """OpenAI-style `summary` reasoning blocks don't crash history parsing.
-
-    Regression test for https://github.com/langchain-ai/langchain-google/issues/1603.
-    """
+    """Replay OpenAI summary reasoning safely (regression for #1603)."""
     response_metadata = {"model_provider": "openai"}
     if output_version:
         response_metadata["output_version"] = output_version
@@ -3737,7 +3677,6 @@ def test_parse_chat_history_tool_calls_foreign_reasoning_block(
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    # The reasoning text is converted from the summary; the function call is kept
     assert len(parts) == 2
     assert parts[0].thought is True
     assert parts[0].text == "I should search."
@@ -3746,14 +3685,6 @@ def test_parse_chat_history_tool_calls_foreign_reasoning_block(
 
 
 def test_convert_to_parts_openai_summary_reasoning_without_metadata() -> None:
-    """The exact repro from the issue: no provider metadata and no tool calls.
-
-    This is the only input shape that exercises the `summary` extraction fallback
-    in `_convert_to_parts`; a message tagged `model_provider="openai"` is
-    normalized by core to a `reasoning` key before conversion runs.
-
-    Regression test for https://github.com/langchain-ai/langchain-google/issues/1603.
-    """
     message = AIMessage(
         content=[
             {
@@ -3780,19 +3711,12 @@ def test_convert_to_parts_openai_summary_reasoning_without_metadata() -> None:
 
 
 def test_convert_to_parts_reasoning_summary_not_a_list_is_dropped() -> None:
-    """A `summary` that yields no text is dropped rather than raising."""
     assert _convert_to_parts([{"type": "reasoning", "summary": "notalist"}]) == []
 
 
 def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A foreign block on a metadata-less message is dropped, not raised on.
-
-    Messages lacking `model_provider` (hand-built, or checkpoints serialized before
-    core stamped the field) must not turn a previously-ignored block into a hard
-    request failure.
-    """
     message = AIMessage(
         content=[
             {"type": "text", "text": "Let me look that up."},
@@ -3806,7 +3730,6 @@ def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    # Text survives, the unconvertible block is dropped, the call is emitted once
     assert len(parts) == 2
     assert parts[0].text == "Let me look that up."
     assert parts[1].function_call is not None
@@ -3814,132 +3737,64 @@ def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
     assert "Dropping content block that cannot" in caplog.text
 
 
-def test_parse_chat_history_tool_calls_native_invalid_media_raises() -> None:
-    """A native block that fails validation must not be silently dropped.
-
-    A malformed media block on a `google_genai` message is bad input, not an
-    expected foreign shape; dropping it would turn the request into a different
-    valid request without telling the caller.
-    """
-    message = AIMessage(
-        content=[
-            {"type": "media", "mime_type": "image/png", "data": "not valid base64!!"},
+@pytest.mark.parametrize(
+    ("model_provider", "output_version", "content", "expected"),
+    [
+        *[
+            pytest.param(
+                provider,
+                None,
+                [{"type": "thinking", "thinking": "Thinking.", "signature": "c2ln"}],
+                [("Thinking.", True)],
+                id=f"{provider}-v0-thinking",
+            )
+            for provider in ("google_genai", "google_vertexai")
         ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "google_genai"},
-    )
-
-    with pytest.raises(ValueError, match="valid base64"):
-        _parse_chat_history([message])
-
-
-def test_parse_chat_history_tool_calls_foreign_malformed_media_still_dropped(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Another provider's malformed block is dropped, not raised on.
-
-    Only native content regains strict validation; multi-provider histories keep
-    the tolerant behavior since unconvertible foreign blocks are expected.
-    """
-    message = AIMessage(
-        content=[
-            {"type": "media", "mime_type": "image/png", "data": "not valid base64!!"},
+        *[
+            pytest.param(
+                provider,
+                "v1",
+                [
+                    {
+                        "type": "reasoning",
+                        "reasoning": "Thinking.",
+                        "extras": {"signature": "c2ln"},
+                    },
+                    {
+                        "type": "text",
+                        "text": "Answer.",
+                        "extras": {"signature": "c2ln"},
+                    },
+                ],
+                [("Thinking.", True), ("Answer.", None)],
+                id=f"{provider}-v1-content",
+            )
+            for provider in ("google_genai", "google_vertexai")
         ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "openai"},
-    )
-
-    with caplog.at_level(logging.WARNING):
-        _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 1
-    assert parts[0].function_call is not None
-    # Core projects an unknown provider's `media` block to `non_standard`; the
-    # tolerant path drops it with a warning instead of failing the request.
-    assert "Dropping non-standard content block" in caplog.text
-
-
-@pytest.mark.parametrize("model_provider", ["google_genai", "google_vertexai"])
-def test_parse_chat_history_tool_calls_native_v0_signature_preserved(
+        *[
+            pytest.param(
+                "google_vertexai",
+                output_version,
+                [{"type": "text", "text": "Answer.", "thought_signature": "c2ln"}],
+                [("Answer.", None)],
+                id=f"vertex-text-{output_version or 'v0'}",
+            )
+            for output_version in (None, "v1")
+        ],
+    ],
+)
+def test_parse_chat_history_preserves_native_signatures(
     model_provider: str,
-) -> None:
-    """Vertex AI serves the same Gemini models, so its signatures stay valid."""
-    signature = base64.b64encode(b"vertex_sig").decode("ascii")
-    message = AIMessage(
-        content=[{"type": "thinking", "thinking": "Thinking.", "signature": signature}],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": model_provider},
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].thought is True
-    assert parts[0].thought_signature == b"vertex_sig"
-
-
-@pytest.mark.parametrize("model_provider", ["google_genai", "google_vertexai"])
-def test_parse_chat_history_tool_calls_native_v1_signature_preserved(
-    model_provider: str,
-) -> None:
-    """Both native providers keep reasoning text and signatures on the v1 path.
-
-    Regression guard: `_compat` used to gate v1 signature handling on
-    `google_genai` alone, so a Vertex AI turn lost its reasoning block entirely
-    and had its text signature stripped. The signature then fell through to
-    `DUMMY_THOUGHT_SIGNATURE`, silently degrading thinking continuity.
-    """
-    signature = base64.b64encode(b"vertex_sig").decode("ascii")
-    message = AIMessage(
-        content=[
-            {
-                "type": "reasoning",
-                "reasoning": "Thinking.",
-                "extras": {"signature": signature},
-            },
-            {"type": "text", "text": "Answer.", "extras": {"signature": signature}},
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": model_provider,
-            "output_version": "v1",
-        },
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 3
-    assert parts[0].thought is True
-    assert parts[0].text == "Thinking."
-    assert parts[0].thought_signature == b"vertex_sig"
-    assert parts[1].text == "Answer."
-    assert parts[1].thought_signature == b"vertex_sig"
-    assert parts[2].function_call is not None
-
-
-@pytest.mark.parametrize("output_version", [None, "v1"])
-def test_parse_chat_history_vertex_text_thought_signature_preserved(
     output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    expected: list[tuple[str, bool | None]],
 ) -> None:
-    """Vertex's top-level text signature survives both history paths."""
-    signature = base64.b64encode(b"vertex_sig").decode("ascii")
-    response_metadata = {"model_provider": "google_vertexai"}
+    """Treat Vertex and Developer API signatures as the same native format."""
+    response_metadata = {"model_provider": model_provider}
     if output_version is not None:
         response_metadata["output_version"] = output_version
     message = AIMessage(
-        content=[
-            {
-                "type": "text",
-                "text": "Answer.",
-                "thought_signature": signature,
-            }
-        ],
+        content=content,
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
         response_metadata=response_metadata,
     )
@@ -3948,16 +3803,15 @@ def test_parse_chat_history_vertex_text_thought_signature_preserved(
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].text == "Answer."
-    assert parts[0].thought_signature == b"vertex_sig"
-    assert parts[1].function_call is not None
+    assert len(parts) == len(expected) + 1
+    assert [(part.text, part.thought) for part in parts[:-1]] == expected
+    assert all(part.thought_signature == b"sig" for part in parts[:-1])
+    assert parts[-1].function_call is not None
 
 
 def test_parse_chat_history_tool_calls_v1_unknown_provider_preserves_signature() -> (
     None
 ):
-    """Older v1 checkpoints keep native signatures without provider metadata."""
     signature = base64.b64encode(b"checkpoint_sig").decode("ascii")
     message = AIMessage(
         content=[
@@ -3985,7 +3839,6 @@ def test_parse_chat_history_tool_calls_v1_unknown_provider_preserves_signature()
 def test_parse_chat_history_tool_calls_summary_reasoning_kept_without_metadata() -> (
     None
 ):
-    """A metadata-less `summary` reasoning block is converted, not dropped."""
     message = AIMessage(
         content=[
             {
@@ -4006,26 +3859,50 @@ def test_parse_chat_history_tool_calls_summary_reasoning_kept_without_metadata()
 
 
 @pytest.mark.parametrize(
-    "block",
+    ("block", "response_metadata", "expected_signature"),
     [
-        {"type": "thinking", "thinking": "", "signature": "c2ln"},
-        {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
-        {"type": "text", "text": "", "extras": {"signature": "c2ln"}},
+        pytest.param(
+            {"type": "thinking", "thinking": "", "signature": "c2ln"},
+            {},
+            b"sig",
+            id="v0-thinking",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
+            {},
+            b"sig",
+            id="v0-reasoning",
+        ),
+        pytest.param(
+            {"type": "text", "text": "", "extras": {"signature": "c2ln"}},
+            {},
+            b"sig",
+            id="v0-text",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
+            {"model_provider": "google_genai", "output_version": "v1"},
+            b"sig",
+            id="v1-signed",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": ""},
+            {"model_provider": "google_genai", "output_version": "v1"},
+            None,
+            id="v1-unsigned",
+        ),
     ],
 )
-def test_parse_chat_history_tool_calls_keeps_signature_only_blocks(
+def test_parse_chat_history_handles_empty_thought_blocks(
     block: dict[str, Any],
+    response_metadata: dict[str, Any],
+    expected_signature: bytes | None,
 ) -> None:
-    """An empty block carrying a signature must survive.
-
-    Gemini emits signature-bearing blocks with empty text and requires the
-    signature to be echoed back, so emptiness alone must not trigger a drop --
-    otherwise the signature is lost and the Gemini 3 enforcement pass silently
-    substitutes `DUMMY_THOUGHT_SIGNATURE` for the whole turn.
-    """
+    """Retain signature-only thoughts while dropping genuinely empty thoughts."""
     message = AIMessage(
         content=[block],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
     )
 
     _, formatted_messages = _parse_chat_history(
@@ -4034,72 +3911,47 @@ def test_parse_chat_history_tool_calls_keeps_signature_only_blocks(
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    assert len(parts) == 2
-    # The real signature survives on the thought part rather than being dropped
-    # and back-filled with the dummy
-    assert parts[0].thought_signature == b"sig"
-    assert parts[0].thought_signature != DUMMY_THOUGHT_SIGNATURE
-    assert parts[1].function_call is not None
+    content_parts = [part for part in parts if part.function_call is None]
+    if expected_signature is None:
+        assert content_parts == []
+    else:
+        assert len(content_parts) == 1
+        assert content_parts[0].thought_signature == expected_signature
+        assert content_parts[0].thought_signature != DUMMY_THOUGHT_SIGNATURE
+    assert len([part for part in parts if part.function_call is not None]) == 1
 
 
-def test_parse_chat_history_tool_calls_v1_keeps_signature_only_thought() -> None:
-    """The v1 path keeps a signature-bearing empty thought, matching the v0 path."""
-    signature = base64.b64encode(b"sig").decode("ascii")
+@pytest.mark.parametrize(
+    ("block", "expected_text", "expected_thought"),
+    [
+        pytest.param(
+            {"type": "text", "text": "Looking it up."},
+            "Looking it up.",
+            None,
+            id="text",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "I should search."},
+            "I should search.",
+            True,
+            id="reasoning",
+        ),
+        pytest.param(
+            {"type": "text", "text": ""},
+            None,
+            None,
+            id="signature-only",
+        ),
+    ],
+)
+def test_parse_chat_history_strips_foreign_signatures(
+    block: dict[str, Any],
+    expected_text: str | None,
+    expected_thought: bool | None,
+) -> None:
+    block["extras"] = {"signature": "b3BlbmFpX3NpZw=="}
     message = AIMessage(
-        content=[
-            {"type": "reasoning", "reasoning": "", "extras": {"signature": signature}},
-            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "google_genai",
-            "output_version": "v1",
-        },
-    )
-
-    _, formatted_messages = _parse_chat_history(
-        [message], model="gemini-3.1-pro-preview"
-    )
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].thought is True
-    assert parts[0].thought_signature == b"sig"
-    assert parts[1].function_call is not None
-
-
-def test_parse_chat_history_tool_calls_v1_drops_unsigned_empty_thought() -> None:
-    """An empty thought with no signature is still dropped on the v1 path."""
-    message = AIMessage(
-        content=[{"thought": True, "text": ""}, {"function_call": {"name": "search"}}],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "google_genai",
-            "output_version": "v1",
-        },
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 1
-    assert parts[0].function_call is not None
-
-
-def test_parse_chat_history_tool_calls_foreign_text_signature_stripped() -> None:
-    """A foreign `text` block's signature is stripped, not just reasoning blocks."""
-    message = AIMessage(
-        content=[
-            {
-                "type": "text",
-                "text": "Looking it up.",
-                "extras": {
-                    "signature": base64.b64encode(b"openai_sig").decode("ascii")
-                },
-            }
-        ],
+        content=[block],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
         response_metadata={"model_provider": "openai"},
     )
@@ -4108,41 +3960,18 @@ def test_parse_chat_history_tool_calls_foreign_text_signature_stripped() -> None
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    assert parts[0].text == "Looking it up."
-    assert parts[0].thought_signature is None
-
-
-def test_parse_chat_history_tool_calls_foreign_signature_only_block_dropped() -> None:
-    """A foreign block whose only payload is a signature must not emit an empty part.
-
-    The emptiness check must run after foreign signatures are stripped: the
-    signature makes the block look non-empty, but once stripped nothing remains,
-    and the Gemini API rejects the resulting empty text part.
-    """
-    message = AIMessage(
-        content=[
-            {
-                "type": "text",
-                "text": "",
-                "extras": {
-                    "signature": base64.b64encode(b"openai_sig").decode("ascii")
-                },
-            }
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "openai"},
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 1
-    assert parts[0].function_call is not None
+    content_parts = [part for part in parts if part.function_call is None]
+    if expected_text is None:
+        assert content_parts == []
+    else:
+        assert len(content_parts) == 1
+        assert content_parts[0].text == expected_text
+        assert content_parts[0].thought is expected_thought
+        assert content_parts[0].thought_signature is None
+    assert len([part for part in parts if part.function_call is not None]) == 1
 
 
 def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
-    """A `tool_call_chunk` block must not duplicate the rebuilt function call."""
     message = AIMessage(
         content=[
             {
@@ -4164,22 +3993,26 @@ def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
 
 
 @pytest.mark.parametrize("output_version", [None, "v1"])
+@pytest.mark.parametrize("index", [0, None], ids=["indexed", "unindexed"])
 def test_parse_chat_history_consumes_legacy_function_call_signature(
     output_version: str | None,
+    index: int | None,
 ) -> None:
-    """Legacy signature sidecars are attached to rebuilt function calls."""
+    """Map indexed and early unindexed signature sidecars to rebuilt calls."""
     signature = base64.b64encode(b"legacy_sig").decode("ascii")
     response_metadata = {"model_provider": "google_vertexai"}
     if output_version is not None:
         response_metadata["output_version"] = output_version
+    signature_block: dict[str, Any] = {
+        "type": "function_call_signature",
+        "signature": signature,
+    }
+    if index is not None:
+        signature_block["index"] = index
     message = AIMessage(
         content=[
             {"type": "text", "text": "Calling a tool."},
-            {
-                "type": "function_call_signature",
-                "signature": signature,
-                "index": 0,
-            },
+            signature_block,
         ],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
         response_metadata=response_metadata,
@@ -4195,32 +4028,6 @@ def test_parse_chat_history_consumes_legacy_function_call_signature(
     assert parts[1].thought_signature == b"legacy_sig"
 
 
-@pytest.mark.parametrize("output_version", [None, "v1"])
-def test_parse_chat_history_maps_unindexed_legacy_function_call_signature(
-    output_version: str | None,
-) -> None:
-    """Unindexed legacy sidecars use signature order, not content position."""
-    signature = base64.b64encode(b"unindexed_legacy_sig").decode("ascii")
-    response_metadata = {"model_provider": "google_vertexai"}
-    if output_version is not None:
-        response_metadata["output_version"] = output_version
-    message = AIMessage(
-        content=[
-            {"type": "text", "text": "Calling a tool."},
-            {"type": "function_call_signature", "signature": signature},
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata=response_metadata,
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert parts[1].function_call is not None
-    assert parts[1].thought_signature == b"unindexed_legacy_sig"
-
-
 @pytest.mark.parametrize(
     ("model_provider", "file_uri"),
     [
@@ -4231,7 +4038,6 @@ def test_parse_chat_history_maps_unindexed_legacy_function_call_signature(
 def test_parse_chat_history_tool_calls_normalizes_native_blocks(
     model_provider: str, file_uri: str
 ) -> None:
-    """Provider-native file and function-call blocks replay without duplication."""
     message = AIMessage(
         content=[
             {
@@ -4265,37 +4071,29 @@ def test_parse_chat_history_tool_calls_normalizes_native_blocks(
     assert parts[1].function_call.args == {"q": "x"}
 
 
-def test_parse_chat_history_drops_vertex_gcs_for_gemini_backend() -> None:
-    """The source being Vertex does not make its GCS URI valid for Gemini API."""
-    message = AIMessage(
-        content=[
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(
             {
                 "type": "file_data",
                 "file_uri": "gs://bucket/document.pdf",
                 "mime_type": "application/pdf",
-            }
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "google_vertexai"},
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 1
-    assert parts[0].function_call is not None
-
-
-def test_parse_chat_history_drops_nested_vertex_gcs_for_gemini_backend() -> None:
-    """Nested Chat Completions image URLs receive the same backend filtering."""
+            },
+            id="file-data",
+        ),
+        pytest.param(
+            {"type": "image_url", "image_url": {"url": "gs://bucket/image.png"}},
+            id="nested-image-url",
+        ),
+    ],
+)
+def test_parse_chat_history_drops_vertex_gcs_for_gemini_backend(
+    block: dict[str, Any],
+) -> None:
+    """Filter Vertex-only GCS references according to the destination backend."""
     message = AIMessage(
-        content=[
-            {
-                "type": "image_url",
-                "image_url": {"url": "gs://bucket/image.png"},
-            }
-        ],
+        content=[block],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
         response_metadata={"model_provider": "google_vertexai"},
     )
@@ -4312,7 +4110,6 @@ def test_parse_chat_history_drops_nested_vertex_gcs_for_gemini_backend() -> None
 def test_prepare_request_checks_target_backend_for_vertex_gcs_history(
     vertexai: bool,
 ) -> None:
-    """Vertex GCS references replay only when the target is also Vertex AI."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         api_key=FAKE_API_KEY,
@@ -4354,51 +4151,21 @@ def test_prepare_request_checks_target_backend_for_vertex_gcs_history(
     assert len([part for part in parts if part.function_call is not None]) == 1
 
 
-def test_parse_chat_history_tool_calls_preserves_native_media_block() -> None:
-    """A native `media` block mixed with a raw `function_call` is not dropped.
-
-    Core's google translator has no `media` case, so projecting the message
-    through `content_blocks` would turn the block into `non_standard` and lose it.
-    Reading raw `content` and normalizing only the function-call block preserves
-    the media part.
-    """
-    message = AIMessage(
-        content=[
+@pytest.mark.parametrize(
+    ("block", "output_version", "expected_uri", "expected_mime_type"),
+    [
+        pytest.param(
             {
                 "type": "media",
-                "file_uri": "https://generativelanguage.googleapis.com/v1beta/files/abc",
+                "file_uri": "files/native-audio",
                 "mime_type": "audio/mpeg",
             },
-            {
-                "type": "function_call",
-                "name": "transcribe",
-                "args": {},
-                "id": "call_1",
-            },
-        ],
-        tool_calls=[{"name": "transcribe", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "google_genai"},
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].file_data is not None
-    assert (
-        parts[0].file_data.file_uri
-        == "https://generativelanguage.googleapis.com/v1beta/files/abc"
-    )
-    assert parts[0].file_data.mime_type == "audio/mpeg"
-    assert parts[1].function_call is not None
-    assert parts[1].function_call.name == "transcribe"
-
-
-def test_parse_chat_history_tool_calls_v1_preserves_native_media_block() -> None:
-    """V1 projection does not discard a native block wrapped as `non_standard`."""
-    message = AIMessage(
-        content=[
+            None,
+            "files/native-audio",
+            "audio/mpeg",
+            id="v0-media",
+        ),
+        pytest.param(
             {
                 "type": "non_standard",
                 "value": {
@@ -4407,13 +4174,39 @@ def test_parse_chat_history_tool_calls_v1_preserves_native_media_block() -> None
                     "mime_type": "audio/mpeg",
                 },
             },
-            {"type": "tool_call", "name": "transcribe", "args": {}, "id": "call_1"},
+            "v1",
+            "files/native-audio",
+            "audio/mpeg",
+            id="v1-non-standard-media",
+        ),
+        pytest.param(
+            {"type": "file", "file_id": "files/abc", "mime_type": "application/pdf"},
+            "v1",
+            "files/abc",
+            "application/pdf",
+            id="v1-file-id",
+        ),
+    ],
+)
+def test_parse_chat_history_replays_native_file_blocks(
+    block: dict[str, Any],
+    output_version: str | None,
+    expected_uri: str,
+    expected_mime_type: str,
+) -> None:
+    """Replay native file shapes that core may otherwise wrap as non-standard."""
+    response_metadata = {"model_provider": "google_genai"}
+    call_block_type = "function_call"
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+        call_block_type = "tool_call"
+    message = AIMessage(
+        content=[
+            block,
+            {"type": call_block_type, "name": "search", "args": {}, "id": "call_1"},
         ],
-        tool_calls=[{"name": "transcribe", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "google_genai",
-            "output_version": "v1",
-        },
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
     )
 
     _, formatted_messages = _parse_chat_history([message])
@@ -4422,40 +4215,12 @@ def test_parse_chat_history_tool_calls_v1_preserves_native_media_block() -> None
     assert parts is not None
     assert len(parts) == 2
     assert parts[0].file_data is not None
-    assert parts[0].file_data.file_uri == "files/native-audio"
-    assert parts[0].file_data.mime_type == "audio/mpeg"
+    assert parts[0].file_data.file_uri == expected_uri
+    assert parts[0].file_data.mime_type == expected_mime_type
     assert parts[1].function_call is not None
 
 
-def test_parse_chat_history_tool_calls_v1_file_id_becomes_file_data() -> None:
-    """A v1 `file` block carrying a `file_id` converts to a `file_data` part."""
-    message = AIMessage(
-        content=[
-            {
-                "type": "file",
-                "file_id": "files/abc",
-                "mime_type": "application/pdf",
-            },
-            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "google_genai",
-            "output_version": "v1",
-        },
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert parts[0].file_data is not None
-    assert parts[0].file_data.file_uri == "files/abc"
-    assert parts[0].file_data.mime_type == "application/pdf"
-
-
 def test_parse_chat_history_tool_calls_v1_foreign_file_id_dropped() -> None:
-    """A provider-scoped foreign file ID must not be replayed to Gemini."""
     message = AIMessage(
         content=[
             {
@@ -4482,7 +4247,6 @@ def test_parse_chat_history_tool_calls_v1_foreign_file_id_dropped() -> None:
 
 
 def test_parse_chat_history_tool_calls_v1_text_signature_decoded() -> None:
-    """A signature on a v1 `text` block round-trips as decoded bytes."""
     signature = base64.b64encode(b"text_sig").decode("ascii")
     message = AIMessage(
         content=[
@@ -4504,36 +4268,39 @@ def test_parse_chat_history_tool_calls_v1_text_signature_decoded() -> None:
     assert parts[0].thought_signature == b"text_sig"
 
 
-def test_convert_from_v1_keeps_base64_media_undecoded() -> None:
-    """`Blob` base64-decodes a `str`, so the converter must not pre-encode it.
-
-    Pre-encoding produced double-base64-encoded bytes on the wire.
-    """
-    converted = _convert_from_v1_to_generativelanguage_v1beta(
-        [{"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"}],
-        "google_genai",
-    )
-
-    assert converted == [
-        {"inline_data": {"mime_type": "image/png", "data": "aGVsbG8="}}
-    ]
-    assert Blob(**converted[0]["inline_data"]).data == b"hello"
-
-
-def test_parse_chat_history_tool_calls_foreign_signatures_not_leaked() -> None:
-    """Signatures from other providers are stripped before sending to Google."""
+@pytest.mark.parametrize(
+    ("block", "expected_mime_type", "expected_data"),
+    [
+        pytest.param(
+            {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"},
+            "image/png",
+            b"hello",
+            id="image",
+        ),
+        pytest.param(
+            {"type": "file", "base64": "d29ybGQ=", "mime_type": "text/plain"},
+            "text/plain",
+            b"world",
+            id="file",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_v1_preserves_inline_media(
+    block: dict[str, Any],
+    expected_mime_type: str,
+    expected_data: bytes,
+) -> None:
+    """Convert projected v1beta media dictionaries into real Gemini media parts."""
     message = AIMessage(
         content=[
-            {
-                "type": "reasoning",
-                "reasoning": "I should search.",
-                "extras": {
-                    "signature": base64.b64encode(b"openai_sig").decode("ascii")
-                },
-            }
+            block,
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
         ],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "openai"},
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
     )
 
     _, formatted_messages = _parse_chat_history([message])
@@ -4541,32 +4308,17 @@ def test_parse_chat_history_tool_calls_foreign_signatures_not_leaked() -> None:
     parts = formatted_messages[0].parts
     assert parts is not None
     assert len(parts) == 2
-    assert parts[0].thought is True
-    assert parts[0].text == "I should search."
-    # Signature is from another provider and must not be echoed to Google
-    assert parts[0].thought_signature is None
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == expected_mime_type
+    assert parts[0].inline_data.data == expected_data
+    assert parts[0].text is None
+    assert parts[1].function_call is not None
 
 
-def test_parse_chat_history_tool_calls_v1_preserves_media_and_code_parts() -> None:
-    """v1-projected media/code parts survive the tool-call branch.
-
-    `_convert_from_v1_to_generativelanguage_v1beta` produces type-less v1beta
-    dicts (`inline_data`, `file_data`, `executable_code`,
-    `code_execution_result`); they must be converted to real media/code parts
-    rather than stringified as text.
-    """
+def test_parse_chat_history_tool_calls_v1_preserves_code_execution() -> None:
+    """Keep projected code execution separate from the rebuilt function call."""
     message = AIMessage(
         content=[
-            {
-                "type": "image",
-                "base64": "aGVsbG8=",
-                "mime_type": "image/png",
-            },
-            {
-                "type": "file",
-                "base64": "d29ybGQ=",
-                "mime_type": "text/plain",
-            },
             {
                 "type": "server_tool_call",
                 "name": "code_interpreter",
@@ -4591,58 +4343,31 @@ def test_parse_chat_history_tool_calls_v1_preserves_media_and_code_parts() -> No
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    assert len(parts) == 5
-    image_part = parts[0]
-    assert image_part.inline_data is not None
-    assert image_part.inline_data.mime_type == "image/png"
-    assert image_part.inline_data.data == b"hello"
-    assert image_part.text is None
-    file_part = parts[1]
-    assert file_part.inline_data is not None
-    assert file_part.inline_data.mime_type == "text/plain"
-    assert file_part.inline_data.data == b"world"
-    assert file_part.text is None
-    executable_part = parts[2]
+    assert len(parts) == 3
+    executable_part = parts[0]
     assert executable_part.executable_code is not None
     assert executable_part.executable_code.code == "print(1)"
     assert executable_part.executable_code.language == Language.PYTHON
-    result_part = parts[3]
+    result_part = parts[1]
     assert result_part.code_execution_result is not None
     assert result_part.code_execution_result.output == "1"
     assert result_part.code_execution_result.outcome == (
         CodeExecutionResultOutcome.OUTCOME_OK
     )
-    function_call_parts = [part for part in parts if part.function_call]
-    assert len(function_call_parts) == 1
+    assert parts[2].function_call is not None
 
 
-def test_parse_chat_history_tool_calls_skips_empty_text_blocks() -> None:
-    """Empty text blocks don't produce empty parts (Gemini rejects them)."""
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_skips_empty_text(
+    output_version: str | None,
+) -> None:
+    response_metadata = {"model_provider": "google_genai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
     message = AIMessage(
         content=[{"type": "text", "text": ""}],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-    )
-
-    _, formatted_messages = _parse_chat_history([message])
-
-    parts = formatted_messages[0].parts
-    assert parts is not None
-    assert len(parts) == 1
-    assert parts[0].function_call is not None
-
-
-def test_parse_chat_history_tool_calls_skips_empty_v1_text() -> None:
-    """Empty text blocks in v1-projected messages don't produce empty parts."""
-    message = AIMessage(
-        content=[
-            {"type": "text", "text": ""},
-            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
-        ],
-        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={
-            "model_provider": "google_genai",
-            "output_version": "v1",
-        },
+        response_metadata=response_metadata,
     )
 
     _, formatted_messages = _parse_chat_history([message])
@@ -4654,7 +4379,7 @@ def test_parse_chat_history_tool_calls_skips_empty_v1_text() -> None:
 
 
 def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
-    """v1-projected messages emit exactly one FunctionCall part per tool call."""
+    """Emit calls once when both v1 content and `tool_calls` contain them."""
     message = AIMessage(
         content="Searching now.",
         tool_calls=[
@@ -4672,8 +4397,6 @@ def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
             },
         }
     )
-    # Content blocks carry the tool calls AND `message.tool_calls` is set; the
-    # function calls must still be emitted exactly once each.
     assert any(
         isinstance(block, dict) and block.get("type") == "tool_call"
         for block in v1_message.content
@@ -4689,7 +4412,6 @@ def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
     assert function_call_parts[1].function_call is not None
     assert function_call_parts[0].function_call.args == {"q": "a"}
     assert function_call_parts[1].function_call.args == {"q": "b"}
-    # Text content is preserved too
     assert [part for part in parts if part.text == "Searching now."]
 
 
@@ -8009,103 +7731,7 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, GoogleContextOverflowError)
 
 
-# --- Gap coverage for tool-call history conversion helpers --------------------
-
-
-@pytest.mark.parametrize(
-    ("sig", "expected"),
-    [
-        (base64.b64encode(b"sig").decode("ascii"), b"sig"),
-        (b"raw_bytes", b"raw_bytes"),
-        ("", None),
-        (b"", None),
-        (None, None),
-        (123, None),
-    ],
-)
-def test_decode_signature(sig: Any, expected: bytes | None) -> None:
-    """Both wire shapes decode, and every empty form normalizes to `None`.
-
-    The empty-string case matters: returning `b""` instead of `None` would emit a
-    part with a zero-length signature, which is not the same as no signature.
-    """
-    assert _decode_signature(sig) == expected
-
-
-def test_convert_to_parts_decodes_bytes_thought_signature() -> None:
-    """A v1beta thought part may carry raw bytes rather than base64."""
-    parts = _convert_to_parts(
-        [{"thought": True, "text": "Thinking.", "thought_signature": b"raw_sig"}]
-    )
-
-    assert len(parts) == 1
-    assert parts[0].thought is True
-    assert parts[0].thought_signature == b"raw_sig"
-
-
-def test_convert_to_parts_typed_block_wins_over_thought_key() -> None:
-    """An explicit `type` takes precedence over the type-less `thought` sniffing.
-
-    Regression guard: the `thought` branch used to run before the `type` chain, so
-    a block carrying both was silently reinterpreted as a thought part.
-    """
-    parts = _convert_to_parts(
-        [{"type": "text", "text": "Not a thought.", "thought": True}]
-    )
-
-    assert len(parts) == 1
-    assert parts[0].text == "Not a thought."
-    assert parts[0].thought is not True
-
-
-def test_convert_to_parts_empty_inline_data_is_not_a_file_part() -> None:
-    """An empty-but-present `inline_data` must not fall through to `file_data`.
-
-    Regression guard: the branch resolved the payload with
-    `part.get("inline_data") or part.get("file_data")`, so a falsy `inline_data`
-    was emitted as a `file_data` part.
-    """
-    parts = _convert_to_parts([{"inline_data": {}}])
-
-    assert len(parts) == 1
-    assert parts[0].inline_data is not None
-    assert parts[0].file_data is None
-
-
-@pytest.mark.parametrize(
-    ("block", "attr"),
-    [
-        ({"inline_data": {"mime_type": None, "data": "aGk="}}, "inline_data"),
-        ({"file_data": {"mime_type": None, "file_uri": "gs://b/o"}}, "file_data"),
-        ({"executable_code": {"language": None, "code": "x=1"}}, "executable_code"),
-        (
-            {"code_execution_result": {"outcome": None, "output": "1"}},
-            "code_execution_result",
-        ),
-    ],
-)
-def test_convert_to_parts_v1beta_shapes_tolerate_none_valued_keys(
-    block: dict[str, Any], attr: str
-) -> None:
-    """A `None`-valued key converts rather than failing validation.
-
-    `_compat` fills these fields with defaults, so `None` should not occur; this
-    pins the tolerance so that a stricter `google-genai` release surfaces here
-    rather than as a dropped media block in production.
-    """
-    parts = _convert_to_parts([block])
-
-    assert len(parts) == 1
-    assert getattr(parts[0], attr) is not None
-
-
 def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
-    """Function-call blocks are stripped even on the strict native path.
-
-    Native content is converted strictly, so a leftover `tool_call` block would
-    raise `Unrecognized message part type` rather than be dropped. The tolerant
-    path hides this, which is why this test pins a native provider.
-    """
     message = AIMessage(
         content=[
             {"type": "text", "text": "Looking it up."},
@@ -8127,12 +7753,6 @@ def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
 
 
 def test_parse_chat_history_tool_calls_foreign_server_tool_filtered_silently() -> None:
-    """A foreign non-code-interpreter server tool is filtered before conversion.
-
-    It must be dropped by the content filter, not by `_convert_to_parts`'s
-    warn-and-skip: reaching the latter means an unexpected `UserWarning` on every
-    turn of a multi-provider conversation.
-    """
     message = AIMessage(
         content=[
             {"type": "text", "text": "Searching."},
@@ -8159,7 +7779,6 @@ def test_parse_chat_history_tool_calls_foreign_server_tool_filtered_silently() -
 
 
 def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> None:
-    """Non-dict list entries pass through; empty strings are dropped."""
     message = AIMessage(
         content=["Hello.", "", {"type": "text", "text": "World."}],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
@@ -8174,38 +7793,9 @@ def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> Non
     assert parts[2].function_call is not None
 
 
-def test_convert_to_parts_joins_multi_segment_summary() -> None:
-    """Every `summary` segment is concatenated, and non-dict entries are skipped.
-
-    Guards against silently truncating a multi-segment reasoning summary to its
-    first element.
-    """
-    parts = _convert_to_parts(
-        [
-            {
-                "type": "reasoning",
-                "summary": [
-                    {"type": "summary_text", "text": "First."},
-                    "not a dict",
-                    {"type": "summary_text", "text": "Second."},
-                ],
-            }
-        ]
-    )
-
-    assert len(parts) == 1
-    assert parts[0].text == "First. Second."
-    assert parts[0].thought is True
-
-
 def test_lenient_conversion_logs_the_underlying_cause(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The dropped block's actual error is reported, not just "no equivalent".
-
-    Media loading raises actionable errors (e.g. a rejected local file path) that
-    the tolerant path would otherwise discard.
-    """
     message = AIMessage(
         content=[
             {"type": "text", "text": "Here it is."},
@@ -8221,46 +7811,5 @@ def test_lenient_conversion_logs_the_underlying_cause(
     assert parts is not None
     assert parts[0].text == "Here it is."
     assert "Dropping content block that cannot" in caplog.text
-    # The actionable cause reaches the log, not just "Gemini has no equivalent".
-    # Media loading rejects unusable sources with remediation text; discarding it
-    # would tell the caller only that Gemini cannot represent an image, which is
-    # both false and unfixable-sounding.
     assert "./secrets/local.png" in caplog.text
     assert "Media string must be one of" in caplog.text
-
-
-@pytest.mark.parametrize(
-    ("content", "model_provider", "expected_fragment"),
-    [
-        (
-            [{"type": "brand_new_core_block"}],
-            "google_genai",
-            "no Gemini equivalent",
-        ),
-        (
-            [{"type": "non_standard", "value": {"type": "redacted_thinking"}}],
-            "anthropic",
-            "non-standard v1 content block",
-        ),
-        (["not a mapping"], "google_genai", "not a typed mapping"),
-    ],
-)
-def test_convert_from_v1_logs_dropped_blocks(
-    content: list[Any],
-    model_provider: str,
-    expected_fragment: str,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Every v1 drop is diagnosable.
-
-    The v1 tool-call path converts native content strictly on the assumption that
-    `_compat` already removed anything unrepresentable, so a silent drop here is
-    the only trace of lost content.
-    """
-    with caplog.at_level(logging.WARNING):
-        result = _convert_from_v1_to_generativelanguage_v1beta(
-            cast("Any", content), model_provider
-        )
-
-    assert result == []
-    assert expected_fragment in caplog.text

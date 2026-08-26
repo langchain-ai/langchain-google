@@ -327,28 +327,13 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
-# THE EMPTY-PART RULE, referenced throughout this module: the Gemini API rejects a
-# part that carries no payload, and on thinking-enabled turns the thought signature
-# *is* the payload it requires to be echoed back. A signature-only block is
-# therefore kept; a genuinely empty one is not.
-# (`ChatGoogleGenerativeAI._filter_messages` deliberately sends an empty text part
-# for Vertex AI, which is a separate, endpoint-specific allowance.)
+# Gemini rejects empty parts, but a thought signature is itself a replayable payload.
 
 
 def _decode_signature(sig: Any) -> bytes | None:
-    """Decode a thought signature to the raw bytes the Gemini API expects.
+    """Decode a serialized thought signature to Gemini's byte representation.
 
-    Signatures cross process boundaries base64-encoded (that is how they survive
-    JSON serialization in a checkpoint) but reach the API as bytes.
-
-    Args:
-        sig: A base64-encoded `str`, raw `bytes`, or any other value.
-
-    Returns:
-        The signature as bytes, or `None` if there is no usable signature.
-
-    Raises:
-        binascii.Error: If `sig` is a `str` that is not valid base64.
+    Checkpoints store signatures as base64 strings, while the SDK accepts bytes.
     """
     if isinstance(sig, str):
         return base64.b64decode(sig) or None
@@ -358,18 +343,7 @@ def _decode_signature(sig: Any) -> bytes | None:
 
 
 def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
-    """Return the thought signature carried by a content block, if any.
-
-    Signatures live under `thought_signature` on Vertex text blocks, at the top
-    level under `signature` on v0 `thinking` blocks, and under `extras` on v1
-    `reasoning` and `text` blocks.
-
-    Args:
-        block: The content block to inspect.
-
-    Returns:
-        The signature value, or `None` if the block carries none.
-    """
+    """Read a signature from its v0, v1, or Vertex location."""
     extras = block.get("extras")
     return (
         block.get("thought_signature")
@@ -379,19 +353,10 @@ def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
 
 
 def _is_redundant_v1beta_part(block: Any) -> bool:
-    """Whether an already-converted v1beta part must be dropped before conversion.
+    """Check whether a projected part duplicates a call or is truly empty.
 
-    Function calls are rebuilt from `message.tool_calls` so that they are emitted
-    exactly once. Text parts are dropped per the empty-part rule near the top of
-    this module, so a part whose text is empty but which carries a signature is
-    kept.
-
-    Args:
-        block: A block from an `AIMessage` whose content was already projected to
-            v1beta dicts by `_convert_from_v1_to_generativelanguage_v1beta`.
-
-    Returns:
-        `True` if the block must not be converted to a part.
+    Signature-only parts are intentionally retained because Gemini requires their
+    signatures to be replayed even when they contain no text.
     """
     if not isinstance(block, dict):
         return False
@@ -407,21 +372,7 @@ def _is_redundant_v1beta_part(block: Any) -> bool:
 
 
 def _v1beta_dict_to_part(part: Mapping[str, Any]) -> Part | None:
-    """Convert an already-projected `generativelanguage_v1beta` dict to a `Part`.
-
-    `_convert_from_v1_to_generativelanguage_v1beta` projects v1 content blocks to
-    plain v1beta dicts, which carry no `type` key and so are identified by which
-    keys they hold. The `_parse_chat_history` tool-call branch routes v1-converted
-    content through here.
-
-    Args:
-        part: A mapping with no `type` key, as emitted by
-            `_convert_from_v1_to_generativelanguage_v1beta`.
-
-    Returns:
-        The corresponding `Part`, or `None` if `part` is not one of the shapes that
-        function emits.
-    """
+    """Validate a type-less projected v1beta dictionary as a Gemini part."""
     if not set(part).intersection(Part.model_fields):
         return None
     return Part.model_validate(part)
@@ -1019,36 +970,16 @@ def _convert_to_parts_lenient(
     content: list[Any],
     model: str | None = None,
 ) -> list[Part]:
-    """Convert content to parts, dropping any block that fails to convert.
+    """Convert foreign content one block at a time, dropping invalid blocks.
 
-    For content that may carry another provider's blocks, where an unconvertible
-    block is an expected occurrence in a multi-provider history rather than a
-    programming error. Native content is converted with `_convert_to_parts`
-    directly, so that a failure surfaces instead of silently changing the request.
-
-    Each block is converted on its own so that one unconvertible block does not
-    discard its neighbors. Note that a whole-list attempt cannot be used as a fast
-    path here: `_convert_to_parts` fetches remote media, so retrying after a
-    failure would re-download every image preceding the failing block.
-
-    Args:
-        content: The content blocks to convert.
-        model: The model name, used for version-specific logic.
-
-    Returns:
-        The convertible blocks as parts, in their original order.
+    Per-block conversion preserves valid neighbors without retrying media downloads
+    that occurred before a failing block.
     """
     parts: list[Part] = []
     for block in content:
         try:
             parts.extend(_convert_to_parts([block], model=model))
         except (ValueError, ChatGoogleGenerativeAIError) as exc:
-            # `ValueError` covers both the unrecognized-part-type error and the
-            # `pydantic.ValidationError`/`binascii.Error` raised by a malformed
-            # payload; `ChatGoogleGenerativeAIError` covers a block that is
-            # neither a string nor a mapping. The cause is logged because it is
-            # not always "Gemini has no equivalent" -- it may be an actionable
-            # message from media loading (e.g. a rejected local file path).
             logger.warning(
                 "Dropping content block that cannot be represented as a Gemini "
                 "part (type: %s): %s",
@@ -1059,17 +990,7 @@ def _convert_to_parts_lenient(
 
 
 def _as_gemini_media_block(block: Mapping[str, Any]) -> dict[str, Any]:
-    """Re-tag a raw Gemini `file_data` block as a `media` block.
-
-    `_convert_to_parts` has no `file_data` branch; the `media` shape with
-    `file_uri` is the Gemini-native equivalent it converts.
-
-    Args:
-        block: A raw `file_data` block carrying a `file_uri`.
-
-    Returns:
-        The equivalent `media` block.
-    """
+    """Re-tag raw Gemini file data for the shared media converter."""
     return {
         "type": "media",
         "file_uri": block["file_uri"],
@@ -1078,18 +999,7 @@ def _as_gemini_media_block(block: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
-    """Whether `block` is a function call that is rebuilt from `message.tool_calls`.
-
-    `_convert_to_parts` has no `tool_call` branch, so leaving these in would raise;
-    they would also duplicate every call. Foreign messages reach the filter via
-    `content_blocks`, which can include these blocks.
-
-    Args:
-        block: The content block to test.
-
-    Returns:
-        `True` if the block must be dropped.
-    """
+    """Check whether a block is rebuilt from `message.tool_calls`."""
     return block.get("type") in (
         "tool_call",
         "tool_call_chunk",
@@ -1101,14 +1011,7 @@ def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
 def _function_call_signatures_from_content(
     message: AIMessage,
 ) -> dict[int, str | bytes]:
-    """Extract legacy function-call signature sidecars from message content.
-
-    Args:
-        message: AI message whose tool calls are being rebuilt.
-
-    Returns:
-        Signature values keyed by their corresponding tool-call index.
-    """
+    """Index legacy function-call signature sidecars by tool call."""
     if _classify_model_provider(
         message.response_metadata.get("model_provider")
     ) == "foreign" or not isinstance(message.content, list):
@@ -1137,17 +1040,10 @@ def _function_call_signatures_from_content(
 def _is_unsupported_foreign_server_tool(
     block: Mapping[str, Any], code_interpreter_call_ids: Container[str]
 ) -> bool:
-    """Whether `block` is another provider's server tool that Gemini cannot replay.
+    """Check whether a foreign server-tool block has a Gemini equivalent.
 
-    Code interpreter calls map onto Gemini's `executable_code`; nothing else does.
-    A result is kept only when its call was kept, so no orphan result is sent.
-
-    Args:
-        block: The content block to test.
-        code_interpreter_call_ids: Ids of the code-interpreter calls being kept.
-
-    Returns:
-        `True` if the block must be dropped.
+    Code-interpreter calls map to executable code; their results are retained only
+    when the corresponding call was retained.
     """
     block_type = block.get("type")
     if block_type == "server_tool_call":
@@ -1158,18 +1054,10 @@ def _is_unsupported_foreign_server_tool(
 
 
 def _strip_foreign_signature(block: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Return `block` without any thought signature another provider attached.
+    """Return a block without another provider's thought signature.
 
-    Signatures from other providers are not meaningful to Google. Stripping must
-    happen before the empty-block check: a block whose only payload is a foreign
-    signature would otherwise survive on the strength of that signature and then
-    emit an empty part. See the empty-part rule near the top of this module.
-
-    Args:
-        block: The content block to strip.
-
-    Returns:
-        `block` unchanged if it carries no signature, otherwise a stripped copy.
+    This runs before empty-block filtering so a signature-only foreign block does
+    not become an invalid empty Gemini part after its signature is removed.
     """
     extras = block.get("extras")
     extras_has_signature = isinstance(extras, dict) and "signature" in extras
@@ -1189,15 +1077,7 @@ def _strip_foreign_signature(block: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
-    """Whether `block` is a text/thought block with no payload at all.
-
-    Args:
-        block: The content block to test.
-
-    Returns:
-        `True` if the block carries neither text nor a thought signature, and so
-        must be dropped per the empty-part rule near the top of this module.
-    """
+    """Check whether a text or thought block has no replayable payload."""
     if block.get("type") not in ("text", "thinking", "reasoning"):
         return False
     has_text = (
@@ -1210,14 +1090,7 @@ def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
 
 
 def _content_block_file_uri(block: Any) -> Any:
-    """Return the file URI carried by any supported content-block shape.
-
-    Args:
-        block: Raw, standardized, or projected content block.
-
-    Returns:
-        The block's file URI or `None` when it has no file reference.
-    """
+    """Return the URI carried by any supported file block shape."""
     if not isinstance(block, Mapping):
         return None
     file_data = block.get("file_data")
@@ -1241,15 +1114,7 @@ def _content_block_file_uri(block: Any) -> Any:
 def _drop_unsupported_file_references(
     content: list[Any], *, use_vertexai: bool
 ) -> list[Any]:
-    """Drop history file references that the target backend cannot consume.
-
-    Args:
-        content: Prepared AI-message content blocks.
-        use_vertexai: Whether the target is the Vertex AI backend.
-
-    Returns:
-        Content without backend-specific file references unsupported by the target.
-    """
+    """Drop file references unsupported by the target backend."""
     filtered: list[Any] = []
     for block in content:
         file_uri = _content_block_file_uri(block)
@@ -1266,44 +1131,20 @@ def _drop_unsupported_file_references(
 def _prepare_ai_message_content(
     message: AIMessage, *, exclude_function_calls: bool
 ) -> list[Any]:
-    """Prepare non-v1 `AIMessage` content for provider-aware conversion.
+    """Normalize non-v1 AI content for provider-aware conversion.
 
-    When function calls are rebuilt from `message.tool_calls`, strips their valid
-    and invalid content blocks. Normalizes another provider's blocks regardless of
-    whether the message has tool calls, so foreign signatures never reach Gemini.
-    Foreign code-interpreter calls are retained; their results only when matched.
-
-    Args:
-        message: The `AIMessage` whose content should be prepared.
-        exclude_function_calls: Whether function-call blocks should be omitted
-            because they will be rebuilt from `message.tool_calls`.
-
-    Returns:
-        The content to convert as a list, with provider-native blocks normalized as
-        needed, function-call blocks optionally removed, another provider's
-        signatures stripped, unreplayable foreign server tool blocks dropped, and
-        text/thought blocks that carry neither text nor a signature dropped. String
-        content is wrapped in a list (empty string yields an empty list, per the
-        empty-part rule near the top of this module).
+    Foreign messages use LangChain's standardized blocks. Native messages retain
+    their raw blocks because core may wrap valid Gemini media as `non_standard`.
     """
     provider_kind = _classify_model_provider(
         message.response_metadata.get("model_provider")
     )
     is_foreign = provider_kind == "foreign"
-    # Only foreign messages are read from `content_blocks`: they need core's
-    # standardization to shapes `_convert_to_parts` understands, and anything
-    # core cannot standardize is safe to drop because it is not Google's.
-    # Native and unstamped messages are read from raw `content`: core projects
-    # Google's own `thinking` and `media` blocks to `non_standard`, which would
-    # discard genuine signatures and silently drop media blocks mixed with
-    # native function calls. Raw `function_call`/`file_data` blocks are
-    # normalized individually below.
+    # Core standardizes foreign blocks, but can wrap native Gemini blocks as
+    # `non_standard`, so native and unstamped messages use their raw content.
     content = message.content_blocks if is_foreign else message.content
 
     if not isinstance(content, list):
-        # A bare string is returned as a single-element list so that callers never
-        # have to re-handle the scalar case (iterating a `str` would yield one part
-        # per character). Empty text carries no information and is dropped.
         return [content] if content else []
 
     code_interpreter_call_ids: set[str] = set()
@@ -1337,11 +1178,8 @@ def _prepare_ai_message_content(
             )
             continue
         if exclude_function_calls and block_type == "function_call":
-            # Raw Gemini function call: the equivalent part is rebuilt from
-            # `message.tool_calls`, so the block must not be converted twice.
             continue
         if block_type == "file_data" and "file_uri" in block:
-            # Raw Gemini file reference: re-tag so `_convert_to_parts` handles it.
             filtered.append(_as_gemini_media_block(block))
             continue
         candidate: Mapping[str, Any] = block
@@ -1362,21 +1200,10 @@ def _convert_ai_message_content(
     exclude_function_calls: bool,
     use_vertexai: bool,
 ) -> list[Part]:
-    """Convert an AI message's non-authoritative content to Gemini parts.
+    """Convert AI content while treating `message.tool_calls` as authoritative.
 
-    `message.tool_calls` is the authoritative function-call representation. V1
-    content is first projected to Gemini-compatible dictionaries; other content
-    uses the provider-aware normalization path when function calls must be removed.
-
-    Args:
-        message: The AI message to convert.
-        model: The target model name, used for version-specific media behavior.
-        exclude_function_calls: Whether function-call blocks should be omitted
-            because they will be rebuilt from `message.tool_calls`.
-        use_vertexai: Whether the target is the Vertex AI backend.
-
-    Returns:
-        Converted Gemini parts.
+    Native content is validated strictly; foreign and provider-less content is
+    converted leniently so unsupported provider-specific blocks do not abort replay.
     """
     provider_kind = _classify_model_provider(
         message.response_metadata.get("model_provider")
