@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 import os
 import warnings
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -71,6 +72,7 @@ from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai.chat_models import (
+    DUMMY_THOUGHT_SIGNATURE,
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
     GoogleContextOverflowError,
@@ -174,7 +176,7 @@ def test_integration_initialization() -> None:
 def test_empty_ai_message_content_is_normalized_for_vertex(
     response_metadata: dict[str, str], vertexai: bool
 ) -> None:
-    """Test empty AI content lists become empty text parts for Vertex only."""
+    """Test empty AI content lists never produce a partless model turn."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
@@ -192,11 +194,8 @@ def test_empty_ai_message_content_is_normalized_for_vertex(
     empty_ai_content = request["contents"][1]
     assert empty_ai_content.role == "model"
     assert empty_ai_content.parts is not None
-    if vertexai:
-        assert len(empty_ai_content.parts) == 1
-        assert empty_ai_content.parts[0].text == ""
-    else:
-        assert empty_ai_content.parts == []
+    assert len(empty_ai_content.parts) == 1
+    assert empty_ai_content.parts[0].text == ""
 
 
 def test_seed_initialization() -> None:
@@ -2922,7 +2921,7 @@ def test_thought_signature_conversion() -> None:
         [reasoning_other_provider],  # type: ignore[list-item]
         "other_provider",
     )
-    assert result == []
+    assert result == [{"thought": True, "text": "thinking..."}]
 
 
 def test_compat_image_url_block() -> None:
@@ -3082,13 +3081,8 @@ def test_signature_round_trip_conversion() -> None:
     with patch.object(
         llm.client.models, "generate_content", return_value=mock_response
     ):
-        # First call - get response with signatures
         result = llm.invoke("Test message")
-
-        # Verify signatures were extracted
         assert isinstance(result.content, list)
-
-        # Find blocks with signatures
         sig_blocks = []
         for block in result.content:
             if isinstance(block, dict):
@@ -3101,7 +3095,6 @@ def test_signature_round_trip_conversion() -> None:
             f"Expected signature blocks, got content: {result.content}"
         )
 
-        # Now simulate passing this result back in a conversation
         with patch(
             "langchain_google_genai.chat_models._convert_from_v1_to_generativelanguage_v1beta"
         ) as mock_convert:
@@ -3111,14 +3104,11 @@ def test_signature_round_trip_conversion() -> None:
 
             mock_convert.side_effect = real_convert
 
-            # Create conversation with the signature-containing message
             conversation = [
                 HumanMessage(content="First message"),
-                result,  # This contains signatures
+                result,
                 HumanMessage(content="Follow up"),
             ]
-
-            # Set up mock for the follow-up response
             follow_up_response = GenerateContentResponse(
                 candidates=[
                     Candidate(content=Content(parts=[Part(text="Follow up response")]))
@@ -3130,10 +3120,7 @@ def test_signature_round_trip_conversion() -> None:
             ):
                 follow_up = llm.invoke(conversation)
 
-            # Verify conversion was called
             assert mock_convert.call_count >= 1
-
-            # Find calls with signatures
             calls_with_signatures = []
             for call in mock_convert.call_args_list:
                 content_blocks, model_provider = call[0]
@@ -3155,17 +3142,12 @@ def test_signature_round_trip_conversion() -> None:
                 "Expected at least one call to convert signatures"
             )
 
-            # Verify follow-up succeeded
             assert isinstance(follow_up, AIMessage)
             assert follow_up.content is not None
 
 
 def test_parse_response_candidate_adds_index_to_signature() -> None:
-    """Test _parse_response_candidate adds index to function_call_signature blocks."""
-    # Mock a candidate with thinking and function call with signature
     part1 = Part(text="Thinking...", thought=True)
-
-    # Signature must be bytes
     sig = b"mysig"
     part2 = Part(
         function_call=FunctionCall(name="tool", args={}), thought_signature=sig
@@ -3182,12 +3164,8 @@ def test_parse_response_candidate_adds_index_to_signature() -> None:
 
 
 def test_parse_chat_history_uses_index_for_signature() -> None:
-    """Test _parse_chat_history uses the index field to map signatures to tool calls."""
     sig_bytes = b"dummy_signature"
     sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
-
-    # Content with thinking block (index 0) and signature block (index 1)
-    # The signature block points to tool call index 0
     content = [{"type": "thinking", "thinking": "I should use the tool."}]
 
     tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
@@ -3200,25 +3178,1506 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
         },
     )
 
-    # Parse the history
     _, formatted_messages = _parse_chat_history([message])
-
-    # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert model_content.parts is not None
     assert len(model_content.parts) == 2
 
-    # First part should be the thinking text (thinking blocks come first)
     thinking_part = model_content.parts[0]
     assert thinking_part.thought is True
     assert thinking_part.text == "I should use the tool."
 
-    # Second part should be the function call with signature
     function_part = model_content.parts[1]
     assert function_part.function_call is not None
     assert function_part.function_call.name == "my_tool"
     assert function_part.thought_signature == sig_bytes
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_text", "expected_thought", "expected_signature"),
+    [
+        pytest.param(
+            "Let me look that up.",
+            "Let me look that up.",
+            None,
+            None,
+            id="string",
+        ),
+        pytest.param(
+            [{"type": "text", "text": "One moment."}],
+            "One moment.",
+            None,
+            None,
+            id="text-block",
+        ),
+        pytest.param(
+            [{"type": "thinking", "thinking": "Thinking.", "signature": "c2ln"}],
+            "Thinking.",
+            True,
+            b"sig",
+            id="v0-thinking",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "reasoning",
+                    "reasoning": "Thinking.",
+                    "extras": {"signature": "c2ln"},
+                }
+            ],
+            "Thinking.",
+            True,
+            b"sig",
+            id="v1-reasoning",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_preserves_content(
+    content: str | list[str | dict[Any, Any]],
+    expected_text: str,
+    expected_thought: bool | None,
+    expected_signature: bytes | None,
+) -> None:
+    """Preserve assistant content beside tool calls (regression for #1706)."""
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == expected_text
+    assert parts[0].thought is expected_thought
+    assert parts[0].thought_signature == expected_signature
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
+    """Preserve signed reasoning through v1 projection (regression for #1964)."""
+    sig_bytes = b"thinking_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+    v1_message = message.model_copy(
+        update={
+            "content": message.content_blocks,
+            "response_metadata": {
+                **message.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+    assert v1_message.content[0]["type"] == "reasoning"  # type: ignore[index]
+    assert any(
+        isinstance(block, dict) and block.get("type") == "tool_call"
+        for block in v1_message.content
+    )
+
+    _, formatted_messages = _parse_chat_history([v1_message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    thought_parts = [part for part in parts if part.thought]
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(thought_parts) == 1
+    assert len(function_call_parts) == 1
+    assert thought_parts[0].text == "Let me think."
+    assert thought_parts[0].thought_signature == sig_bytes
+    assert function_call_parts[0].function_call is not None
+    assert function_call_parts[0].function_call.name == "search"
+    assert function_call_parts[0].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Let me look that up."},
+            {
+                "type": "tool_use",
+                "id": "call_1",
+                "name": "search",
+                "input": {"q": "x"},
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Let me look that up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert parts[1].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_tool_calls_drops_invalid_foreign_calls() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "function_call",
+                "name": "search",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+            {
+                "type": "function_call",
+                "name": "broken",
+                "arguments": "{",
+                "call_id": "call_bad",
+                "id": "fc_bad",
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        invalid_tool_calls=[
+            {
+                "name": "broken",
+                "args": "{",
+                "id": "call_bad",
+                "error": "Invalid JSON",
+            }
+        ],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_drops_foreign_web_search_pair() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "web_search_call",
+                "id": "ws_1",
+                "status": "completed",
+                "action": {
+                    "type": "search",
+                    "query": "weather",
+                    "sources": [{"type": "url", "url": "https://example.com/weather"}],
+                },
+            },
+            {
+                "type": "function_call",
+                "name": "lookup",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+        ],
+        tool_calls=[{"name": "lookup", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "lookup"
+    assert parts[0].code_execution_result is None
+
+
+def test_parse_chat_history_tool_calls_keeps_foreign_code_interpreter_pair() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "code_interpreter_call",
+                "id": "ci_1",
+                "code": "print(1)",
+                "outputs": ["1"],
+                "status": "completed",
+            },
+            {
+                "type": "function_call",
+                "name": "lookup",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+        ],
+        tool_calls=[{"name": "lookup", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 3
+    assert parts[0].executable_code is not None
+    assert parts[0].executable_code.code == "print(1)"
+    assert parts[1].code_execution_result is not None
+    assert parts[1].code_execution_result.output == "['1']"
+    assert parts[2].function_call is not None
+    assert parts[2].function_call.name == "lookup"
+
+
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "redacted_thinking", "data": "encrypted"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [
+                {
+                    "type": "non_standard",
+                    "value": {"type": "redacted_thinking", "data": "encrypted"},
+                }
+            ],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_drops_foreign_non_standard_block(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response_metadata = {"model_provider": "anthropic"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert "Dropping" in caplog.text
+
+
+def test_parse_chat_history_without_tool_calls_drops_foreign_non_standard() -> None:
+    signature = base64.b64encode(b"anthropic_signature").decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Visible response."},
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "thinking",
+                    "thinking": "Private reasoning.",
+                    "signature": signature,
+                },
+            },
+        ],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == "Visible response."
+    assert parts[0].thought_signature is None
+
+
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "media", "mime_type": "image/png", "data": "invalid!!"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [{"type": "image", "mime_type": "image/png", "base64": "invalid!!"}],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_drops_malformed_foreign_media(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drop malformed foreign media without losing an otherwise valid tool call."""
+    response_metadata = {"model_provider": "openai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert "Dropping" in caplog.text
+
+
+def test_parse_chat_history_falls_back_for_foreign_server_tools(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Avoid a partless model turn when every foreign server-tool block is dropped."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "server_tool_call",
+                "name": "web_search",
+                "id": "srv_1",
+                "args": {"query": "x"},
+            },
+            {
+                "type": "server_tool_result",
+                "tool_call_id": "srv_1",
+                "status": "success",
+                "output": {},
+            },
+        ],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history(
+            [HumanMessage("hi"), message, HumanMessage("again")],
+            model=MODEL_NAME,
+        )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+    assert "AI message at index 1" in caplog.text
+    assert "2 content block(s) were dropped" in caplog.text
+
+
+def test_parse_chat_history_falls_back_for_unsupported_vertex_gcs() -> None:
+    """Avoid a partless model turn when Developer API replay drops Vertex GCS."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            }
+        ],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_parse_chat_history_falls_back_for_unsigned_v1_reasoning() -> None:
+    """Avoid a partless model turn when v1 reasoning has no thought signature."""
+    message = AIMessage(
+        content=[{"type": "reasoning", "reasoning": "hmm"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_parse_chat_history_falls_back_for_invalid_unknown_provider_media() -> None:
+    """Avoid a partless model turn when the only unknown-provider block is invalid."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "mime_type": "image/png",
+                "data": "not valid base64!!",
+            }
+        ]
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_filter_messages_empty_foreign_vertex_model_turn_remains_replayable() -> None:
+    """Preserve the Vertex empty-content workaround through foreign block filtering."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    message = AIMessage(
+        content=[],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    request = llm._prepare_request([HumanMessage("hi"), message, HumanMessage("again")])
+
+    parts = request["contents"][1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "media", "mime_type": "image/png", "data": "invalid!!"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [{"type": "image", "mime_type": "image/png", "base64": "invalid!!"}],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_rejects_malformed_native_media(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+) -> None:
+    """Keep native replay strict so invalid input cannot silently change a request."""
+    response_metadata = {"model_provider": "google_genai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    with pytest.raises(ValueError, match="valid base64"):
+        _parse_chat_history([message])
+
+
+def test_convert_to_parts_still_raises_on_unknown_type() -> None:
+    with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
+        _convert_to_parts([{"type": "bogus"}])
+
+
+@pytest.mark.parametrize(
+    ("message_type", "content"),
+    [
+        pytest.param(
+            HumanMessage,
+            [{"text": "hi", "index": 0}],
+            id="human-index",
+        ),
+        pytest.param(
+            HumanMessage,
+            [{"text": "hi", "id": "x"}],
+            id="human-id",
+        ),
+        pytest.param(
+            SystemMessage,
+            [{"text": "hi", "index": 0}],
+            id="system-index",
+        ),
+        pytest.param(
+            SystemMessage,
+            [{"text": "hi", "id": "x"}],
+            id="system-id",
+        ),
+    ],
+)
+def test_parse_chat_history_tolerates_extra_keys_in_typeless_parts(
+    message_type: type[HumanMessage] | type[SystemMessage],
+    content: list[str | dict[Any, Any]],
+) -> None:
+    """Keep permissive typeless-dict fallback for human and system messages."""
+    system_instruction, formatted_messages = _parse_chat_history(
+        [message_type(content=content)]
+    )
+
+    if message_type is SystemMessage:
+        assert system_instruction is not None
+        parts = system_instruction.parts
+    else:
+        parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts == [Part(text=str(content[0]))]
+
+
+def test_convert_to_parts_accepts_projected_typeless_text() -> None:
+    """Keep valid projected text dictionaries on the v1beta conversion path."""
+    parts = _convert_to_parts(
+        [{"text": "hi"}],
+        allow_v1beta_dicts=True,
+    )
+
+    assert parts == [Part(text="hi")]
+
+
+def test_parse_chat_history_v1_projected_parts_round_trip() -> None:
+    """Convert every projected v1beta replay shape into a real Gemini part."""
+    projected_content = [
+        {"text": "hi", "thought_signature": "c2ln"},
+        {"inline_data": {"mime_type": "image/png", "data": "aW1hZ2U="}},
+        {
+            "file_data": {
+                "mime_type": "application/pdf",
+                "file_uri": "files/document",
+            }
+        },
+        {"thought": True, "text": "Thinking."},
+    ]
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with patch(
+        "langchain_google_genai.chat_models."
+        "_convert_from_v1_to_generativelanguage_v1beta",
+        return_value=projected_content,
+    ):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 4
+    assert parts[0].text == "hi"
+    assert parts[0].thought_signature == b"sig"
+    assert parts[1].inline_data == Blob(mime_type="image/png", data=b"image")
+    assert parts[2].file_data is not None
+    assert parts[2].file_data.mime_type == "application/pdf"
+    assert parts[2].file_data.file_uri == "files/document"
+    assert parts[3].thought is True
+    assert parts[3].text == "Thinking."
+
+
+def test_parse_chat_history_rejects_malformed_native_v1beta_projection() -> None:
+    """Surface invalid projected dictionaries during strict native v1 replay."""
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with (
+        patch(
+            "langchain_google_genai.chat_models."
+            "_convert_from_v1_to_generativelanguage_v1beta",
+            return_value=[{"text": "hi", "index": 0}],
+        ),
+        pytest.raises(ValidationError),
+    ):
+        _parse_chat_history([message])
+
+
+def test_parse_chat_history_drops_malformed_foreign_v1beta_projection(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drop invalid projected dictionaries during lenient foreign v1 replay."""
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    with (
+        patch(
+            "langchain_google_genai.chat_models."
+            "_convert_from_v1_to_generativelanguage_v1beta",
+            return_value=[{"text": "hi", "id": "x"}],
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts == [Part(text="")]
+    assert "Dropping content block that cannot be represented" in caplog.text
+
+
+def test_parse_chat_history_preserves_human_non_standard_media() -> None:
+    message = HumanMessage(
+        content_blocks=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "mime_type": "image/png",
+                    "data": base64.b64encode(b"image data").decode("ascii"),
+                },
+            }
+        ]
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == "image/png"
+    assert parts[0].inline_data.data == b"image data"
+
+
+def test_parse_chat_history_preserves_native_ai_non_standard_media() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "mime_type": "audio/mpeg",
+                    "file_uri": "files/native-audio",
+                },
+            }
+        ],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.mime_type == "audio/mpeg"
+    assert parts[0].file_data.file_uri == "files/native-audio"
+
+
+def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "mime_type": "image/png",
+                "data": base64.b64encode(b"foreign image").decode("ascii"),
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_foreign_reasoning_block(
+    output_version: str | None,
+) -> None:
+    """Replay OpenAI summary reasoning safely (regression for #1603)."""
+    response_metadata = {"model_provider": "openai"}
+    if output_version:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "I should search."}],
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "I should search."
+    assert parts[0].thought_signature is None
+    assert parts[1].function_call is not None
+
+
+def test_convert_to_parts_openai_summary_reasoning_without_metadata() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "id": "rs_abc123",
+                "summary": [
+                    {"type": "summary_text", "text": "Let me think step by step..."}
+                ],
+            },
+            {"type": "text", "text": "The answer is 4."},
+        ],
+        tool_calls=[],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "Let me think step by step..."
+    assert parts[1].thought is not True
+    assert parts[1].text == "The answer is 4."
+
+
+def test_convert_to_parts_reasoning_summary_not_a_list_is_dropped() -> None:
+    assert _convert_to_parts([{"type": "reasoning", "summary": "notalist"}]) == []
+
+
+def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Let me look that up."},
+            {"type": "tool_use", "id": "call_1", "name": "search", "input": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Let me look that up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert "Dropping content block that cannot" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("model_provider", "output_version", "content", "expected"),
+    [
+        *[
+            pytest.param(
+                provider,
+                None,
+                [{"type": "thinking", "thinking": "Thinking.", "signature": "c2ln"}],
+                [("Thinking.", True)],
+                id=f"{provider}-v0-thinking",
+            )
+            for provider in ("google_genai", "google_vertexai")
+        ],
+        *[
+            pytest.param(
+                provider,
+                "v1",
+                [
+                    {
+                        "type": "reasoning",
+                        "reasoning": "Thinking.",
+                        "extras": {"signature": "c2ln"},
+                    },
+                    {
+                        "type": "text",
+                        "text": "Answer.",
+                        "extras": {"signature": "c2ln"},
+                    },
+                ],
+                [("Thinking.", True), ("Answer.", None)],
+                id=f"{provider}-v1-content",
+            )
+            for provider in ("google_genai", "google_vertexai")
+        ],
+        *[
+            pytest.param(
+                "google_vertexai",
+                output_version,
+                [{"type": "text", "text": "Answer.", "thought_signature": "c2ln"}],
+                [("Answer.", None)],
+                id=f"vertex-text-{output_version or 'v0'}",
+            )
+            for output_version in (None, "v1")
+        ],
+    ],
+)
+def test_parse_chat_history_preserves_native_signatures(
+    model_provider: str,
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    expected: list[tuple[str, bool | None]],
+) -> None:
+    """Treat Vertex and Developer API signatures as the same native format."""
+    response_metadata = {"model_provider": model_provider}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == len(expected) + 1
+    assert [(part.text, part.thought) for part in parts[:-1]] == expected
+    assert all(part.thought_signature == b"sig" for part in parts[:-1])
+    assert parts[-1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_unknown_provider_preserves_signature() -> (
+    None
+):
+    signature = base64.b64encode(b"checkpoint_sig").decode("ascii")
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "reasoning": "Thinking.",
+                "extras": {"signature": signature},
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"output_version": "v1"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "Thinking."
+    assert parts[0].thought_signature == b"checkpoint_sig"
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_summary_reasoning_kept_without_metadata() -> (
+    None
+):
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "I should search."}],
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "I should search."
+
+
+@pytest.mark.parametrize(
+    ("block", "response_metadata", "expected_signature"),
+    [
+        pytest.param(
+            {"type": "thinking", "thinking": "", "signature": "c2ln"},
+            {},
+            b"sig",
+            id="v0-thinking",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
+            {},
+            b"sig",
+            id="v0-reasoning",
+        ),
+        pytest.param(
+            {"type": "text", "text": "", "extras": {"signature": "c2ln"}},
+            {},
+            b"sig",
+            id="v0-text",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
+            {"model_provider": "google_genai", "output_version": "v1"},
+            b"sig",
+            id="v1-signed",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": ""},
+            {"model_provider": "google_genai", "output_version": "v1"},
+            None,
+            id="v1-unsigned",
+        ),
+    ],
+)
+def test_parse_chat_history_handles_empty_thought_blocks(
+    block: dict[str, Any],
+    response_metadata: dict[str, Any],
+    expected_signature: bytes | None,
+) -> None:
+    """Retain signature-only thoughts while dropping genuinely empty thoughts."""
+    message = AIMessage(
+        content=[block],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [message], model="gemini-3.1-pro-preview"
+    )
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    content_parts = [part for part in parts if part.function_call is None]
+    if expected_signature is None:
+        assert content_parts == []
+    else:
+        assert len(content_parts) == 1
+        assert content_parts[0].thought_signature == expected_signature
+        assert content_parts[0].thought_signature != DUMMY_THOUGHT_SIGNATURE
+    assert len([part for part in parts if part.function_call is not None]) == 1
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_text", "expected_thought"),
+    [
+        pytest.param(
+            {"type": "text", "text": "Looking it up."},
+            "Looking it up.",
+            None,
+            id="text",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "I should search."},
+            "I should search.",
+            True,
+            id="reasoning",
+        ),
+        pytest.param(
+            {"type": "text", "text": ""},
+            None,
+            None,
+            id="signature-only",
+        ),
+    ],
+)
+def test_parse_chat_history_strips_foreign_signatures(
+    block: dict[str, Any],
+    expected_text: str | None,
+    expected_thought: bool | None,
+) -> None:
+    block["extras"] = {"signature": "b3BlbmFpX3NpZw=="}
+    message = AIMessage(
+        content=[block],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    content_parts = [part for part in parts if part.function_call is None]
+    if expected_text is None:
+        assert content_parts == []
+    else:
+        assert len(content_parts) == 1
+        assert content_parts[0].text == expected_text
+        assert content_parts[0].thought is expected_thought
+        assert content_parts[0].thought_signature is None
+    assert len([part for part in parts if part.function_call is not None]) == 1
+
+
+def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_call_chunk",
+                "name": "search",
+                "args": "{}",
+                "id": "call_1",
+                "index": 0,
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len([p for p in parts if p.function_call]) == 1
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+@pytest.mark.parametrize("index", [0, None], ids=["indexed", "unindexed"])
+def test_parse_chat_history_consumes_legacy_function_call_signature(
+    output_version: str | None,
+    index: int | None,
+) -> None:
+    """Map indexed and early unindexed signature sidecars to rebuilt calls."""
+    signature = base64.b64encode(b"legacy_sig").decode("ascii")
+    response_metadata = {"model_provider": "google_vertexai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    signature_block: dict[str, Any] = {
+        "type": "function_call_signature",
+        "signature": signature,
+    }
+    if index is not None:
+        signature_block["index"] = index
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Calling a tool."},
+            signature_block,
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Calling a tool."
+    assert parts[1].function_call is not None
+    assert parts[1].thought_signature == b"legacy_sig"
+
+
+@pytest.mark.parametrize(
+    ("model_provider", "file_uri"),
+    [
+        ("google_genai", "files/abc"),
+        ("google_vertexai", "gs://bucket/document.pdf"),
+    ],
+)
+def test_parse_chat_history_tool_calls_normalizes_native_blocks(
+    model_provider: str, file_uri: str
+) -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": file_uri,
+                "mime_type": "application/pdf",
+            },
+            {
+                "type": "function_call",
+                "name": "search",
+                "args": {"q": "x"},
+                "id": "call_1",
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": model_provider},
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [message], use_vertexai=model_provider == "google_vertexai"
+    )
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == file_uri
+    assert parts[0].file_data.mime_type == "application/pdf"
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert parts[1].function_call.args == {"q": "x"}
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(
+            {
+                "type": "file_data",
+                "file_uri": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            },
+            id="file-data",
+        ),
+        pytest.param(
+            {"type": "image_url", "image_url": {"url": "gs://bucket/image.png"}},
+            id="nested-image-url",
+        ),
+    ],
+)
+def test_parse_chat_history_drops_vertex_gcs_for_gemini_backend(
+    block: dict[str, Any],
+) -> None:
+    """Filter Vertex-only GCS references according to the destination backend."""
+    message = AIMessage(
+        content=[block],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message], use_vertexai=False)
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_prepare_request_checks_target_backend_for_vertex_gcs_history(
+    vertexai: bool,
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    message = AIMessage(
+        content=[
+            {
+                "type": "image",
+                "url": "gs://bucket/image.png",
+                "mime_type": "image/png",
+            },
+            {
+                "type": "file",
+                "url": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            },
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_vertexai",
+            "output_version": "v1",
+        },
+    )
+
+    request = llm._prepare_request([message])
+
+    parts = request["contents"][0].parts
+    assert parts is not None
+    file_uris = [
+        part.file_data.file_uri for part in parts if part.file_data is not None
+    ]
+    expected_uris = (
+        ["gs://bucket/image.png", "gs://bucket/document.pdf"] if vertexai else []
+    )
+    assert file_uris == expected_uris
+    assert len([part for part in parts if part.function_call is not None]) == 1
+
+
+@pytest.mark.parametrize(
+    ("block", "output_version", "expected_uri", "expected_mime_type"),
+    [
+        pytest.param(
+            {
+                "type": "media",
+                "file_uri": "files/native-audio",
+                "mime_type": "audio/mpeg",
+            },
+            None,
+            "files/native-audio",
+            "audio/mpeg",
+            id="v0-media",
+        ),
+        pytest.param(
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "file_uri": "files/native-audio",
+                    "mime_type": "audio/mpeg",
+                },
+            },
+            "v1",
+            "files/native-audio",
+            "audio/mpeg",
+            id="v1-non-standard-media",
+        ),
+        pytest.param(
+            {"type": "file", "file_id": "files/abc", "mime_type": "application/pdf"},
+            "v1",
+            "files/abc",
+            "application/pdf",
+            id="v1-file-id",
+        ),
+    ],
+)
+def test_parse_chat_history_replays_native_file_blocks(
+    block: dict[str, Any],
+    output_version: str | None,
+    expected_uri: str,
+    expected_mime_type: str,
+) -> None:
+    """Replay native file shapes that core may otherwise wrap as non-standard."""
+    response_metadata = {"model_provider": "google_genai"}
+    call_block_type = "function_call"
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+        call_block_type = "tool_call"
+    message = AIMessage(
+        content=[
+            block,
+            {"type": call_block_type, "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == expected_uri
+    assert parts[0].file_data.mime_type == expected_mime_type
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_foreign_file_id_dropped() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "file",
+                "file_id": "file-openai-abc",
+                "mime_type": "application/pdf",
+            },
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_v1_text_signature_decoded() -> None:
+    signature = base64.b64encode(b"text_sig").decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "hi", "extras": {"signature": signature}},
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts[0].text == "hi"
+    assert parts[0].thought_signature == b"text_sig"
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_mime_type", "expected_data"),
+    [
+        pytest.param(
+            {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"},
+            "image/png",
+            b"hello",
+            id="image",
+        ),
+        pytest.param(
+            {"type": "file", "base64": "d29ybGQ=", "mime_type": "text/plain"},
+            "text/plain",
+            b"world",
+            id="file",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_v1_preserves_inline_media(
+    block: dict[str, Any],
+    expected_mime_type: str,
+    expected_data: bytes,
+) -> None:
+    """Convert projected v1beta media dictionaries into real Gemini media parts."""
+    message = AIMessage(
+        content=[
+            block,
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == expected_mime_type
+    assert parts[0].inline_data.data == expected_data
+    assert parts[0].text is None
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_preserves_code_execution() -> None:
+    """Keep projected code execution separate from the rebuilt function call."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "server_tool_call",
+                "name": "code_interpreter",
+                "args": {"code": "print(1)", "language": "python"},
+                "id": "srv_1",
+            },
+            {
+                "type": "server_tool_result",
+                "extras": {"block_type": "code_execution_result", "outcome": 1},
+                "output": "1",
+            },
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 3
+    executable_part = parts[0]
+    assert executable_part.executable_code is not None
+    assert executable_part.executable_code.code == "print(1)"
+    assert executable_part.executable_code.language == Language.PYTHON
+    result_part = parts[1]
+    assert result_part.code_execution_result is not None
+    assert result_part.code_execution_result.output == "1"
+    assert result_part.code_execution_result.outcome == (
+        CodeExecutionResultOutcome.OUTCOME_OK
+    )
+    assert parts[2].function_call is not None
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_skips_empty_text(
+    output_version: str | None,
+) -> None:
+    response_metadata = {"model_provider": "google_genai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[{"type": "text", "text": ""}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
+    """Emit calls once when both v1 content and `tool_calls` contain them."""
+    message = AIMessage(
+        content="Searching now.",
+        tool_calls=[
+            {"name": "search", "args": {"q": "a"}, "id": "call_1"},
+            {"name": "search", "args": {"q": "b"}, "id": "call_2"},
+        ],
+        response_metadata={"model_provider": "google_genai"},
+    )
+    v1_message = message.model_copy(
+        update={
+            "content": message.content_blocks,
+            "response_metadata": {
+                **message.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+    assert any(
+        isinstance(block, dict) and block.get("type") == "tool_call"
+        for block in v1_message.content
+    )
+
+    _, formatted_messages = _parse_chat_history([v1_message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(function_call_parts) == 2
+    assert function_call_parts[0].function_call is not None
+    assert function_call_parts[1].function_call is not None
+    assert function_call_parts[0].function_call.args == {"q": "a"}
+    assert function_call_parts[1].function_call.args == {"q": "b"}
+    assert [part for part in parts if part.text == "Searching now."]
 
 
 def test_system_message_only_raises_error() -> None:
@@ -6535,3 +7994,87 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Looking it up."},
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+            {"type": "invalid_tool_call", "name": "search", "args": "{bad"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Looking it up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_foreign_server_tool_filtered_silently() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Searching."},
+            {
+                "type": "server_tool_call",
+                "name": "web_search",
+                "id": "srv_1",
+                "args": {"query": "x"},
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Searching."
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> None:
+    message = AIMessage(
+        content=["Hello.", "", {"type": "text", "text": "World."}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert [part.text for part in parts[:2]] == ["Hello.", "World."]
+    assert parts[2].function_call is not None
+
+
+def test_lenient_conversion_logs_the_underlying_cause(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Here it is."},
+            {"type": "image_url", "image_url": {"url": "./secrets/local.png"}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts[0].text == "Here it is."
+    assert "Dropping content block that cannot" in caplog.text
+    assert "./secrets/local.png" in caplog.text
+    assert "Media string must be one of" in caplog.text

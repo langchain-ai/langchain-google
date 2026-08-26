@@ -155,7 +155,11 @@ def create_context_cache(
         raise ValueError(msg)
 
     # Parse messages into system instruction and content
-    system_instruction, contents = _parse_chat_history(messages, model=model.model)
+    system_instruction, contents = _parse_chat_history(
+        messages,
+        model=model.model,
+        use_vertexai=model._use_vertexai,  # type: ignore[attr-defined]
+    )
 
     # Convert tools to Tool objects if provided
     tool_list = None

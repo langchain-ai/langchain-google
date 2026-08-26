@@ -11,7 +11,14 @@ import re
 import uuid
 import warnings
 import wave
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Container,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -122,7 +129,9 @@ from langchain_google_genai._common import (
     get_user_agent,
 )
 from langchain_google_genai._compat import (
+    _classify_model_provider,
     _convert_from_v1_to_generativelanguage_v1beta,
+    _is_file_uri_supported,
 )
 from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
@@ -145,6 +154,9 @@ _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., 
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
+)
+_GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
+    {"media", "thinking", "executable_code", "code_execution_result"}
 )
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
@@ -315,6 +327,57 @@ def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
 
 
+# Gemini rejects empty parts, but a thought signature is itself a replayable payload.
+
+
+def _decode_signature(sig: Any) -> bytes | None:
+    """Decode a serialized thought signature to Gemini's byte representation.
+
+    Checkpoints store signatures as base64 strings, while the SDK accepts bytes.
+    """
+    if isinstance(sig, str):
+        return base64.b64decode(sig) or None
+    if isinstance(sig, bytes):
+        return sig or None
+    return None
+
+
+def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
+    """Read a signature from its v0, v1, or Vertex location."""
+    extras = block.get("extras")
+    return (
+        block.get("thought_signature")
+        or block.get("signature")
+        or (extras.get("signature") if isinstance(extras, Mapping) else None)
+    )
+
+
+def _is_redundant_v1beta_part(block: Any) -> bool:
+    """Check whether a projected part duplicates a call or is truly empty.
+
+    Signature-only parts are intentionally retained because Gemini requires their
+    signatures to be replayed even when they contain no text.
+    """
+    if not isinstance(block, dict):
+        return False
+    if "function_call" in block:
+        return True
+    if block.get("text"):
+        return False
+    return set(block) <= {
+        "text",
+        "thought",
+        "thought_signature",
+    } and not block.get("thought_signature")
+
+
+def _v1beta_dict_to_part(part: Mapping[str, Any]) -> Part | None:
+    """Validate a type-less projected v1beta dictionary as a Gemini part."""
+    if not set(part).intersection(Part.model_fields):
+        return None
+    return Part.model_validate(part)
+
+
 def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
     """Merge a per-request `HttpOptions` over internally-derived options.
 
@@ -465,6 +528,8 @@ def _validate_video_metadata(video_metadata: object) -> None:
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
     model: str | None = None,
+    *,
+    allow_v1beta_dicts: bool = False,
 ) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
@@ -472,6 +537,14 @@ def _convert_to_parts(
 
     Handles both legacy (pre-v1) dict-based content blocks and v1 `ContentBlock`
     objects.
+
+    Args:
+        raw_content: Message content to convert.
+        model: Model name used for version-specific conversion behavior.
+        allow_v1beta_dicts: Whether to validate type-less projected v1beta mappings.
+
+    Returns:
+        Gemini parts representing the message content.
     """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -485,19 +558,12 @@ def _convert_to_parts(
             if "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
-                    # Check if there's a signature attached to this text block
-                    thought_sig = None
-                    if "extras" in part and isinstance(part["extras"], dict):
-                        sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            # Decode base64-encoded signature back to bytes
-                            thought_sig = base64.b64decode(sig)
-                    if thought_sig:
-                        parts.append(
-                            Part(text=part["text"], thought_signature=thought_sig)
+                    parts.append(
+                        Part(
+                            text=part["text"],
+                            thought_signature=_decode_signature(_block_signature(part)),
                         )
-                    else:
-                        parts.append(Part(text=part["text"]))
+                    )
                 elif part.get("type") == "file" and "file_id" in part:
                     # Handle FileContentBlock with file_id (uploaded file reference)
                     mime_type = part.get("mime_type", "application/octet-stream")
@@ -672,30 +738,36 @@ def _convert_to_parts(
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
-                    thought_sig = None
-                    if "signature" in part:
-                        sig = part["signature"]
-                        if sig and isinstance(sig, str):
-                            # Decode base64-encoded signature back to bytes
-                            thought_sig = base64.b64decode(sig)
                     parts.append(
                         Part(
                             text=part["thinking"],
                             thought=True,
-                            thought_signature=thought_sig,
+                            thought_signature=_decode_signature(_block_signature(part)),
                         )
                     )
                 elif part["type"] == "reasoning":
                     # ReasoningContentBlock (when output_version = "v1")
-                    extras = part.get("extras", {}) or {}
-                    sig = extras.get("signature")
-                    thought_sig = None
-                    if sig and isinstance(sig, str):
-                        # Decode base64-encoded signature back to bytes
-                        thought_sig = base64.b64decode(sig)
+                    thought_sig = _decode_signature(_block_signature(part))
+                    reasoning_text = part.get("reasoning")
+                    if reasoning_text is None:
+                        # Foreign-provider reasoning block without a `reasoning`
+                        # key (e.g. OpenAI's `summary` shape). Extract summary
+                        # text when possible; otherwise drop the block.
+                        summary = part.get("summary")
+                        if isinstance(summary, list):
+                            summary_texts = [
+                                text.strip()
+                                for item in summary
+                                if isinstance(item, dict)
+                                and isinstance((text := item.get("text")), str)
+                                and text.strip()
+                            ]
+                            reasoning_text = " ".join(summary_texts)
+                        if not reasoning_text:
+                            continue
                     parts.append(
                         Part(
-                            text=part["reasoning"],
+                            text=reasoning_text,
                             thought=True,
                             thought_signature=thought_sig,
                         )
@@ -778,9 +850,36 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
+                elif part["type"] == "non_standard":
+                    value = part.get("value")
+                    if (
+                        isinstance(value, Mapping)
+                        and value.get("type") in _GEMINI_NATIVE_NON_STANDARD_TYPES
+                    ):
+                        # Core wraps Gemini-native blocks it cannot standardize.
+                        # Unwrap only known shapes; malformed native values must
+                        # still raise rather than silently changing the request.
+                        parts.extend(
+                            _convert_to_parts(
+                                [dict(value)],
+                                model=model,
+                                allow_v1beta_dicts=allow_v1beta_dicts,
+                            )
+                        )
+                    else:
+                        logger.warning(
+                            "Dropping non-standard content block that cannot be "
+                            "represented as a Gemini part (inner type: %s).",
+                            value.get("type") if isinstance(value, Mapping) else None,
+                        )
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
+            elif (
+                allow_v1beta_dicts
+                and (v1beta_part := _v1beta_dict_to_part(part)) is not None
+            ):
+                parts.append(v1beta_part)
             else:
                 # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
@@ -886,10 +985,301 @@ DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
 )
 
 
+def _convert_to_parts_lenient(
+    content: list[Any],
+    model: str | None = None,
+    *,
+    allow_v1beta_dicts: bool = False,
+) -> list[Part]:
+    """Convert foreign content one block at a time, dropping invalid blocks.
+
+    Per-block conversion preserves valid neighbors without retrying media downloads
+    that occurred before a failing block.
+
+    Args:
+        content: Message content blocks to convert.
+        model: Model name used for version-specific conversion behavior.
+        allow_v1beta_dicts: Whether to validate type-less projected v1beta mappings.
+
+    Returns:
+        Valid Gemini parts from the supplied content.
+    """
+    parts: list[Part] = []
+    for block in content:
+        try:
+            parts.extend(
+                _convert_to_parts(
+                    [block],
+                    model=model,
+                    allow_v1beta_dicts=allow_v1beta_dicts,
+                )
+            )
+        except (ValueError, ChatGoogleGenerativeAIError) as exc:
+            logger.warning(
+                "Dropping content block that cannot be represented as a Gemini "
+                "part (type: %s): %s",
+                block.get("type") if isinstance(block, Mapping) else type(block),
+                exc,
+            )
+    return parts
+
+
+def _as_gemini_media_block(block: Mapping[str, Any]) -> dict[str, Any]:
+    """Re-tag raw Gemini file data for the shared media converter."""
+    return {
+        "type": "media",
+        "file_uri": block["file_uri"],
+        "mime_type": block.get("mime_type", "application/octet-stream"),
+    }
+
+
+def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
+    """Check whether a block is rebuilt from `message.tool_calls`."""
+    return block.get("type") in (
+        "tool_call",
+        "tool_call_chunk",
+        "invalid_tool_call",
+        "function_call_signature",
+    )
+
+
+def _function_call_signatures_from_content(
+    message: AIMessage,
+) -> dict[int, str | bytes]:
+    """Index legacy function-call signature sidecars by tool call."""
+    if _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    ) == "foreign" or not isinstance(message.content, list):
+        return {}
+    signatures: dict[int, str | bytes] = {}
+    signature_ordinal = 0
+    for block in message.content:
+        if (
+            not isinstance(block, Mapping)
+            or block.get("type") != "function_call_signature"
+        ):
+            continue
+        signature = block.get("signature")
+        if not isinstance(signature, (str, bytes)) or not signature:
+            continue
+        # Early signature sidecars did not include an index and were appended after
+        # other content. Their position in the full content list therefore does not
+        # identify the corresponding entry in `message.tool_calls`.
+        tool_call_index = block.get("index", signature_ordinal)
+        signature_ordinal += 1
+        if isinstance(tool_call_index, int):
+            signatures[tool_call_index] = signature
+    return signatures
+
+
+def _is_unsupported_foreign_server_tool(
+    block: Mapping[str, Any], code_interpreter_call_ids: Container[str]
+) -> bool:
+    """Check whether a foreign server-tool block has a Gemini equivalent.
+
+    Code-interpreter calls map to executable code; their results are retained only
+    when the corresponding call was retained.
+    """
+    block_type = block.get("type")
+    if block_type == "server_tool_call":
+        return block.get("name") != "code_interpreter"
+    if block_type == "server_tool_result":
+        return block.get("tool_call_id") not in code_interpreter_call_ids
+    return False
+
+
+def _strip_foreign_signature(block: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return a block without another provider's thought signature.
+
+    This runs before empty-block filtering so a signature-only foreign block does
+    not become an invalid empty Gemini part after its signature is removed.
+    """
+    extras = block.get("extras")
+    extras_has_signature = isinstance(extras, dict) and "signature" in extras
+    if (
+        not {"signature", "thought_signature"}.intersection(block)
+        and not extras_has_signature
+    ):
+        return block
+    stripped: dict[str, Any] = {
+        k: v for k, v in block.items() if k not in ("signature", "thought_signature")
+    }
+    if extras_has_signature:
+        stripped["extras"] = {
+            k: v for k, v in cast("dict[str, Any]", extras).items() if k != "signature"
+        }
+    return stripped
+
+
+def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
+    """Check whether a text or thought block has no replayable payload."""
+    if block.get("type") not in ("text", "thinking", "reasoning"):
+        return False
+    has_text = (
+        block.get("text")
+        or block.get("thinking")
+        or block.get("reasoning")
+        or block.get("summary")
+    )
+    return not has_text and not _block_signature(block)
+
+
+def _content_block_file_uri(block: Any) -> Any:
+    """Return the URI carried by any supported file block shape."""
+    if not isinstance(block, Mapping):
+        return None
+    file_data = block.get("file_data")
+    if isinstance(file_data, Mapping):
+        return file_data.get("file_uri")
+    block_type = block.get("type")
+    if block_type in ("file_data", "media"):
+        return block.get("file_uri")
+    if block_type == "file":
+        return block.get("file_id") or block.get("url")
+    if block_type == "image":
+        return block.get("url")
+    if block_type == "image_url":
+        image_url = block.get("image_url")
+        if isinstance(image_url, Mapping):
+            return image_url.get("url")
+        return image_url
+    return None
+
+
+def _drop_unsupported_file_references(
+    content: list[Any], *, use_vertexai: bool
+) -> list[Any]:
+    """Drop file references unsupported by the target backend."""
+    filtered: list[Any] = []
+    for block in content:
+        file_uri = _content_block_file_uri(block)
+        if not _is_file_uri_supported(file_uri, use_vertexai=use_vertexai):
+            logger.warning(
+                "Dropping Google Cloud Storage file URI from chat history because "
+                "the target Gemini Developer API does not support gs:// references."
+            )
+            continue
+        filtered.append(block)
+    return filtered
+
+
+def _prepare_ai_message_content(
+    message: AIMessage, *, exclude_function_calls: bool
+) -> list[Any]:
+    """Normalize non-v1 AI content for provider-aware conversion.
+
+    Foreign messages use LangChain's standardized blocks. Native messages retain
+    their raw blocks because core may wrap valid Gemini media as `non_standard`.
+    """
+    provider_kind = _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    )
+    is_foreign = provider_kind == "foreign"
+    # Core standardizes foreign blocks, but can wrap native Gemini blocks as
+    # `non_standard`, so native and unstamped messages use their raw content.
+    content = message.content_blocks if is_foreign else message.content
+
+    if not isinstance(content, list):
+        return [content] if content else []
+
+    code_interpreter_call_ids: set[str] = set()
+    if is_foreign:
+        code_interpreter_call_ids = {
+            call_id
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "server_tool_call"
+            and block.get("name") == "code_interpreter"
+            and isinstance(call_id := block.get("id"), str)
+        }
+
+    filtered: list[Any] = []
+    for block in content:
+        if not isinstance(block, dict):
+            if isinstance(block, str) and not block:
+                continue
+            filtered.append(block)
+            continue
+
+        if exclude_function_calls and _is_rebuilt_tool_call_block(block):
+            continue
+        block_type = block.get("type")
+        if is_foreign and block_type == "non_standard":
+            value = block.get("value")
+            logger.warning(
+                "Dropping non-standard content block that cannot be represented "
+                "as a Gemini part (inner type: %s).",
+                value.get("type") if isinstance(value, Mapping) else None,
+            )
+            continue
+        if exclude_function_calls and block_type == "function_call":
+            continue
+        if block_type == "file_data" and "file_uri" in block:
+            filtered.append(_as_gemini_media_block(block))
+            continue
+        candidate: Mapping[str, Any] = block
+        if is_foreign:
+            if _is_unsupported_foreign_server_tool(block, code_interpreter_call_ids):
+                continue
+            candidate = _strip_foreign_signature(block)
+        if _is_empty_content_block(candidate):
+            continue
+        filtered.append(candidate)
+    return filtered
+
+
+def _convert_ai_message_content(
+    message: AIMessage,
+    model: str | None,
+    *,
+    exclude_function_calls: bool,
+    use_vertexai: bool,
+) -> list[Part]:
+    """Convert AI content while treating `message.tool_calls` as authoritative.
+
+    Native content is validated strictly; foreign and provider-less content is
+    converted leniently so unsupported provider-specific blocks do not abort replay.
+    """
+    provider_kind = _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    )
+    is_v1_content = message.response_metadata.get("output_version") == "v1"
+    if is_v1_content:
+        content: list[Any] = _convert_from_v1_to_generativelanguage_v1beta(
+            cast("list[types.ContentBlock]", message.content),
+            message.response_metadata.get("model_provider"),
+            use_vertexai=use_vertexai,
+        )
+        if exclude_function_calls:
+            content = [
+                block for block in content if not _is_redundant_v1beta_part(block)
+            ]
+    elif exclude_function_calls or provider_kind == "foreign":
+        content = _prepare_ai_message_content(
+            message, exclude_function_calls=exclude_function_calls
+        )
+    else:
+        content = (
+            [message.content] if isinstance(message.content, str) else message.content
+        )
+
+    content = _drop_unsupported_file_references(content, use_vertexai=use_vertexai)
+    convert = (
+        _convert_to_parts if provider_kind == "native" else _convert_to_parts_lenient
+    )
+    return convert(
+        content,
+        model=model,
+        allow_v1beta_dicts=is_v1_content,
+    )
+
+
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage],
     convert_system_message_to_human: bool = False,
     model: str | None = None,
+    *,
+    use_vertexai: bool = False,
 ) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
@@ -899,6 +1289,7 @@ def _parse_chat_history(
 
             Whether to convert the first system message into a `HumanMessage`.
         model: The model name, used for version-specific logic.
+        use_vertexai: Whether the target is the Vertex AI backend.
 
     Returns:
         A tuple containing:
@@ -915,27 +1306,6 @@ def _parse_chat_history(
             DeprecationWarning,
             stacklevel=2,
         )
-    input_messages = list(input_messages)  # Make a mutable copy
-
-    # Case where content was serialized to v1 format
-    for idx, message in enumerate(input_messages):
-        if (
-            isinstance(message, AIMessage)
-            and message.response_metadata.get("output_version") == "v1"
-        ):
-            # Unpack known v1 content to v1beta format for the request
-            #
-            # Old content types and any previously serialized messages passed back in to
-            # history will skip this, but hit and processed in `_convert_to_parts`
-            input_messages[idx] = message.model_copy(
-                update={
-                    "content": _convert_from_v1_to_generativelanguage_v1beta(
-                        cast("list[types.ContentBlock]", message.content),
-                        message.response_metadata.get("model_provider"),
-                    )
-                }
-            )
-
     formatted_messages: list[Content] = []
 
     system_instruction: Content | None = None
@@ -961,61 +1331,40 @@ def _parse_chat_history(
         if isinstance(message, AIMessage):
             role = "model"
             if message.tool_calls:
-                ai_message_parts = []
-
-                # First, include thinking blocks from content if present.
+                # First, convert all non-function-call content (text, thinking,
+                # reasoning, media, etc.) through the unified conversion path.
                 # When include_thoughts=True, thinking blocks need to be preserved
                 # when passing messages back to the API.
-                if isinstance(message.content, list):
-                    for content_block in message.content:
-                        if isinstance(content_block, dict):
-                            block_type = content_block.get("type")
-                            if block_type == "thinking":
-                                # v0 output_format thinking block
-                                thought_sig = None
-                                if "signature" in content_block:
-                                    sig = content_block["signature"]
-                                    if sig and isinstance(sig, str):
-                                        thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["thinking"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
-                                    )
-                                )
-                            elif block_type == "reasoning":
-                                # v1 output_format reasoning block
-                                # (Stored in extras, and different type key)
-                                extras = content_block.get("extras", {}) or {}
-                                sig = extras.get("signature")
-                                thought_sig = None
-                                if sig and isinstance(sig, str):
-                                    thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["reasoning"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
-                                    )
-                                )
+                ai_message_parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=True,
+                    use_vertexai=use_vertexai,
+                )
 
                 # Then, add function call parts
-                function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
-                    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                function_call_sigs: dict[Any, str | bytes] = (
+                    message.additional_kwargs.get(
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                    )
                 )
-                for tool_call_idx, tool_call in enumerate(message.tool_calls):
+                indexed_function_call_sigs = _function_call_signatures_from_content(
+                    message
+                )
+                for tool_call_index, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
                     )
                     # Check if there's a signature for this function call
-                    sig = function_call_sigs.get(tool_call.get("id"))
+                    sig = function_call_sigs.get(
+                        tool_call.get("id")
+                    ) or indexed_function_call_sigs.get(tool_call_index)
                     if sig:
                         ai_message_parts.append(
                             Part(
                                 function_call=function_call,
-                                thought_signature=_base64_to_bytes(sig),
+                                thought_signature=_decode_signature(sig),
                             )
                         )
                     else:
@@ -1041,11 +1390,19 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             elif message.response_metadata.get("output_version") == "v1":
-                # Already converted to v1beta format above
-                parts = message.content  # type: ignore[assignment]
+                parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=False,
+                    use_vertexai=use_vertexai,
+                )
             else:
-                # Prepare request content parts from message.content field
-                parts = _convert_to_parts(message.content, model=model)
+                parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=False,
+                    use_vertexai=use_vertexai,
+                )
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content, model=model)
@@ -1062,6 +1419,21 @@ def _parse_chat_history(
         # Final step; assemble the Content object to pass to the API
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
+        if role == "model" and not parts:
+            if isinstance(message.content, list) and message.content:
+                logger.warning(
+                    "AI message at index %d converted to no Gemini parts after all "
+                    "%d content block(s) were dropped; using an empty text part.",
+                    i,
+                    len(message.content),
+                )
+            else:
+                logger.warning(
+                    "AI message at index %d converted to no Gemini parts; using an "
+                    "empty text part.",
+                    i,
+                )
+            parts = [Part(text="")]
         formatted_messages.append(Content(role=role, parts=parts))
 
     # Enforce thought signatures for new Gemini models
@@ -3154,6 +3526,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             filtered_messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
             model=self.model,
+            use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
         )
         if (
             _uses_fixed_sampling_and_disallows_prefill(self.model)

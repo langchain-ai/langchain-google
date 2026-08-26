@@ -1,9 +1,52 @@
 """Go from v1 content blocks to generativelanguage_v1beta format."""
 
 import json
-from typing import Any, cast
+import logging
+from typing import Any, Literal, cast
 
 from langchain_core.messages import content as types
+
+logger = logging.getLogger(__name__)
+
+# Vertex and the Gemini Developer API share content and signature formats.
+_NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
+_ModelProviderKind = Literal["native", "foreign", "unknown"]
+
+
+def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
+    """Classify a source provider for Gemini content replay."""
+    if model_provider is None:
+        return "unknown"
+    if model_provider in _NATIVE_MODEL_PROVIDERS:
+        return "native"
+    return "foreign"
+
+
+def _is_file_uri_supported(file_uri: Any, *, use_vertexai: bool) -> bool:
+    """Check whether the target Google backend accepts a file URI.
+
+    Google Cloud Storage references are supported by Vertex AI but not by the
+    Gemini Developer API.
+    """
+    return not (
+        isinstance(file_uri, str) and file_uri.startswith("gs://") and not use_vertexai
+    )
+
+
+def _file_data_block(
+    file_uri: Any,
+    mime_type: Any,
+    *,
+    use_vertexai: bool,
+) -> dict[str, Any] | None:
+    """Build file data when the target backend accepts its URI."""
+    if not _is_file_uri_supported(file_uri, use_vertexai=use_vertexai):
+        logger.warning(
+            "Dropping Google Cloud Storage file URI because the target Gemini "
+            "Developer API does not support gs:// references."
+        )
+        return None
+    return {"file_data": {"mime_type": mime_type, "file_uri": file_uri}}
 
 
 def translate_citations_to_grounding_metadata(
@@ -125,21 +168,35 @@ def translate_citations_to_grounding_metadata(
 
 
 def _convert_from_v1_to_generativelanguage_v1beta(
-    content: list[types.ContentBlock], model_provider: str | None
+    content: list[types.ContentBlock],
+    model_provider: str | None,
+    *,
+    use_vertexai: bool = False,
 ) -> list[dict[str, Any]]:
     """Convert v1 content blocks to `generativelanguage_v1beta` `Content`.
 
     Args:
         content: List of v1 `ContentBlock` objects.
         model_provider: The model provider name that generated the v1 content.
+        use_vertexai: Whether the content will be sent to the Vertex AI backend.
 
     Returns:
         List of dictionaries in `generativelanguage_v1beta` `Content` format, ready to
             be sent to the API.
+
+    Note:
+        Every shape emitted here must be accepted by
+        `chat_models._convert_to_parts`, which converts these dicts to `Part`
+        objects.
     """
+    provider_kind = _classify_model_provider(model_provider)
     new_content: list = []
     for block in content:
         if not isinstance(block, dict) or "type" not in block:
+            logger.warning(
+                "Dropping v1 content block that is not a typed mapping (got: %s).",
+                type(block) if not isinstance(block, dict) else "dict without 'type'",
+            )
             continue
 
         block_dict = dict(block)  # (For typing)
@@ -147,91 +204,101 @@ def _convert_from_v1_to_generativelanguage_v1beta(
         # TextContentBlock
         if block_dict["type"] == "text":
             new_block = {"text": block_dict.get("text", "")}
-            if (
-                thought_signature := (block_dict.get("extras") or {}).get("signature")  # type: ignore[attr-defined]
-            ) and model_provider == "google_genai":
+            extras = block_dict.get("extras")
+            thought_signature = block_dict.get("thought_signature") or (
+                extras.get("signature") if isinstance(extras, dict) else None
+            )
+            if thought_signature and provider_kind != "foreign":
                 new_block["thought_signature"] = thought_signature
             new_content.append(new_block)
             # Citations are only handled on output. Can't pass them back :/
 
         # ReasoningContentBlock -> thinking
-        elif block_dict["type"] == "reasoning" and model_provider == "google_genai":
-            # Google requires passing back the thought_signature when available.
-            # Signatures are only provided when function calling is enabled.
-            if "extras" in block_dict and isinstance(block_dict["extras"], dict):
-                extras = block_dict["extras"]
-                if "signature" in extras:
-                    new_block = {
-                        "thought": True,
-                        "text": block_dict.get("reasoning", ""),
-                        "thought_signature": extras["signature"],
-                    }
-                    new_content.append(new_block)
-                # else: skip reasoning blocks without signatures
-                # TODO: log a warning?
-            # else: skip reasoning blocks without extras
-            # TODO: log a warning?
+        elif block_dict["type"] == "reasoning":
+            extras = block_dict.get("extras")
+            signature = block_dict.get("thought_signature") or (
+                extras.get("signature") if isinstance(extras, dict) else None
+            )
+            if provider_kind == "native" and not signature:
+                logger.warning(
+                    "Dropping v1 reasoning block with no thought signature; "
+                    "its text will not be sent back to the model."
+                )
+                continue
+            reasoning_text = block_dict.get("reasoning")
+            summary = block_dict.get("summary")
+            if reasoning_text is None and isinstance(summary, list):
+                summary_texts = [
+                    text.strip()
+                    for item in summary
+                    if isinstance(item, dict)
+                    and isinstance((text := item.get("text")), str)
+                    and text.strip()
+                ]
+                reasoning_text = " ".join(summary_texts)
+            if not reasoning_text and not (signature and provider_kind != "foreign"):
+                continue
+            new_block = {
+                "thought": True,
+                "text": reasoning_text or "",
+            }
+            if signature and provider_kind != "foreign":
+                new_block["thought_signature"] = signature
+            new_content.append(new_block)
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
-            if base64 := block_dict.get("base64"):
+            # SDK validation decodes base64 strings; do not pre-encode them.
+            if b64_data := block_dict.get("base64"):
                 new_block = {
                     "inline_data": {
                         "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "data": base64.encode("utf-8")
-                        if isinstance(base64, str)
-                        else base64,
+                        "data": b64_data,
                     }
                 }
                 new_content.append(new_block)
-            elif (url := block_dict.get("url")) and model_provider == "google_genai":
+            elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                new_block = {
-                    "file_data": {
-                        "mime_type": block_dict.get("mime_type", "image/jpeg"),
-                        "file_uri": url,
-                    }
-                }
-                new_content.append(new_block)
+                file_data_block = _file_data_block(
+                    url,
+                    block_dict.get("mime_type", "image/jpeg"),
+                    use_vertexai=use_vertexai,
+                )
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
 
         # TODO: AudioContentBlock -> audio once models support passing back in
 
         # FileContentBlock (documents)
         elif block_dict["type"] == "file":
-            if base64 := block_dict.get("base64"):
+            if b64_data := block_dict.get("base64"):
                 new_block = {
                     "inline_data": {
                         "mime_type": block_dict.get(
                             "mime_type", "application/octet-stream"
                         ),
-                        "data": base64.encode("utf-8")
-                        if isinstance(base64, str)
-                        else base64,
+                        "data": b64_data,
                     }
                 }
                 new_content.append(new_block)
-            elif file_id := block_dict.get("file_id"):
+            elif (file_id := block_dict.get("file_id")) and provider_kind != "foreign":
                 # File ID from uploaded file
-                new_block = {
-                    "file_data": {
-                        "mime_type": block_dict.get(
-                            "mime_type", "application/octet-stream"
-                        ),
-                        "file_uri": file_id,
-                    }
-                }
-                new_content.append(new_block)
-            elif (url := block_dict.get("url")) and model_provider == "google_genai":
+                file_data_block = _file_data_block(
+                    file_id,
+                    block_dict.get("mime_type", "application/octet-stream"),
+                    use_vertexai=use_vertexai,
+                )
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
+            elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                new_block = {
-                    "file_data": {
-                        "mime_type": block_dict.get(
-                            "mime_type", "application/octet-stream"
-                        ),
-                        "file_uri": url,
-                    }
-                }
-                new_content.append(new_block)
+                file_data_block = _file_data_block(
+                    url,
+                    block_dict.get("mime_type", "application/octet-stream"),
+                    use_vertexai=use_vertexai,
+                )
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
 
         # ToolCall -> FunctionCall
         elif block_dict["type"] == "tool_call":
@@ -258,6 +325,11 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 }
             }
             new_content.append(function_call)
+
+        elif block_dict["type"] == "function_call_signature":
+            # The caller extracts this legacy sidecar before v1 projection and
+            # attaches it to the function call rebuilt from `message.tool_calls`.
+            continue
 
         elif block_dict["type"] == "server_tool_call":
             if block_dict.get("name") == "code_interpreter":
@@ -304,6 +376,27 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 )
 
         elif block_dict["type"] == "non_standard":
-            new_content.append(block_dict["value"])
+            value = block_dict.get("value")
+            if provider_kind != "foreign" and isinstance(value, dict):
+                # Core wraps provider-native blocks it cannot standardize (for
+                # example Gemini's `media` block) as `non_standard`. Preserve the
+                # raw value for native and provider-less checkpoints; the caller
+                # converts native content strictly and unknown content leniently.
+                new_content.append(value)
+            else:
+                logger.warning(
+                    "Dropping non-standard v1 content block that cannot be "
+                    "represented as a Gemini part (inner type: %s).",
+                    value.get("type") if isinstance(value, dict) else None,
+                )
+
+        else:
+            # No branch matched. A block type this whitelist does not know is
+            # dropped, which is right for another provider's blocks but is a bug
+            # signal for a newly added core block type -- hence the warning.
+            logger.warning(
+                "Dropping v1 content block with no Gemini equivalent (type: %s).",
+                block_dict["type"],
+            )
 
     return new_content
