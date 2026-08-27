@@ -119,12 +119,15 @@ def test_convert_from_v1_drops_foreign_reasoning_with_signature() -> None:
 def test_convert_from_v1_drops_foreign_reasoning_summary() -> None:
     """OpenAI-style summary blocks are dropped for foreign providers."""
     converted = _convert_from_v1_to_generativelanguage_v1beta(
-        [
-            {
-                "type": "reasoning",
-                "summary": [{"type": "summary_text", "text": "I should search."}],
-            }
-        ],
+        cast(
+            "Any",
+            [
+                {
+                    "type": "reasoning",
+                    "summary": [{"type": "summary_text", "text": "I should search."}],
+                }
+            ],
+        ),
         "openai",
     )
 
