@@ -962,28 +962,17 @@ def _get_ai_message_tool_messages_parts(
     return parts
 
 
-# To generate the below thought signature:
+# Placeholder injected by `_parse_chat_history` when a function-call part for a
+# Gemini 3+ model lacks a thought signature (e.g. replayed history or a
+# cross-provider fallback). Carrying the documented bypass sentinel makes the
+# API skip thought-signature validation for that part; a real signature copied
+# from an unrelated response is rejected as invalid.
+#
+# https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
+SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 
-# from langchain_google_genai import ChatGoogleGenerativeAI
-#
-# def generate_placeholder_thoughts(value: int) -> str:
-#     """Placeholder tool."""
-#     pass
-#
-# model = ChatGoogleGenerativeAI(
-#     model="gemini-3.1-pro-preview"
-# ).bind_tools([generate_placeholder_thoughts])
-#
-# response = model.invoke("Generate a placeholder tool invocation.")
-
-DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
-    "ErQCCrECAdHtim8MtxgeMCRCiNiyoyImxtYAEDzz4NXOr/HSL3rA7rPPvHWZCm+T9VSDYh/mt9lESoH4wQh"
-    "/ca1zDtWTN6XOL1+S3krYLQeqp47RV/b1eSq5jdZF28S4Lb7w4A3/EFdybc4SFb2/YhMm+CulYLmLA4Tr4V"
-    "Su0eMWgxM3HVt6u0jECf5BbXzj0qjJ32tEQYJvKvV8H1tCHvB6J+RZhsDr+TcyOCaqxDoR4WKxXYxNRZb3h"
-    "YTuCnBEDPhn1lROumVaghi9nEIgc17z002zLoyqIptlLfIVw70FXkCLsPUSL1SjPQYtGL8PVncVajeqGogR"
-    "D/eZSVZ1Zr5tshxh3DQ+JAYNcrHaRHWC4Hg0H6oftYx+JdJD9B/81NYV9jyGxP7zHKFHOELl0IUP5GEXP9I"
-    "="
-)
+# Kept for backwards compatibility with imports of the previous constant.
+DUMMY_THOUGHT_SIGNATURE = SKIP_THOUGHT_SIGNATURE_VALIDATOR.encode("ascii")
 
 
 def _convert_to_parts_lenient(
@@ -1475,8 +1464,8 @@ def _parse_chat_history(
 
         # 2. Patch Missing Signatures:
         # Iterate through the active loop. If a model message contains a function call
-        # but lacks a thought signature, inject a dummy value. This satisfies the
-        # API's schema validation without requiring the original internal thought data.
+        # but lacks a thought signature, inject the bypass sentinel. This satisfies
+        # the API's validation without requiring the original internal thought data.
         start_idx = active_loop_start_idx + 1 if active_loop_start_idx != -1 else 0
         for i in range(start_idx, len(formatted_messages)):
             content_msg = formatted_messages[i]
@@ -1486,7 +1475,24 @@ def _parse_chat_history(
                     if part.function_call:
                         if not first_fc_seen:
                             if not part.thought_signature:
-                                part.thought_signature = DUMMY_THOUGHT_SIGNATURE
+                                # Assign the str sentinel post-construction so
+                                # pydantic never coerces it to bytes: the SDK's
+                                # request encoder base64-encodes bytes values,
+                                # which would hide the bypass string from the
+                                # API. Part is not validate_assignment, so the
+                                # string survives serialization as-is.
+                                try:
+                                    part.thought_signature = cast(
+                                        "bytes",
+                                        SKIP_THOUGHT_SIGNATURE_VALIDATOR,
+                                    )
+                                except ValueError:
+                                    # A future SDK/pydantic version could turn
+                                    # on validate_assignment, which coerces the
+                                    # str to base64-decoded bytes. Send those
+                                    # bytes rather than dropping the signature
+                                    # entirely and failing schema validation.
+                                    part.thought_signature = DUMMY_THOUGHT_SIGNATURE
                             first_fc_seen = True
 
     return system_instruction, formatted_messages
