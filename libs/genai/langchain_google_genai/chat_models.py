@@ -115,6 +115,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PrivateAttr,
     SecretStr,
     field_validator,
     model_validator,
@@ -173,6 +174,75 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
 
 class GoogleContextOverflowError(ClientError, ContextOverflowError):
     """ClientError raised when input exceeds Google's context limit."""
+
+
+class _ClientCleanup:
+    """Close a client when the last model sharing it is collected."""
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+        self._async_loop: asyncio.AbstractEventLoop | None = None
+        self._closed = False
+
+    def __eq__(self, other: object) -> bool:
+        """Keep the internal cleanup token out of model equality semantics."""
+        return isinstance(other, _ClientCleanup)
+
+    @staticmethod
+    def _consume_task_exception(task: asyncio.Task[None]) -> None:
+        if not task.cancelled():
+            task.exception()
+
+    def register_async_loop(self) -> None:
+        """Record the event loop that owns any async transports created later."""
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        if self._async_loop is None:
+            self._async_loop = running_loop
+
+    async def aclose(self) -> None:
+        """Close all transports on the event loop that owns the async client."""
+        if self._closed:
+            return
+
+        running_loop = asyncio.get_running_loop()
+        if self._async_loop is not None and running_loop is not self._async_loop:
+            msg = "The async client must be closed on the event loop where it was used."
+            raise RuntimeError(msg)
+
+        self._async_loop = running_loop
+        self._client.close()
+        await self._client.aio.aclose()
+        self._closed = True
+
+    def __del__(self) -> None:
+        """Close sync and async transports without leaking cleanup exceptions."""
+        if self._closed:
+            return
+
+        try:
+            self._client.close()
+        except Exception:
+            pass
+
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        except Exception:
+            return
+
+        if running_loop is not self._async_loop:
+            return
+
+        try:
+            task = running_loop.create_task(self._client.aio.aclose())
+            task.add_done_callback(self._consume_task_exception)
+        except Exception:
+            pass
 
 
 # Inherit ChatGoogleGenerativeAIError for backward compatibility
@@ -962,28 +1032,17 @@ def _get_ai_message_tool_messages_parts(
     return parts
 
 
-# To generate the below thought signature:
+# Placeholder injected by `_parse_chat_history` when a function-call part for a
+# Gemini 3+ model lacks a thought signature (e.g. replayed history or a
+# cross-provider fallback). Carrying the documented bypass sentinel makes the
+# API skip thought-signature validation for that part; a real signature copied
+# from an unrelated response is rejected as invalid.
+#
+# https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
+SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 
-# from langchain_google_genai import ChatGoogleGenerativeAI
-#
-# def generate_placeholder_thoughts(value: int) -> str:
-#     """Placeholder tool."""
-#     pass
-#
-# model = ChatGoogleGenerativeAI(
-#     model="gemini-3.1-pro-preview"
-# ).bind_tools([generate_placeholder_thoughts])
-#
-# response = model.invoke("Generate a placeholder tool invocation.")
-
-DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
-    "ErQCCrECAdHtim8MtxgeMCRCiNiyoyImxtYAEDzz4NXOr/HSL3rA7rPPvHWZCm+T9VSDYh/mt9lESoH4wQh"
-    "/ca1zDtWTN6XOL1+S3krYLQeqp47RV/b1eSq5jdZF28S4Lb7w4A3/EFdybc4SFb2/YhMm+CulYLmLA4Tr4V"
-    "Su0eMWgxM3HVt6u0jECf5BbXzj0qjJ32tEQYJvKvV8H1tCHvB6J+RZhsDr+TcyOCaqxDoR4WKxXYxNRZb3h"
-    "YTuCnBEDPhn1lROumVaghi9nEIgc17z002zLoyqIptlLfIVw70FXkCLsPUSL1SjPQYtGL8PVncVajeqGogR"
-    "D/eZSVZ1Zr5tshxh3DQ+JAYNcrHaRHWC4Hg0H6oftYx+JdJD9B/81NYV9jyGxP7zHKFHOELl0IUP5GEXP9I"
-    "="
-)
+# Kept for backwards compatibility with imports of the previous constant.
+DUMMY_THOUGHT_SIGNATURE = SKIP_THOUGHT_SIGNATURE_VALIDATOR.encode("ascii")
 
 
 def _convert_to_parts_lenient(
@@ -1475,8 +1534,8 @@ def _parse_chat_history(
 
         # 2. Patch Missing Signatures:
         # Iterate through the active loop. If a model message contains a function call
-        # but lacks a thought signature, inject a dummy value. This satisfies the
-        # API's schema validation without requiring the original internal thought data.
+        # but lacks a thought signature, inject the bypass sentinel. This satisfies
+        # the API's validation without requiring the original internal thought data.
         start_idx = active_loop_start_idx + 1 if active_loop_start_idx != -1 else 0
         for i in range(start_idx, len(formatted_messages)):
             content_msg = formatted_messages[i]
@@ -1486,7 +1545,24 @@ def _parse_chat_history(
                     if part.function_call:
                         if not first_fc_seen:
                             if not part.thought_signature:
-                                part.thought_signature = DUMMY_THOUGHT_SIGNATURE
+                                # Assign the str sentinel post-construction so
+                                # pydantic never coerces it to bytes: the SDK's
+                                # request encoder base64-encodes bytes values,
+                                # which would hide the bypass string from the
+                                # API. Part is not validate_assignment, so the
+                                # string survives serialization as-is.
+                                try:
+                                    part.thought_signature = cast(
+                                        "bytes",
+                                        SKIP_THOUGHT_SIGNATURE_VALIDATOR,
+                                    )
+                                except ValueError:
+                                    # A future SDK/pydantic version could turn
+                                    # on validate_assignment, which coerces the
+                                    # str to base64-decoded bytes. Send those
+                                    # bytes rather than dropping the signature
+                                    # entirely and failing schema validation.
+                                    part.thought_signature = DUMMY_THOUGHT_SIGNATURE
                             first_fc_seen = True
 
     return system_instruction, formatted_messages
@@ -2915,6 +2991,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
+    _client_cleanup: _ClientCleanup = PrivateAttr()
+
     stop: list[str] | None = Field(default=None, alias="stop_sequences")
     """Stop sequences for the model."""
 
@@ -3222,6 +3300,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             self.client = Client(api_key=google_api_key, http_options=http_options)
+        self._client_cleanup = _ClientCleanup(self.client)
         return self
 
     @model_validator(mode="after")
@@ -3231,48 +3310,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
             self.profile = _get_default_model_profile(model_id)
         return self
-
-    def __del__(self) -> None:
-        """Clean up the client on deletion."""
-        if not hasattr(self, "client") or self.client is None:
-            return
-
-        try:
-            # Close the sync client
-            self.client.close()
-
-            # Attempt to close the async client
-            # Note: The SDK's close() doesn't close the async client automatically
-            if hasattr(self.client, "aio") and self.client.aio is not None:
-                try:
-                    # Check if there's a running event loop
-                    loop = asyncio.get_running_loop()
-                    if not loop.is_closed():
-                        # Schedule the close
-                        # Wrap in ensure_future to avoid "coroutine never awaited"
-                        task = asyncio.ensure_future(
-                            self.client.aio.aclose(), loop=loop
-                        )
-                        # Add a done callback to suppress any exceptions
-                        task.add_done_callback(
-                            lambda t: t.exception() if not t.cancelled() else None
-                        )
-                except RuntimeError:
-                    # No running loop - create a new one for cleanup
-                    try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            loop.run_until_complete(self.client.aio.aclose())
-                        finally:
-                            loop.close()
-                            asyncio.set_event_loop(None)
-                    except Exception:
-                        # Suppress errors during shutdown
-                        pass
-        except Exception:
-            # Suppress all errors during cleanup
-            pass
 
     @property
     def async_client(self) -> Any:
@@ -3288,7 +3325,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized. Initialize the model first."
             raise ValueError(msg)
+        self._client_cleanup.register_async_loop()
         return self.client.aio
+
+    async def aclose(self) -> None:
+        """Close the sync and async clients on the async client's event loop.
+
+        Call this method before the event loop used for async requests exits.
+
+        Raises:
+            RuntimeError: If called from a different event loop than the one used for
+                async requests.
+        """
+        await self._client_cleanup.aclose()
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
@@ -3979,7 +4028,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         try:
             response: GenerateContentResponse = (
-                await self.client.aio.models.generate_content(
+                await self.async_client.models.generate_content(
                     **request,
                 )
             )
@@ -4083,7 +4132,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         indexer = _StreamBlockIndexer()
-        stream = await self.client.aio.models.generate_content_stream(
+        stream = await self.async_client.models.generate_content_stream(
             **request,
         )
 
