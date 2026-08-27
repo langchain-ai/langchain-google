@@ -99,6 +99,74 @@ def test_convert_to_parts_joins_multi_segment_summary() -> None:
     assert parts[0].thought is True
 
 
+def test_convert_from_v1_drops_foreign_reasoning_with_signature() -> None:
+    """Foreign reasoning blocks drop entirely; adjacent text still converts."""
+    converted = _convert_from_v1_to_generativelanguage_v1beta(
+        [
+            {
+                "type": "reasoning",
+                "reasoning": "Considering Paris.",
+                "extras": {"signature": "bedrock-sig"},
+            },
+            {"type": "text", "text": "Paris."},
+        ],
+        "bedrock_converse",
+    )
+
+    assert converted == [{"text": "Paris."}]
+
+
+def test_convert_from_v1_drops_foreign_reasoning_summary() -> None:
+    """OpenAI-style summary blocks are dropped for foreign providers."""
+    converted = _convert_from_v1_to_generativelanguage_v1beta(
+        [
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "I should search."}],
+            }
+        ],
+        "openai",
+    )
+
+    assert converted == []
+
+
+def test_convert_from_v1_keeps_native_reasoning_with_signature() -> None:
+    """Regression guard: native signed reasoning still becomes a thought part."""
+    converted = _convert_from_v1_to_generativelanguage_v1beta(
+        [
+            {
+                "type": "reasoning",
+                "reasoning": "Thinking.",
+                "extras": {"signature": "c2ln"},
+            }
+        ],
+        "google_genai",
+    )
+
+    assert converted == [
+        {"thought": True, "text": "Thinking.", "thought_signature": "c2ln"}
+    ]
+
+
+def test_convert_from_v1_keeps_unknown_provider_reasoning() -> None:
+    """Regression guard: provider-less checkpoints stay lenient."""
+    converted = _convert_from_v1_to_generativelanguage_v1beta(
+        [
+            {
+                "type": "reasoning",
+                "reasoning": "Thinking.",
+                "extras": {"signature": "c2ln"},
+            }
+        ],
+        None,
+    )
+
+    assert converted == [
+        {"thought": True, "text": "Thinking.", "thought_signature": "c2ln"}
+    ]
+
+
 def test_convert_from_v1_keeps_base64_media_undecoded() -> None:
     """Leave base64 decoding to SDK validation to avoid double encoding."""
     converted = _convert_from_v1_to_generativelanguage_v1beta(

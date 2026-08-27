@@ -215,6 +215,16 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         # ReasoningContentBlock -> thinking
         elif block_dict["type"] == "reasoning":
+            if provider_kind == "foreign":
+                # Another provider's chain-of-thought (for example AWS Bedrock or
+                # OpenAI summary blocks) is not a Gemini thought; sending it back
+                # would leak foreign reasoning text into Gemini requests.
+                logger.info(
+                    "Dropping v1 reasoning block from provider %r; foreign "
+                    "reasoning cannot be replayed as a Gemini thought part.",
+                    model_provider,
+                )
+                continue
             extras = block_dict.get("extras")
             signature = block_dict.get("thought_signature") or (
                 extras.get("signature") if isinstance(extras, dict) else None
@@ -236,13 +246,14 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     and text.strip()
                 ]
                 reasoning_text = " ".join(summary_texts)
-            if not reasoning_text and not (signature and provider_kind != "foreign"):
+            # Past the early return above, provider_kind is native or unknown.
+            if not reasoning_text and not signature:
                 continue
             new_block = {
                 "thought": True,
                 "text": reasoning_text or "",
             }
-            if signature and provider_kind != "foreign":
+            if signature:
                 new_block["thought_signature"] = signature
             new_content.append(new_block)
 
