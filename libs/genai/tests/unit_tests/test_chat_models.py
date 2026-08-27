@@ -8162,7 +8162,8 @@ def test_dummy_thought_signature_survives_serialization_as_bypass_string() -> No
 
     # Run the same serialization the SDK applies before sending the request.
     encoded = encode_unserializable_types(convert_to_dict({"contents": contents}))
-    encoded_parts = encoded["contents"][1]["parts"]
+    encoded_contents = cast("list[dict[str, Any]]", encoded["contents"])
+    encoded_parts = cast("list[dict[str, Any]]", encoded_contents[1]["parts"])
     encoded_signatures = [
         part.get("thought_signature") or part.get("thoughtSignature")
         for part in encoded_parts
