@@ -1519,19 +1519,7 @@ _MERGEABLE_BLOCK_TYPES = frozenset({"text", "thinking"})
 
 
 class _StreamBlockIndexer:
-    """Allocates streaming ``index`` values for the blocks of one response stream.
-
-    Consumers treat blocks sharing an index as deltas of a single block:
-    `langchain_core` merges same-index content blocks field by field, and the
-    ``v3`` event bridge keys open blocks by index. Text and reasoning genuinely
-    stream as deltas, but images, code blocks and function calls each arrive
-    complete, so reusing an index for them silently destroys data -- consecutive
-    images concatenate into one unusable data URL, and parallel tool calls
-    overwrite each other along with their thought signatures.
-
-    Tool call chunks draw from the same counter as content blocks because
-    `AIMessageChunk.content_blocks` flattens both into a single keyspace.
-    """
+    """Allocates streaming `index` values for content blocks."""
 
     def __init__(self) -> None:
         self._next_index = 0
