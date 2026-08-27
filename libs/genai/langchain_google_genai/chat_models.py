@@ -181,6 +181,8 @@ class _ClientCleanup:
 
     def __init__(self, client: Client) -> None:
         self._client = client
+        self._async_loop: asyncio.AbstractEventLoop | None = None
+        self._closed = False
 
     def __eq__(self, other: object) -> bool:
         """Keep the internal cleanup token out of model equality semantics."""
@@ -191,8 +193,36 @@ class _ClientCleanup:
         if not task.cancelled():
             task.exception()
 
+    def register_async_loop(self) -> None:
+        """Record the event loop that owns any async transports created later."""
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        if self._async_loop is None:
+            self._async_loop = running_loop
+
+    async def aclose(self) -> None:
+        """Close all transports on the event loop that owns the async client."""
+        if self._closed:
+            return
+
+        running_loop = asyncio.get_running_loop()
+        if self._async_loop is not None and running_loop is not self._async_loop:
+            msg = "The async client must be closed on the event loop where it was used."
+            raise RuntimeError(msg)
+
+        self._async_loop = running_loop
+        self._client.close()
+        await self._client.aio.aclose()
+        self._closed = True
+
     def __del__(self) -> None:
         """Close sync and async transports without leaking cleanup exceptions."""
+        if self._closed:
+            return
+
         try:
             self._client.close()
         except Exception:
@@ -201,23 +231,18 @@ class _ClientCleanup:
         try:
             running_loop = asyncio.get_running_loop()
         except RuntimeError:
-            cleanup_loop: asyncio.AbstractEventLoop | None = None
-            try:
-                cleanup_loop = asyncio.new_event_loop()
-                cleanup_loop.run_until_complete(self._client.aio.aclose())
-            except Exception:
-                pass
-            finally:
-                if cleanup_loop is not None:
-                    cleanup_loop.close()
+            return
+        except Exception:
+            return
+
+        if running_loop is not self._async_loop:
+            return
+
+        try:
+            task = running_loop.create_task(self._client.aio.aclose())
+            task.add_done_callback(self._consume_task_exception)
         except Exception:
             pass
-        else:
-            try:
-                task = running_loop.create_task(self._client.aio.aclose())
-                task.add_done_callback(self._consume_task_exception)
-            except Exception:
-                pass
 
 
 # Inherit ChatGoogleGenerativeAIError for backward compatibility
@@ -3250,7 +3275,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized. Initialize the model first."
             raise ValueError(msg)
+        self._client_cleanup.register_async_loop()
         return self.client.aio
+
+    async def aclose(self) -> None:
+        """Close the sync and async clients on the async client's event loop.
+
+        Call this method before the event loop used for async requests exits.
+
+        Raises:
+            RuntimeError: If called from a different event loop than the one used for
+                async requests.
+        """
+        await self._client_cleanup.aclose()
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
@@ -3941,7 +3978,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         try:
             response: GenerateContentResponse = (
-                await self.client.aio.models.generate_content(
+                await self.async_client.models.generate_content(
                     **request,
                 )
             )
@@ -4054,7 +4091,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         index = -1
         index_type = ""
-        stream = await self.client.aio.models.generate_content_stream(
+        stream = await self.async_client.models.generate_content_stream(
             **request,
         )
 

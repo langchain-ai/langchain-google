@@ -78,6 +78,7 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
     GoogleContextOverflowError,
+    _ClientCleanup,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
@@ -8118,6 +8119,7 @@ async def test_dropping_model_closes_async_transports_inside_running_loop() -> N
                 model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
             )
             assert model.client is not None
+            _ = model.async_client
             api_client = model.client._api_client
             # Materialize the cached aiohttp session; no request is sent.
             # Annotated `Any`: these are private SDK internals whose declared union
@@ -8144,30 +8146,59 @@ async def test_dropping_model_closes_async_transports_inside_running_loop() -> N
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
 
 
-def test_async_client_closed_when_model_dropped_after_event_loop_exits() -> None:
-    """Dropping the model after its async loop exits must close async transports."""
+def test_cleanup_does_not_close_async_client_on_new_loop() -> None:
+    """Finalization after the owning loop exits must not create a cleanup loop."""
+    client = Mock()
+    client.aio.aclose = AsyncMock()
+    cleanup = _ClientCleanup(client)
 
-    async def create_model_and_transports() -> tuple[ChatGoogleGenerativeAI, Any, Any]:
-        model = ChatGoogleGenerativeAI(
-            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
-        )
-        assert model.client is not None
-        api_client = model.client._api_client
-        aiohttp_session = await api_client._get_aiohttp_session()
-        return model, api_client._async_httpx_client, aiohttp_session
+    async def register_owning_loop(cleanup_token: _ClientCleanup) -> None:
+        cleanup_token.register_async_loop()
 
-    model, async_httpx_client, aiohttp_session = asyncio.run(
-        create_model_and_transports()
+    asyncio.run(register_owning_loop(cleanup))
+
+    cleanup_ref = weakref.ref(cleanup)
+    del cleanup
+
+    assert cleanup_ref() is None
+    client.close.assert_called_once_with()
+    client.aio.aclose.assert_not_awaited()
+
+
+def test_aclose_rejects_different_event_loop() -> None:
+    """Explicit shutdown must not close async transports from another loop."""
+    client = Mock()
+    client.aio.aclose = AsyncMock()
+    cleanup = _ClientCleanup(client)
+
+    async def register_owning_loop(cleanup_token: _ClientCleanup) -> None:
+        cleanup_token.register_async_loop()
+
+    asyncio.run(register_owning_loop(cleanup))
+
+    with pytest.raises(RuntimeError, match="event loop where it was used"):
+        asyncio.run(cleanup.aclose())
+
+    client.aio.aclose.assert_not_awaited()
+
+
+async def test_aclose_closes_async_transports_on_owning_loop() -> None:
+    """Explicit shutdown closes both async transports before their loop exits."""
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
     )
-    assert not async_httpx_client.is_closed
-    assert not aiohttp_session.closed
+    assert model.client is not None
+    _ = model.async_client
+    api_client = model.client._api_client
+    sync_httpx_client = api_client._httpx_client
+    aiohttp_session: Any = await api_client._get_aiohttp_session()
+    async_httpx_client: Any = api_client._async_httpx_client
 
-    model_ref = weakref.ref(model)
-    del model
+    await model.aclose()
 
-    assert model_ref() is None
-    assert async_httpx_client.is_closed
+    assert sync_httpx_client.is_closed
     assert aiohttp_session.closed
+    assert async_httpx_client.is_closed
 
 
 def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
