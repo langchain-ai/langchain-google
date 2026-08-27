@@ -8075,20 +8075,19 @@ def test_model_copy_does_not_close_shared_client() -> None:
 
 
 def test_client_closed_when_last_model_reference_dropped() -> None:
-    """Dropping the last reference to a model must still close its transport.
+    """Dropping the last reference to a model closes its sync transport.
 
-    This checks that the model's `Client` is correctly closed when the model is garbage-
-    collected. This test was added to check that removing the `__del__` method from
-    `ChatGoogleGenerativeAI` (which used to close the client) does not break the
-    expected behavior of closing the transport when the last reference to the model is
-    dropped.
+    The model owns no finalizer itself; closing rides on the `_ClientCleanup` token
+    held as a private attribute, whose finalizer runs once no model shares the
+    `Client` any more. That indirection is invisible from the model's public surface,
+    so pin it here.
     """
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
     )
     assert model.client is not None
-    # Hold the transport only: keeping the `Client` or `BaseApiClient` alive would
-    # prevent the SDK finalizers that perform the cleanup from ever running.
+    # Hold the transport only: a surviving reference to the `Client` would keep its
+    # finalizer from running, so the assertion below would fail for the wrong reason.
     httpx_client = model.client._api_client._httpx_client
     assert httpx_client is not None
     assert not httpx_client.is_closed
@@ -8098,16 +8097,16 @@ def test_client_closed_when_last_model_reference_dropped() -> None:
     assert httpx_client.is_closed
 
 
-async def test_dropping_model_emits_no_unclosed_resource_warnings() -> None:
-    """Relying on the SDK's finalizers must not resurrect unclosed-resource noise.
+async def test_dropping_model_closes_async_transports_inside_running_loop() -> None:
+    """Dropping a model inside a running loop closes its async transports.
 
-    This checked that garbage-collecting a model does not emit "Unclosed client session"
-    or "Unclosed connector" warnings. It was added to ensure that removing the `__del__`
-    method from `ChatGoogleGenerativeAI` (which used to close the client) does not break
-    the expected behavior of suppressing warnings when the last reference to the model
-    is dropped.
+    `_ClientCleanup` schedules `aio.aclose()` on the running loop rather than awaiting
+    it, so the close lands one loop cycle after the model is collected. The loop
+    exception handler is captured because that scheduled close is fire-and-forget: a
+    failure inside it would otherwise surface nowhere.
     """
     loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
     handler_contexts: list[dict[str, Any]] = []
     loop.set_exception_handler(lambda _loop, context: handler_contexts.append(context))
 
@@ -8119,17 +8118,30 @@ async def test_dropping_model_emits_no_unclosed_resource_warnings() -> None:
                 model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
             )
             assert model.client is not None
+            api_client = model.client._api_client
             # Materialize the cached aiohttp session; no request is sent.
-            await model.client._api_client._get_aiohttp_session()
+            # Annotated `Any`: these are private SDK internals whose declared union
+            # types do not narrow to the concrete transports being asserted on.
+            aiohttp_session: Any = await api_client._get_aiohttp_session()
+            async_httpx_client: Any = api_client._async_httpx_client
+            assert not aiohttp_session.closed
+            assert not async_httpx_client.is_closed
 
-            del model
+            # Hold the transports only: a surviving reference to the model, its
+            # `Client`, or the `_ClientCleanup` token would keep the finalizer from
+            # running, and the assertions below would fail for the wrong reason.
+            del model, api_client
             await asyncio.sleep(0)
     finally:
-        loop.set_exception_handler(None)
+        loop.set_exception_handler(previous_handler)
 
+    assert aiohttp_session.closed
+    assert async_httpx_client.is_closed
+    # Assert the whole list rather than filtering for "Unclosed": the SDK strips its
+    # own unclosed-resource warnings, so a narrower filter would silently discard real
+    # errors, such as a failure raised inside the scheduled `aclose()` task.
+    assert handler_contexts == []
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
-    unclosed = [c for c in handler_contexts if "Unclosed" in str(c.get("message", ""))]
-    assert unclosed == []
 
 
 def test_async_client_closed_when_model_dropped_after_event_loop_exits() -> None:
