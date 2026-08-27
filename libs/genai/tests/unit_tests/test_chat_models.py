@@ -8132,6 +8132,32 @@ async def test_dropping_model_emits_no_unclosed_resource_warnings() -> None:
     assert unclosed == []
 
 
+def test_async_client_closed_when_model_dropped_after_event_loop_exits() -> None:
+    """Dropping the model after its async loop exits must close async transports."""
+
+    async def create_model_and_transports() -> tuple[ChatGoogleGenerativeAI, Any, Any]:
+        model = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        assert model.client is not None
+        api_client = model.client._api_client
+        aiohttp_session = await api_client._get_aiohttp_session()
+        return model, api_client._async_httpx_client, aiohttp_session
+
+    model, async_httpx_client, aiohttp_session = asyncio.run(
+        create_model_and_transports()
+    )
+    assert not async_httpx_client.is_closed
+    assert not aiohttp_session.closed
+
+    model_ref = weakref.ref(model)
+    del model
+
+    assert model_ref() is None
+    assert async_httpx_client.is_closed
+    assert aiohttp_session.closed
+
+
 def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
     message = AIMessage(
         content=[

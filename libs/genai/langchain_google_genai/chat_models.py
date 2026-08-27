@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
@@ -114,6 +115,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PrivateAttr,
     SecretStr,
     field_validator,
     model_validator,
@@ -172,6 +174,50 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
 
 class GoogleContextOverflowError(ClientError, ContextOverflowError):
     """ClientError raised when input exceeds Google's context limit."""
+
+
+class _ClientCleanup:
+    """Close a client when the last model sharing it is collected."""
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+
+    def __eq__(self, other: object) -> bool:
+        """Keep the internal cleanup token out of model equality semantics."""
+        return isinstance(other, _ClientCleanup)
+
+    @staticmethod
+    def _consume_task_exception(task: asyncio.Task[None]) -> None:
+        if not task.cancelled():
+            task.exception()
+
+    def __del__(self) -> None:
+        """Close sync and async transports without leaking cleanup exceptions."""
+        try:
+            self._client.close()
+        except Exception:
+            pass
+
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            cleanup_loop: asyncio.AbstractEventLoop | None = None
+            try:
+                cleanup_loop = asyncio.new_event_loop()
+                cleanup_loop.run_until_complete(self._client.aio.aclose())
+            except Exception:
+                pass
+            finally:
+                if cleanup_loop is not None:
+                    cleanup_loop.close()
+        except Exception:
+            pass
+        else:
+            try:
+                task = running_loop.create_task(self._client.aio.aclose())
+                task.add_done_callback(self._consume_task_exception)
+            except Exception:
+                pass
 
 
 # Inherit ChatGoogleGenerativeAIError for backward compatibility
@@ -2870,6 +2916,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
+    _client_cleanup: _ClientCleanup = PrivateAttr()
+
     stop: list[str] | None = Field(default=None, alias="stop_sequences")
     """Stop sequences for the model."""
 
@@ -3177,6 +3225,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             self.client = Client(api_key=google_api_key, http_options=http_options)
+        self._client_cleanup = _ClientCleanup(self.client)
         return self
 
     @model_validator(mode="after")
