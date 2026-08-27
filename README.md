@@ -29,4 +29,4 @@ As an open-source project in a rapidly developing field, we are extremely open t
 
 For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).
 
-For contributing to this specific package, see the [`langchain-google` Contributing Guide](./CONTRIBUTING.md).
+For contributing to this specific package, see the [`langchain-google` Contributing Guide](./.github/CONTRIBUTING.md).
