@@ -1,10 +1,12 @@
 """Test chat model integration."""
 
+import asyncio
 import base64
 import json
 import logging
 import os
 import warnings
+import weakref
 from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
@@ -76,6 +78,7 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
     GoogleContextOverflowError,
+    _ClientCleanup,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
@@ -8041,6 +8044,163 @@ def test_context_overflow_error_backwards_compatibility() -> None:
         assert isinstance(exc_info.value, ClientError)
         assert isinstance(exc_info.value, ContextOverflowError)
         assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def test_model_copy_does_not_close_shared_client() -> None:
+    """Collecting a copy must not close the transport the original still uses.
+
+    `model_copy` does not re-run the validator that builds the client, so a copy
+    shares the original's `Client`. This test guards against a change that would
+    make the copy close the transport when it is collected, which would break the
+    original.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    httpx_client = model.client._api_client._httpx_client
+    assert httpx_client is not None
+    assert not httpx_client.is_closed
+
+    copy = model.model_copy(update={"callbacks": []})
+    assert copy is not model
+    assert copy.client is model.client
+
+    copy_ref = weakref.ref(copy)
+    del copy
+    # Guard against a vacuous pass: the assertion below only means something if the
+    # copy was really collected and so had its chance to run a finalizer.
+    assert copy_ref() is None
+
+    assert not httpx_client.is_closed
+
+
+def test_client_closed_when_last_model_reference_dropped() -> None:
+    """Dropping the last reference to a model closes its sync transport.
+
+    The model owns no finalizer itself; closing rides on the `_ClientCleanup` token
+    held as a private attribute, whose finalizer runs once no model shares the
+    `Client` any more. That indirection is invisible from the model's public surface,
+    so pin it here.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    # Hold the transport only: a surviving reference to the `Client` would keep its
+    # finalizer from running, so the assertion below would fail for the wrong reason.
+    httpx_client = model.client._api_client._httpx_client
+    assert httpx_client is not None
+    assert not httpx_client.is_closed
+
+    del model
+
+    assert httpx_client.is_closed
+
+
+async def test_dropping_model_closes_async_transports_inside_running_loop() -> None:
+    """Dropping a model inside a running loop closes its async transports.
+
+    `_ClientCleanup` schedules `aio.aclose()` on the running loop rather than awaiting
+    it, so the close lands one loop cycle after the model is collected. The loop
+    exception handler is captured because that scheduled close is fire-and-forget: a
+    failure inside it would otherwise surface nowhere.
+    """
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    handler_contexts: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: handler_contexts.append(context))
+
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+
+            model = ChatGoogleGenerativeAI(
+                model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+            )
+            assert model.client is not None
+            _ = model.async_client
+            api_client = model.client._api_client
+            # Materialize the cached aiohttp session; no request is sent.
+            # Annotated `Any`: these are private SDK internals whose declared union
+            # types do not narrow to the concrete transports being asserted on.
+            aiohttp_session: Any = await api_client._get_aiohttp_session()
+            async_httpx_client: Any = api_client._async_httpx_client
+            assert not aiohttp_session.closed
+            assert not async_httpx_client.is_closed
+
+            # Hold the transports only: a surviving reference to the model, its
+            # `Client`, or the `_ClientCleanup` token would keep the finalizer from
+            # running, and the assertions below would fail for the wrong reason.
+            del model, api_client
+            await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous_handler)
+
+    assert aiohttp_session.closed
+    assert async_httpx_client.is_closed
+    # Assert the whole list rather than filtering for "Unclosed": the SDK strips its
+    # own unclosed-resource warnings, so a narrower filter would silently discard real
+    # errors, such as a failure raised inside the scheduled `aclose()` task.
+    assert handler_contexts == []
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+
+
+def test_cleanup_does_not_close_async_client_on_new_loop() -> None:
+    """Finalization after the owning loop exits must not create a cleanup loop."""
+    client = Mock()
+    client.aio.aclose = AsyncMock()
+    cleanup = _ClientCleanup(client)
+
+    async def register_owning_loop(cleanup_token: _ClientCleanup) -> None:
+        cleanup_token.register_async_loop()
+
+    asyncio.run(register_owning_loop(cleanup))
+
+    cleanup_ref = weakref.ref(cleanup)
+    del cleanup
+
+    assert cleanup_ref() is None
+    client.close.assert_called_once_with()
+    client.aio.aclose.assert_not_awaited()
+
+
+def test_aclose_rejects_different_event_loop() -> None:
+    """Explicit shutdown must not close async transports from another loop."""
+    client = Mock()
+    client.aio.aclose = AsyncMock()
+    cleanup = _ClientCleanup(client)
+
+    async def register_owning_loop(cleanup_token: _ClientCleanup) -> None:
+        cleanup_token.register_async_loop()
+
+    asyncio.run(register_owning_loop(cleanup))
+
+    with pytest.raises(RuntimeError, match="event loop where it was used"):
+        asyncio.run(cleanup.aclose())
+
+    client.aio.aclose.assert_not_awaited()
+
+
+async def test_aclose_closes_async_transports_on_owning_loop() -> None:
+    """Explicit shutdown closes both async transports before their loop exits."""
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    _ = model.async_client
+    api_client = model.client._api_client
+    sync_httpx_client = api_client._httpx_client
+    assert sync_httpx_client is not None
+    aiohttp_session: Any = await api_client._get_aiohttp_session()
+    async_httpx_client: Any = api_client._async_httpx_client
+    assert async_httpx_client is not None
+
+    await model.aclose()
+
+    assert sync_httpx_client.is_closed
+    assert aiohttp_session.closed
+    assert async_httpx_client.is_closed
 
 
 def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
