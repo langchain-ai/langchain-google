@@ -74,6 +74,7 @@ from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai.chat_models import (
+    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY,
     DUMMY_THOUGHT_SIGNATURE,
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
@@ -8351,3 +8352,130 @@ def test_lenient_conversion_logs_the_underlying_cause(
     assert "Dropping content block that cannot" in caplog.text
     assert "./secrets/local.png" in caplog.text
     assert "Media string must be one of" in caplog.text
+
+
+def _stream_llm(parts_per_chunk: list[list[Part]]) -> AIMessageChunk:
+    """Stream mocked candidate parts and return the aggregated chunk.
+
+    Args:
+        parts_per_chunk: Parts to emit, one inner list per streamed chunk.
+
+    Returns:
+        The result of merging every yielded chunk, as a caller of `.stream()`
+        would accumulate it.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert llm.client is not None
+
+    def mock_stream(**_kwargs: Any) -> Iterator[GenerateContentResponse]:
+        for parts in parts_per_chunk:
+            yield GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=parts))]
+            )
+
+    with patch.object(
+        llm.client.models, "generate_content_stream", side_effect=mock_stream
+    ):
+        chunks = list(llm.stream([HumanMessage(content="hi")]))
+
+    aggregated = chunks[0]
+    for chunk in chunks[1:]:
+        aggregated = aggregated + chunk
+    return aggregated
+
+
+def _image_part(data: bytes) -> Part:
+    return Part(inline_data=Blob(data=data, mime_type="image/png"))
+
+
+def _dict_blocks(message: AIMessageChunk) -> list[dict[str, Any]]:
+    """Return the dict content blocks of `message`, narrowed for type checking."""
+    assert isinstance(message.content, list)
+    return [block for block in message.content if isinstance(block, dict)]
+
+
+@pytest.mark.parametrize("same_chunk", [True, False])
+def test_stream_multiple_images_stay_separate(same_chunk: bool) -> None:
+    """Consecutive images must get distinct indices instead of merging.
+
+    Sharing an index makes `merge_lists` concatenate the two data URLs into one
+    unusable string, which breaks multi-image (Nanobanana) responses.
+    """
+    parts = [_image_part(b"AAAA"), _image_part(b"BBBB")]
+    parts_per_chunk = [parts] if same_chunk else [[parts[0]], [parts[1]]]
+
+    aggregated = _stream_llm(parts_per_chunk)
+
+    blocks = _dict_blocks(aggregated)
+    assert [block["index"] for block in blocks] == [0, 1]
+    assert [block["image_url"]["url"] for block in blocks] == [
+        "data:image/png;base64,QUFBQQ==",
+        "data:image/png;base64,QkJCQg==",
+    ]
+
+
+def test_stream_parallel_tool_calls_get_distinct_indices() -> None:
+    """Parallel function calls must get distinct indices.
+
+    Gemini does not send an index, so without one assigned here consumers that
+    key blocks by index (the `v3` event stream) collapse both calls into one and
+    strand the thought signature of the dropped call.
+    """
+    aggregated = _stream_llm(
+        [
+            [
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "SF"}, id="call_1"
+                    ),
+                    thought_signature=b"sig-1",
+                )
+            ],
+            [
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "Boston"}, id="call_2"
+                    )
+                )
+            ],
+        ]
+    )
+
+    assert [chunk["index"] for chunk in aggregated.tool_call_chunks] == [0, 1]
+    assert [call["id"] for call in aggregated.tool_calls] == ["call_1", "call_2"]
+    assert [call["args"] for call in aggregated.tool_calls] == [
+        {"location": "SF"},
+        {"location": "Boston"},
+    ]
+    # The retained signature must still resolve to a surviving tool call.
+    signatures = aggregated.additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY]
+    assert set(signatures) <= {call["id"] for call in aggregated.tool_calls}
+
+
+def test_stream_text_deltas_still_merge() -> None:
+    """Text arrives as deltas, so it must keep sharing one index."""
+    aggregated = _stream_llm([[Part(text="Hel")], [Part(text="lo")]])
+
+    assert aggregated.text == "Hello"
+    if isinstance(aggregated.content, list):
+        assert len(aggregated.content) == 1
+
+
+def test_stream_reasoning_and_tool_calls_share_one_index_space() -> None:
+    """Content blocks and tool call chunks must draw from the same counter.
+
+    `AIMessageChunk.content_blocks` flattens both into a single keyspace, so a
+    separately numbered tool call would collide with the reasoning block.
+    """
+    aggregated = _stream_llm(
+        [
+            [Part(text="thinking...", thought=True)],
+            [Part(function_call=FunctionCall(name="f1", args={"a": 1}, id="call_1"))],
+            [Part(function_call=FunctionCall(name="f2", args={"b": 2}, id="call_2"))],
+        ]
+    )
+
+    assert [block["index"] for block in _dict_blocks(aggregated)] == [0]
+    assert [chunk["index"] for chunk in aggregated.tool_call_chunks] == [1, 2]

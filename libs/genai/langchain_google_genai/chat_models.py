@@ -1588,6 +1588,56 @@ def _append_to_content(
     raise TypeError(msg)
 
 
+#: Block types that arrive as incremental deltas and must keep a stable index so
+#: successive chunks merge into one block. Every other block Gemini emits is
+#: complete on arrival and needs an index of its own.
+_MERGEABLE_BLOCK_TYPES = frozenset({"text", "thinking"})
+
+
+class _StreamBlockIndexer:
+    """Allocates streaming `index` values for content blocks."""
+
+    def __init__(self) -> None:
+        self._next_index = 0
+        self._open_type: str | None = None
+        self._open_index = -1
+
+    def _allocate(self, block_type: str | None) -> int:
+        index = self._next_index
+        self._next_index += 1
+        self._open_type = block_type
+        self._open_index = index
+        return index
+
+    def assign(self, message: AIMessageChunk) -> None:
+        """Populate any missing ``index`` fields on ``message``, in place.
+
+        Args:
+            message: The chunk whose content blocks and tool call chunks should
+                be indexed. Existing ``index`` values are left untouched.
+        """
+        if isinstance(message.content, list):
+            for block in message.content:
+                if not isinstance(block, dict) or "type" not in block:
+                    continue
+                block_type = block["type"]
+                if (
+                    block_type == self._open_type
+                    and block_type in _MERGEABLE_BLOCK_TYPES
+                ):
+                    index = self._open_index
+                else:
+                    index = self._allocate(block_type)
+                if "index" not in block:
+                    block["index"] = index
+
+        for tool_call_chunk_ in message.tool_call_chunks:
+            # Gemini emits each function call complete in a single part, so every
+            # chunk without a provider-supplied index is a distinct tool call.
+            if tool_call_chunk_.get("index") is None:
+                tool_call_chunk_["index"] = self._allocate(None)
+
+
 def _convert_integer_like_floats(obj: Any) -> Any:
     """Convert integer-like floats to integers recursively.
 
@@ -4027,8 +4077,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
-        index = -1
-        index_type = ""
+        indexer = _StreamBlockIndexer()
         for chunk in _classified_stream(response, request):
             if chunk:
                 _chat_result = _response_to_result(
@@ -4038,14 +4087,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 message = cast("AIMessageChunk", gen.message)
 
             # Populate index if missing
-            if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+            indexer.assign(message)
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -4089,8 +4131,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
-        index = -1
-        index_type = ""
+        indexer = _StreamBlockIndexer()
         stream = await self.async_client.models.generate_content_stream(
             **request,
         )
@@ -4103,14 +4144,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             message = cast("AIMessageChunk", gen.message)
 
             # populate index if missing
-            if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+            indexer.assign(message)
 
             prev_usage_metadata = (
                 message.usage_metadata
