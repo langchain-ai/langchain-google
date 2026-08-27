@@ -3920,8 +3920,18 @@ def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> Non
     assert parts[0].function_call is not None
 
 
-def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
-    """Drop foreign reasoning blocks rather than replaying them as thoughts."""
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_foreign_reasoning_block(
+    output_version: str | None,
+) -> None:
+    """Drop foreign reasoning rather than replaying it as a thought (#1603).
+
+    Both the v1 and non-v1 conversions must drop it: `output_version` is stamped by
+    the producing integration, so it cannot decide whether foreign reasoning leaks.
+    """
+    response_metadata = {"model_provider": "openai"}
+    if output_version:
+        response_metadata["output_version"] = output_version
     message = AIMessage(
         content=[
             {
@@ -3930,7 +3940,7 @@ def test_parse_chat_history_tool_calls_foreign_reasoning_block() -> None:
             }
         ],
         tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
-        response_metadata={"model_provider": "openai", "output_version": "v1"},
+        response_metadata=response_metadata,
     )
 
     _, formatted_messages = _parse_chat_history([message])
@@ -3956,6 +3966,8 @@ def test_parse_chat_history_drops_bedrock_v1_reasoning_block() -> None:
         ],
         response_metadata={"model_provider": "bedrock_converse"},
     )
+    # Restamp as v1 content so replay goes through the v1 converter rather than
+    # the non-v1 path; both are covered, but this test pins the v1 one.
     for_gemini = bedrock_reply.model_copy(
         update={
             "content": bedrock_reply.content_blocks,
@@ -4230,9 +4242,10 @@ def test_parse_chat_history_handles_empty_thought_blocks(
             id="text",
         ),
         pytest.param(
+            # Foreign reasoning is dropped outright, not merely de-signatured.
             {"type": "reasoning", "reasoning": "I should search."},
-            "I should search.",
-            True,
+            None,
+            None,
             id="reasoning",
         ),
         pytest.param(

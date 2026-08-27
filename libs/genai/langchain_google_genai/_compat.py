@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 # Vertex and the Gemini Developer API share content and signature formats.
 _NATIVE_MODEL_PROVIDERS = frozenset({"google_genai", "google_vertexai"})
 _ModelProviderKind = Literal["native", "foreign", "unknown"]
+# Standardized `reasoning` plus the raw shapes providers emit before conversion.
+_REASONING_BLOCK_TYPES = frozenset({"reasoning", "thinking", "reasoning_content"})
 
 
 def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
@@ -219,9 +221,9 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 # Another provider's chain-of-thought (for example AWS Bedrock or
                 # OpenAI summary blocks) is not a Gemini thought; sending it back
                 # would leak foreign reasoning text into Gemini requests.
-                logger.info(
+                logger.warning(
                     "Dropping v1 reasoning block from provider %r; foreign "
-                    "reasoning cannot be replayed as a Gemini thought part.",
+                    "reasoning is not replayed as a Gemini thought part.",
                     model_provider,
                 )
                 continue
@@ -246,7 +248,8 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                     and text.strip()
                 ]
                 reasoning_text = " ".join(summary_texts)
-            # Past the early return above, provider_kind is native or unknown.
+            # Foreign blocks already continued above, and native blocks with no
+            # signature were dropped, so an unsigned block here is provider-less.
             if not reasoning_text and not signature:
                 continue
             new_block = {
