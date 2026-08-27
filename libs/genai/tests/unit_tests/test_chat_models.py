@@ -8105,6 +8105,72 @@ def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> Non
     assert parts[2].function_call is not None
 
 
+def test_dummy_thought_signature_survives_serialization_as_bypass_string() -> None:
+    """The injected fallback signature must reach the API as a literal string.
+
+    Reproduces https://github.com/langchain-ai/langchain-google/issues/1570:
+    for Gemini 3+ models, `_parse_chat_history` injects a placeholder thought
+    signature into function-call parts that lack one. The SDK's
+    `encode_unserializable_types` base64-encodes `bytes` values, so unless the
+    placeholder is restored after encoding, the API receives a base64 blob
+    instead of the documented `skip_thought_signature_validator` bypass string
+    and rejects the request.
+    """
+    from google.genai._common import convert_to_dict, encode_unserializable_types
+
+    messages: list[BaseMessage] = [
+        HumanMessage(content="What's the weather in SF?"),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "get_weather",
+                    "args": {"city": "SF"},
+                    "id": "call_1",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+        ToolMessage(content="sunny, 70F", tool_call_id="call_1"),
+    ]
+
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="Done.")]))]
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.1-pro-preview", google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        llm.invoke(messages)
+
+    contents = mock_generate_content.call_args.kwargs["contents"]
+    function_call_parts = [
+        part
+        for content in contents
+        for part in (content.parts or [])
+        if part.function_call is not None
+    ]
+    assert len(function_call_parts) == 1
+    # The fallback was injected by `_parse_chat_history`.
+    assert function_call_parts[0].thought_signature
+
+    # Run the same serialization the SDK applies before sending the request.
+    encoded = encode_unserializable_types(convert_to_dict({"contents": contents}))
+    encoded_contents = cast("list[dict[str, Any]]", encoded["contents"])
+    encoded_parts = cast("list[dict[str, Any]]", encoded_contents[1]["parts"])
+    encoded_signatures = [
+        part.get("thought_signature") or part.get("thoughtSignature")
+        for part in encoded_parts
+    ]
+    assert "skip_thought_signature_validator" in encoded_signatures
+
+
 def test_lenient_conversion_logs_the_underlying_cause(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
