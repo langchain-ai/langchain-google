@@ -129,6 +129,7 @@ from langchain_google_genai._common import (
     get_user_agent,
 )
 from langchain_google_genai._compat import (
+    _REASONING_BLOCK_TYPES,
     _classify_model_provider,
     _convert_from_v1_to_generativelanguage_v1beta,
     _is_file_uri_supported,
@@ -1171,9 +1172,8 @@ def _prepare_ai_message_content(
     Foreign messages use LangChain's standardized blocks. Native messages retain
     their raw blocks because core may wrap valid Gemini media as `non_standard`.
     """
-    provider_kind = _classify_model_provider(
-        message.response_metadata.get("model_provider")
-    )
+    model_provider = message.response_metadata.get("model_provider")
+    provider_kind = _classify_model_provider(model_provider)
     is_foreign = provider_kind == "foreign"
     # Core standardizes foreign blocks, but can wrap native Gemini blocks as
     # `non_standard`, so native and unstamped messages use their raw content.
@@ -1219,6 +1219,16 @@ def _prepare_ai_message_content(
             continue
         candidate: Mapping[str, Any] = block
         if is_foreign:
+            if block_type in _REASONING_BLOCK_TYPES:
+                # Mirrors the v1 conversion in `_compat.py`: stripping the foreign
+                # signature is not enough, because the reasoning text itself is
+                # another provider's chain-of-thought and is not a Gemini thought.
+                logger.warning(
+                    "Dropping reasoning block from provider %r; foreign reasoning "
+                    "is not replayed as a Gemini thought part.",
+                    model_provider,
+                )
+                continue
             if _is_unsupported_foreign_server_tool(block, code_interpreter_call_ids):
                 continue
             candidate = _strip_foreign_signature(block)

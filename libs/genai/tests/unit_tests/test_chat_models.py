@@ -2912,6 +2912,7 @@ def test_thought_signature_conversion() -> None:
     expected = [{"text": "foo"}]
     assert result == expected
 
+    # Foreign reasoning blocks are dropped entirely (text and signature)
     reasoning_other_provider = {
         "type": "reasoning",
         "reasoning": "thinking...",
@@ -2921,7 +2922,7 @@ def test_thought_signature_conversion() -> None:
         [reasoning_other_provider],  # type: ignore[list-item]
         "other_provider",
     )
-    assert result == [{"thought": True, "text": "thinking..."}]
+    assert result == []
 
 
 def test_compat_image_url_block() -> None:
@@ -3923,7 +3924,11 @@ def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> Non
 def test_parse_chat_history_tool_calls_foreign_reasoning_block(
     output_version: str | None,
 ) -> None:
-    """Replay OpenAI summary reasoning safely (regression for #1603)."""
+    """Drop foreign reasoning rather than replaying it as a thought (#1603).
+
+    Both the v1 and non-v1 conversions must drop it: `output_version` is stamped by
+    the producing integration, so it cannot decide whether foreign reasoning leaks.
+    """
     response_metadata = {"model_provider": "openai"}
     if output_version:
         response_metadata["output_version"] = output_version
@@ -3942,11 +3947,52 @@ def test_parse_chat_history_tool_calls_foreign_reasoning_block(
 
     parts = formatted_messages[0].parts
     assert parts is not None
-    assert len(parts) == 2
-    assert parts[0].thought is True
-    assert parts[0].text == "I should search."
-    assert parts[0].thought_signature is None
-    assert parts[1].function_call is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+def test_parse_chat_history_drops_bedrock_v1_reasoning_block() -> None:
+    """Bedrock chain-of-thought must not leak into Gemini requests."""
+    bedrock_reply = AIMessage(
+        content=[
+            {
+                "type": "reasoning_content",
+                "reasoning_content": {
+                    "text": "Considering Paris.",
+                    "signature": "bedrock-sig",
+                },
+            },
+            {"type": "text", "text": "Paris."},
+        ],
+        response_metadata={"model_provider": "bedrock_converse"},
+    )
+    # Restamp as v1 content so replay goes through the v1 converter rather than
+    # the non-v1 path; both are covered, but this test pins the v1 one.
+    for_gemini = bedrock_reply.model_copy(
+        update={
+            "content": bedrock_reply.content_blocks,
+            "response_metadata": {
+                **bedrock_reply.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+
+    _, contents = _parse_chat_history(
+        [
+            HumanMessage(content="Capital of France?"),
+            for_gemini,
+            HumanMessage(content="Of Italy?"),
+        ]
+    )
+
+    model = next(c for c in contents if c.role == "model")
+    parts = model.parts
+    assert parts is not None
+    assert all(part.thought is not True for part in parts)
+    assert [(part.thought, part.thought_signature, part.text) for part in parts] == [
+        (None, None, "Paris.")
+    ]
 
 
 def test_convert_to_parts_openai_summary_reasoning_without_metadata() -> None:
@@ -4196,9 +4242,10 @@ def test_parse_chat_history_handles_empty_thought_blocks(
             id="text",
         ),
         pytest.param(
+            # Foreign reasoning is dropped outright, not merely de-signatured.
             {"type": "reasoning", "reasoning": "I should search."},
-            "I should search.",
-            True,
+            None,
+            None,
             id="reasoning",
         ),
         pytest.param(
