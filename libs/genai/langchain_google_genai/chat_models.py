@@ -1639,7 +1639,7 @@ def _parse_response_candidate(
         the content format. This is why `model_name` and `model_name_for_content` are
         separate parameters.
     """
-    content: None | str | list[str | dict] = None
+    content: str | list[str | dict] | None = None
     additional_kwargs: dict[str, Any] = {}
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
     if model_name:
