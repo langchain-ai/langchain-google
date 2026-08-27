@@ -8191,8 +8191,10 @@ async def test_aclose_closes_async_transports_on_owning_loop() -> None:
     _ = model.async_client
     api_client = model.client._api_client
     sync_httpx_client = api_client._httpx_client
+    assert sync_httpx_client is not None
     aiohttp_session: Any = await api_client._get_aiohttp_session()
     async_httpx_client: Any = api_client._async_httpx_client
+    assert async_httpx_client is not None
 
     await model.aclose()
 
