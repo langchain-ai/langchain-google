@@ -1831,8 +1831,6 @@ def _parse_response_candidate(
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
-            additional_kwargs["function_call"] = function_call
-
             raw_id = getattr(part.function_call, "id", None)
             tool_call_id = str(raw_id) if raw_id else str(uuid.uuid4())
             if streaming:
@@ -1845,6 +1843,7 @@ def _parse_response_candidate(
                     )
                 )
             else:
+                additional_kwargs["function_call"] = function_call
                 try:
                     tool_call_dict = parse_tool_calls(
                         [{"function": function_call}],
