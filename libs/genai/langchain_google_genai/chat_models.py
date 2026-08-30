@@ -2040,6 +2040,17 @@ def _response_to_result(
         except AttributeError:
             pass
 
+        # Surface Vertex paygo tier. Vertex-only (None on Gemini API); attach only
+        # on the final chunk to avoid duplication when chunks are concatenated.
+        if candidate.finish_reason:
+            usage_md = getattr(response, "usage_metadata", None)
+            traffic_type = getattr(usage_md, "traffic_type", None)
+            if traffic_type is not None:
+                # Store the string enum value for JSON-serializability.
+                traffic_type_value = getattr(traffic_type, "value", traffic_type)
+                generation_info["traffic_type"] = traffic_type_value
+                message.response_metadata["traffic_type"] = traffic_type_value
+
         message.usage_metadata = lc_usage
 
         if stream:
