@@ -1973,6 +1973,15 @@ def _response_to_result(
     except AttributeError:
         lc_usage = None
 
+    # `usage_metadata.traffic_type` is only populated on the Vertex AI backend and
+    # reports which quota (e.g. on-demand vs. provisioned throughput) served the
+    # request.
+    traffic_type = (
+        response.usage_metadata.traffic_type.name
+        if response.usage_metadata and response.usage_metadata.traffic_type
+        else None
+    )
+
     generations: list[ChatGeneration] = []
 
     for candidate in response.candidates or []:
@@ -2009,6 +2018,12 @@ def _response_to_result(
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
+
+        # Only include traffic_type in the final chunk (when finish_reason exists)
+        # to avoid duplication when chunks are concatenated with +=
+        if candidate.finish_reason and traffic_type:
+            generation_info["traffic_type"] = traffic_type
+            message.response_metadata["traffic_type"] = traffic_type
 
         try:
             if candidate.grounding_metadata:
@@ -2942,6 +2957,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "model_provider": "google_genai",
             "prompt_feedback": {"block_reason": 0, "safety_ratings": []},
             "finish_reason": "STOP",
+            # Only present on the Vertex AI backend
+            "traffic_type": "ON_DEMAND",
             "safety_ratings": [
                 {
                     "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",

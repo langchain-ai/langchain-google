@@ -1395,6 +1395,115 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     )
 
 
+def test_response_to_result_includes_traffic_type() -> None:
+    """Test that Vertex `usage_metadata.traffic_type` is surfaced on the message."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+    candidate = Candidate.model_validate(raw_candidate)
+    response = GenerateContentResponse(
+        candidates=[candidate],
+        model_version=MODEL_NAME,
+        usage_metadata={
+            "prompt_token_count": 1,
+            "candidates_token_count": 1,
+            "total_token_count": 2,
+            "traffic_type": "ON_DEMAND_PRIORITY",
+        },
+    )
+
+    result = _response_to_result(response, stream=False)
+
+    generation = result.generations[0]
+    assert generation.generation_info is not None
+    assert generation.generation_info["traffic_type"] == "ON_DEMAND_PRIORITY"
+    assert generation.message.response_metadata["traffic_type"] == "ON_DEMAND_PRIORITY"
+
+
+def test_response_to_result_omits_traffic_type_when_absent() -> None:
+    """Test that `traffic_type` is omitted when not reported (Gemini API backend)."""
+    raw_candidate = {
+        "content": {"parts": [{"text": "Hello, world!"}]},
+        "finish_reason": "STOP",
+        "safety_ratings": [],
+    }
+    candidate = Candidate.model_validate(raw_candidate)
+    response = GenerateContentResponse(
+        candidates=[candidate],
+        model_version=MODEL_NAME,
+        usage_metadata={
+            "prompt_token_count": 1,
+            "candidates_token_count": 1,
+            "total_token_count": 2,
+        },
+    )
+
+    result = _response_to_result(response, stream=False)
+
+    generation = result.generations[0]
+    assert generation.generation_info is not None
+    assert "traffic_type" not in generation.generation_info
+    assert "traffic_type" not in generation.message.response_metadata
+
+
+def test_streaming_chunk_concatenation_no_traffic_type_duplication() -> None:
+    """Test that `traffic_type` only appears on the final chunk when streaming.
+
+    String values in `response_metadata` are concatenated when chunks are combined
+    with the += operator, so `traffic_type` must only be set on the last chunk
+    (when `finish_reason` exists).
+    """
+    usage_metadata = {
+        "prompt_token_count": 1,
+        "candidates_token_count": 1,
+        "total_token_count": 2,
+        "traffic_type": "PROVISIONED_THROUGHPUT",
+    }
+
+    chunk1_candidate = Candidate.model_validate(
+        {"content": {"parts": [{"text": "Hello"}]}, "safety_ratings": []}
+    )
+    response1 = GenerateContentResponse(
+        candidates=[chunk1_candidate],
+        model_version=MODEL_NAME,
+        usage_metadata=usage_metadata,
+    )
+
+    chunk2_candidate = Candidate.model_validate(
+        {
+            "content": {"parts": [{"text": " world"}]},
+            "finish_reason": "STOP",
+            "safety_ratings": [],
+        }
+    )
+    response2 = GenerateContentResponse(
+        candidates=[chunk2_candidate],
+        model_version=MODEL_NAME,
+        usage_metadata=usage_metadata,
+    )
+
+    result1 = _response_to_result(response1, stream=True)
+    result2 = _response_to_result(response2, stream=True)
+
+    msg1 = cast("AIMessageChunk", result1.generations[0].message)
+    msg2 = cast("AIMessageChunk", result2.generations[0].message)
+
+    # Intermediate chunk should NOT have traffic_type in response_metadata
+    assert "traffic_type" not in msg1.response_metadata
+
+    # Only the final chunk should have traffic_type
+    assert msg2.response_metadata["traffic_type"] == "PROVISIONED_THROUGHPUT"
+    generation_info2 = result2.generations[0].generation_info
+    assert generation_info2 is not None
+    assert generation_info2["traffic_type"] == "PROVISIONED_THROUGHPUT"
+
+    # Concatenate chunks (simulating user code with +=)
+    full = msg1 + msg2
+    assert full.response_metadata["traffic_type"] == "PROVISIONED_THROUGHPUT"
+
+
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
