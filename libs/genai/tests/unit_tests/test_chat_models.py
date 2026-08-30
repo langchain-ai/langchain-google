@@ -74,6 +74,9 @@ from langchain_google_genai import (
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
+from langchain_google_genai._function_utils import (
+    convert_to_genai_function_declarations,
+)
 from langchain_google_genai.chat_models import (
     _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY,
     DUMMY_THOUGHT_SIGNATURE,
@@ -6347,7 +6350,10 @@ def test_automatic_function_calling_disabled_with_tools() -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
     )
 
-    request = llm._prepare_request([HumanMessage(content="test")], tools=[add])
+    request = llm._prepare_request(
+        [HumanMessage(content="test")],
+        tools=convert_to_genai_function_declarations([add]),
+    )
     afc = request["config"].automatic_function_calling
     assert afc is not None
     assert afc.disable is True
