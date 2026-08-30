@@ -344,7 +344,7 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
-            elif "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
+            elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
                 creds, project = default()
                 creds = google.auth.credentials.with_scopes_if_required(
                     creds, self.scopes
