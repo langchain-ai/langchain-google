@@ -3278,14 +3278,27 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 os.environ["GOOGLE_API_KEY"] = google_api_key
                 api_key_env_set = True
 
+            # Vertex AI "Express Mode" (API-key auth, no credentials) is
+            # project-less by design. The google-genai SDK gives an
+            # explicitly-passed `project`/`location` precedence over an API
+            # key that was only set via environment variable, which causes
+            # it to silently discard the API key and fall back to
+            # Application Default Credentials -- raising
+            # `DefaultCredentialsError` even though a valid API key was
+            # supplied (see #1473). Only pass `project`/`location` through
+            # when we're not authenticating purely via API key.
+            using_api_key_only = bool(google_api_key) and not self.credentials
+            client_kwargs: dict[str, Any] = {
+                "vertexai": True,
+                "credentials": self.credentials,
+                "http_options": http_options,
+            }
+            if not using_api_key_only:
+                client_kwargs["project"] = self.project
+                client_kwargs["location"] = self.location
+
             try:
-                self.client = Client(
-                    vertexai=True,
-                    project=self.project,
-                    location=self.location,
-                    credentials=self.credentials,
-                    http_options=http_options,
-                )
+                self.client = Client(**client_kwargs)
             finally:
                 # Clean up the temporary environment variable if we set it
                 if api_key_env_set:
