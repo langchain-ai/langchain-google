@@ -15,6 +15,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
+    AutomaticFunctionCallingConfig,
     Blob,
     Candidate,
     Content,
@@ -6312,6 +6313,60 @@ def test_thinking_config_object_is_propagated() -> None:
     assert config.thinking_config is not None
     assert config.thinking_config.include_thoughts is True
     assert config.thinking_config.thinking_budget == 512
+
+
+def test_automatic_function_calling_disabled_by_default() -> None:
+    """Test AFC is disabled on the request config.
+
+    LangChain runs its own tool-execution loop and only sends tool declarations
+    to the API, so the SDK's Automatic Function Calling must be disabled.
+    Leaving it enabled makes the SDK log the "Direct use of automatic function
+    calling (AFC) in Models.generate_content is not recommended" warning
+    (regression test for issue #1978).
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    request = llm._prepare_request([HumanMessage(content="test")])
+    afc = request["config"].automatic_function_calling
+    assert afc is not None
+    assert afc.disable is True
+
+
+def test_automatic_function_calling_disabled_with_tools() -> None:
+    """Test AFC stays disabled when tools are bound (regression for #1978)."""
+
+    def add(a: int, b: int) -> int:
+        """Add two numbers."""
+        return a + b
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    request = llm._prepare_request([HumanMessage(content="test")], tools=[add])
+    afc = request["config"].automatic_function_calling
+    assert afc is not None
+    assert afc.disable is True
+
+
+def test_automatic_function_calling_caller_override_is_honored() -> None:
+    """Test an explicit `automatic_function_calling` overrides the default."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    request = llm._prepare_request(
+        [HumanMessage(content="test")],
+        automatic_function_calling=AutomaticFunctionCallingConfig(disable=False),
+    )
+    afc = request["config"].automatic_function_calling
+    assert afc is not None
+    assert afc.disable is False
 
 
 @pytest.mark.parametrize(
