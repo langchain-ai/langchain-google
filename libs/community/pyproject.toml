@@ -72,6 +72,7 @@ test = [
     "pytest-asyncio>=0.21.1,<2.0.0",
     "pytest-retry>=1.7.0,<2.0.0",
     "pytest-socket>=0.7.0,<1.0.0",
+    "pytest-xdist>=3.8.0,<4.0.0",
     "google-cloud-documentai>=2.24.2,<4.0.0",
     #"google-cloud-documentai-toolbox>=0.13.3a0,<1.0.0",
     "google-cloud-bigquery>=3.21.0,<4.0.0",
