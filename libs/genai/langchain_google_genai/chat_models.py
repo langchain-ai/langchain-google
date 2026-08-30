@@ -3250,6 +3250,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             base_url=cast("str", base_url),
             api_version=self.api_version,
             headers=headers,
+            # Set client-level retries so all code paths honor `max_retries`.
+            # Per-request `HttpRetryOptions` only reach non-streaming calls;
+            # `async_request_streamed` in the SDK does not forward per-request
+            # `http_options`, so without a client-level default, streaming
+            # requests (used by `_astream` / agentic workloads) would get zero
+            # retries regardless of `max_retries`. `max_retries=0` is left as
+            # `None` so the SDK default applies (see the `max_retries` docstring).
+            retry_options=(
+                HttpRetryOptions(attempts=self.max_retries)
+                if self.max_retries
+                else None
+            ),
             client_args=self.client_args,
             async_client_args=self.client_args,
         )

@@ -826,6 +826,52 @@ def test_api_version_forwarded_to_http_options_gemini() -> None:
         assert call_http_options.api_version == "v1"
 
 
+def test_max_retries_sets_client_level_retry_options() -> None:
+    """`max_retries` sets client-level `retry_options` (regression for #1652).
+
+    Per-request `HttpRetryOptions` only reach non-streaming calls; the SDK's
+    streaming path does not forward them, so `max_retries` must also be applied
+    at client construction or streaming requests get zero retries.
+    """
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=5,
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.retry_options is not None
+        assert call_http_options.retry_options.attempts == 5
+
+
+def test_max_retries_defaults_to_client_level_retry_options() -> None:
+    """The default `max_retries` is applied at client level (regression #1652)."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.retry_options is not None
+        assert call_http_options.retry_options.attempts == 6
+
+
+def test_max_retries_zero_defers_to_sdk_default() -> None:
+    """`max_retries=0` leaves `retry_options` unset so the SDK default applies.
+
+    `max_retries=0` is documented to mean "use the Google SDK default", so no
+    client-level `retry_options` should be forced (regression for #1652).
+    """
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.retry_options is None
+
+
 def test_api_version_forwarded_to_http_options_vertex() -> None:
     """`api_version` is forwarded into `HttpOptions` for the Vertex backend.
 
