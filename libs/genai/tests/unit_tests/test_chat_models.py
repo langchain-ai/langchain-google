@@ -2421,6 +2421,80 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert result.usage_metadata["total_tokens"] == 35
 
 
+def test_tool_use_prompt_tokens_included_in_input_token_details() -> None:
+    """Test that `tool_use_prompt_token_count` is surfaced in `input_token_details`.
+
+    Regression test: previously `tool_use_prompt_token_count` was not read from
+    the API response, so usage_metadata under-reported input token costs in
+    agentic (tool-use) workflows.
+    """
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="The answer is 42.")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=30,
+            candidates_token_count=10,
+            total_token_count=50,
+            tool_use_prompt_token_count=10,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
+        result = llm.invoke("What is the answer?")
+
+    assert isinstance(result, AIMessage)
+    assert result.usage_metadata is not None
+    assert result.usage_metadata["input_tokens"] == 30
+    assert result.usage_metadata["output_tokens"] == 10
+    assert result.usage_metadata["total_tokens"] == 50
+    # The key assertion: tool_use tokens must appear in input_token_details
+    assert result.usage_metadata.get("input_token_details") is not None
+    assert result.usage_metadata["input_token_details"].get("tool_use") == 10
+
+
+def test_tool_use_prompt_tokens_absent_when_zero() -> None:
+    """Test that `tool_use` key is absent from input_token_details when not set."""
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="Hello!")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
+        result = llm.invoke("Hi")
+
+    assert isinstance(result, AIMessage)
+    assert result.usage_metadata is not None
+    # No tool_use key when tool_use_prompt_token_count is 0 / absent
+    assert "tool_use" not in (result.usage_metadata.get("input_token_details") or {})
+
+
 def test_constructor_thinking_config_is_propagated() -> None:
     """Test that constructor-level `thinking_config` is sent in request config."""
     mock_response = GenerateContentResponse(
@@ -6217,6 +6291,55 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
         assert config.thinking_config.thinking_level == ThinkingLevel.LOW
         # Pydantic models define all fields; check value is None rather than hasattr
         assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_budget_takes_precedence_for_pre_gemini_3_models() -> None:
+    """`thinking_budget` (not `thinking_level`) must win on Gemini < 3 models.
+
+    Regression test for GH issue #1462: previously `thinking_level` was
+    unconditionally preferred even though it is not a recognized field for
+    Gemini 2.x models, silently dropping `thinking_budget`.
+    """
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr(FAKE_API_KEY),
+            thinking_budget=1024,
+            thinking_level="low",
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 1
+        assert issubclass(warning_list[0].category, UserWarning)
+        assert "not supported by" in str(warning_list[0].message)
+
+        # thinking_budget must be used; thinking_level must be dropped
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == 1024
+        assert config.thinking_config.thinking_level is None
+
+
+def test_thinking_level_still_wins_for_gemini_3_models() -> None:
+    """`thinking_level` must still win for Gemini 3+ models (unchanged)."""
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_budget=1024,
+        thinking_level="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.thinking_budget is None
 
 
 def test_thinking_budget_alone_still_works() -> None:
