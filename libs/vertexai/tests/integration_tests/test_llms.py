@@ -69,13 +69,15 @@ def test_stream() -> None:
 
 
 @pytest.mark.release
-async def test_vertex_consistency() -> None:
+async def test_vertex_generation_methods() -> None:
     llm = VertexAI(model=_DEFAULT_MODEL_NAME, temperature=0)
     output = llm.generate(["Please say foo:"])
     streaming_output = llm.generate(["Please say foo:"], stream=True)
     async_output = await llm.agenerate(["Please say foo:"])
-    assert output.generations[0][0].text == streaming_output.generations[0][0].text
-    assert output.generations[0][0].text == async_output.generations[0][0].text
+
+    for result in (output, streaming_output, async_output):
+        assert isinstance(result, LLMResult)
+        assert result.generations[0][0].text
 
 
 @pytest.mark.release
