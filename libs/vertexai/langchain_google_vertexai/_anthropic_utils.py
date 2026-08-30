@@ -78,7 +78,9 @@ def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
     )
 
 
-def _format_image(image_url: str, project: str | None) -> dict:
+def _format_image(
+    image_url: str, project: str | None, timeout: float | None = None
+) -> dict:
     """Formats a message image to a dict for Anthropic API."""
     regex = r"^data:(?P<media_type>(?:image|application)/.+);base64,(?P<data>.+)$"
     match = re.match(regex, image_url)
@@ -89,7 +91,7 @@ def _format_image(image_url: str, project: str | None) -> dict:
             "data": match.group("data"),
         }
     if validators.url(image_url):
-        loader = ImageBytesLoader(project=project)
+        loader = ImageBytesLoader(project=project, timeout=timeout)
         image_bytes = loader.load_bytes(image_url)
         path = urllib.parse.urlparse(image_url).path
         raw_mime_type = path.split(".")[-1].lower()
@@ -106,7 +108,7 @@ def _format_image(image_url: str, project: str | None) -> dict:
         }
     if image_url.startswith("gs://"):
         # Gets image and encodes to base64.
-        loader = ImageBytesLoader(project=project)
+        loader = ImageBytesLoader(project=project, timeout=timeout)
         part = loader.load_part(image_url)
         if part.file_data.mime_type:
             mime_type = part.file_data.mime_type
@@ -143,7 +145,9 @@ def _format_text_content(text: str) -> dict[str, str | dict[str, Any]]:
 
 
 def _format_message_anthropic(
-    message: HumanMessage | AIMessage | SystemMessage, project: str | None
+    message: HumanMessage | AIMessage | SystemMessage,
+    project: str | None,
+    timeout: float | None = None,
 ):
     """Format a message for Anthropic API.
 
@@ -187,7 +191,7 @@ def _format_message_anthropic(
                         new_block[copy_attr] = block[copy_attr]
 
                 if block["type"] == "image":
-                    content.append(_format_image_content_block(block, project))
+                    content.append(_format_image_content_block(block, project, timeout))
                     continue
 
                 if block["type"] == "text":
@@ -236,7 +240,7 @@ def _format_message_anthropic(
 
                 if block["type"] == "image_url":
                     # convert format
-                    source = _format_image(block["image_url"]["url"], project)
+                    source = _format_image(block["image_url"]["url"], project, timeout)
                     if source["media_type"] == "application/pdf":
                         doc_type = "document"
                     else:
@@ -275,6 +279,7 @@ def _format_message_anthropic(
 def _format_messages_anthropic(
     messages: list[BaseMessage],
     project: str | None,
+    timeout: float | None = None,
 ) -> tuple[dict[str, Any] | None, list[dict]]:
     """Formats messages for Anthropic."""
     system_messages: dict[str, Any] | None = None
@@ -286,12 +291,12 @@ def _format_messages_anthropic(
             if system_messages is not None:
                 msg = "Received multiple non-consecutive system messages."
                 raise ValueError(msg)
-            fm = _format_message_anthropic(message, project)
+            fm = _format_message_anthropic(message, project, timeout)
             if fm:
                 system_messages = fm
             continue
 
-        fm = _format_message_anthropic(message, project)
+        fm = _format_message_anthropic(message, project, timeout)
         if not fm:
             continue
         formatted_messages.append(fm)
@@ -336,7 +341,9 @@ def convert_to_anthropic_tool(
     )
 
 
-def _format_image_content_block(block: dict, project: str | None = None) -> dict:
+def _format_image_content_block(
+    block: dict, project: str | None = None, timeout: float | None = None
+) -> dict:
     """Convert a LangChain image content block to Anthropic wire format.
 
     LangChain image blocks use `{"type": "image", "base64": ..., "mime_type": ...}`
@@ -361,7 +368,7 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
         if url.startswith("data:"):
             return {
                 "type": "image",
-                "source": _format_image(url, project),
+                "source": _format_image(url, project, timeout),
             }
         return {
             "type": "image",

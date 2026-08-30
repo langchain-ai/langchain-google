@@ -2668,3 +2668,15 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_image_bytes_loader_client_inherits_model_timeout() -> None:
+    """``ChatVertexAI`` must thread its configured ``timeout`` into the
+    ``ImageBytesLoader`` used for media fetches, so a stalled image URL cannot
+    hang request preparation past the model's timeout. When no timeout is set
+    the loader stays unbounded (backwards compatible)."""
+    model = ChatVertexAI(model="gemini-2.0-flash", project="test-project", timeout=5.0)
+    assert model._image_bytes_loader_client.timeout == 5.0
+
+    default_model = ChatVertexAI(model="gemini-2.0-flash", project="test-project")
+    assert default_model._image_bytes_loader_client.timeout is None
