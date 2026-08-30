@@ -6219,6 +6219,39 @@ def test_thinking_level_takes_precedence_over_thinking_budget() -> None:
         assert config.thinking_config.thinking_budget is None
 
 
+def test_thinking_budget_takes_precedence_for_gemini_2x() -> None:
+    """Test `thinking_budget` wins over `thinking_level` for Gemini 2.x models.
+
+    Regression test for a bug where `thinking_level` was applied regardless of
+    model version, so a config carrying both parameters (to target 2.x and 3.x
+    interchangeably) silently dropped `thinking_budget` even on Gemini 2.x, where
+    `thinking_level` is not supported.
+    """
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=SecretStr(FAKE_API_KEY),
+            thinking_level="low",
+            thinking_budget=128,
+        )
+
+        msg = HumanMessage(content="test")
+        request = llm._prepare_request([msg])
+        config = request["config"]
+
+        assert len(warning_list) == 1
+        assert issubclass(warning_list[0].category, UserWarning)
+        assert "thinking_budget' takes precedence" in str(warning_list[0].message)
+
+        # Check that thinking_budget is used and thinking_level is ignored
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == 128
+        # Pydantic models define all fields; check value is None rather than hasattr
+        assert config.thinking_config.thinking_level is None
+
+
 def test_thinking_budget_alone_still_works() -> None:
     """Test that `thinking_budget` still works when `thinking_level` is not provided."""
     llm = ChatGoogleGenerativeAI(

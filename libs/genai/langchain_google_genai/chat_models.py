@@ -3058,7 +3058,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     !!! note "Replaces `thinking_budget`"
 
         `thinking_budget` is deprecated for Gemini 3+ models. If both parameters are
-        provided, this field takes precedence.
+        provided, the one matching the model family is used: `thinking_level` for
+        Gemini 3+ models and `thinking_budget` for Gemini 2.x models.
 
         If left unspecified, the model's default thinking level is used.
 
@@ -3082,8 +3083,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     !!! note "Precedence"
 
         If `thinking_config` is provided together with flat thinking arguments,
-        the flat arguments take precedence for matching fields. After merging,
-        `thinking_level` takes precedence over `thinking_budget` for Gemini 3+ models.
+        the flat arguments take precedence for matching fields. After merging, if
+        both `thinking_level` and `thinking_budget` are present, the one matching
+        the model family is used: `thinking_level` for Gemini 3+ models and
+        `thinking_budget` for Gemini 2.x models.
     """
 
     cached_content: str | None = None
@@ -3521,16 +3524,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        # `thinking_level` (Gemini 3+) and `thinking_budget` (Gemini 2.x) map to
+        # different, mutually exclusive API fields. When both are set, keep the one
+        # that matches the target model so a single configuration can drive both
+        # model families.
         if "thinking_level" in config and "thinking_budget" in config:
-            warnings.warn(
-                "Both 'thinking_level' and 'thinking_budget' were set after merging "
-                "thinking configuration values. 'thinking_level' takes precedence "
-                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
-                UserWarning,
-                stacklevel=2,
-            )
-            config.pop("thinking_budget")
+            if _is_gemini_3_or_later(self.model):
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values. 'thinking_level' takes "
+                    "precedence for Gemini 3+ models; 'thinking_budget' will be "
+                    "ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_budget")
+            else:
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values. 'thinking_budget' takes "
+                    "precedence for Gemini 2.x models; 'thinking_level' will be "
+                    "ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_level")
 
         return ThinkingConfig(**config)
 
