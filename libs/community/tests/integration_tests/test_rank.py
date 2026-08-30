@@ -159,14 +159,14 @@ def ranker(
 
 
 @pytest.mark.extended
-def test_compression_retriever(
+async def test_compression_retriever(
     mock_vector_store_retriever: MockVectorStoreRetriever, ranker: VertexAIRank
 ) -> None:
     compression_retriever = CustomRankingRetriever(
         base_retriever=mock_vector_store_retriever, ranker=ranker
     )
     query = "What was the name of einstein's mother? Was she a scientist too?"
-    compressed_docs = compression_retriever.invoke(query)
+    compressed_docs = await compression_retriever.ainvoke(query)
 
     expected_docs = [
         Document(
