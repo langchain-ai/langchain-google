@@ -14,8 +14,10 @@ _OUTPUT_DIMENSIONALITY = 768
     "query",
     [
         "Hi",
-        "This is a longer query string to test the embedding functionality of the"
-        " model against the pickle rick?",
+        (
+            "This is a longer query string to test the embedding functionality of the"
+            " model against the pickle rick?"
+        ),
     ],
 )
 @pytest.mark.asyncio
@@ -33,8 +35,10 @@ async def test_embed_query_different_lengths(query: str, backend_config: dict) -
     "query",
     [
         "Hi",
-        "This is a longer query string to test the embedding functionality of the"
-        " model against the pickle rick?",
+        (
+            "This is a longer query string to test the embedding functionality of the"
+            " model against the pickle rick?"
+        ),
     ],
 )
 @pytest.mark.asyncio
