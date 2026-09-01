@@ -2042,7 +2042,12 @@ def _response_to_result(
         if response.usage_metadata is None:
             msg = "Usage metadata is None"
             raise AttributeError(msg)
-        input_tokens = response.usage_metadata.prompt_token_count or 0
+        # Server-side tool use (for example agentic video processing) reports its
+        # prompt tokens separately; they are input tokens and are included in
+        # `total_token_count`, so fold them in to keep the parts summing.
+        input_tokens = (response.usage_metadata.prompt_token_count or 0) + (
+            response.usage_metadata.tool_use_prompt_token_count or 0
+        )
         thought_tokens = response.usage_metadata.thoughts_token_count or 0
         output_tokens = (
             response.usage_metadata.candidates_token_count or 0
