@@ -411,7 +411,11 @@ def _format_to_genai_function_declaration(
             all(k in tool for k in ("name", "description")) and "parameters" not in tool
         ):
             function = cast("dict", tool)
-        elif "parameters" in tool and tool["parameters"].get("properties"):
+        elif (
+            "parameters" in tool
+            and tool["parameters"] is not None
+            and tool["parameters"].get("properties")
+        ):
             function = convert_to_openai_tool(cast("dict", tool))["function"]
         else:
             function = cast("dict", tool)
