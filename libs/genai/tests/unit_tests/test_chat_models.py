@@ -26,9 +26,12 @@ from google.genai.types import (
     HttpOptions,
     HttpRetryOptions,
     Language,
+    MediaProcessing,
     Part,
     ThinkingConfig,
     ThinkingLevel,
+    ToolCall,
+    ToolResponse,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
@@ -5173,7 +5176,7 @@ def test_convert_to_parts_invalid_image_url_format() -> None:
 
 
 def test_convert_to_parts_missing_mime_type_in_media() -> None:
-    """Test `_convert_to_parts` with missing `mime_type` in media."""
+    """A media `file_uri` without `mime_type` is sent as-is for the API to infer."""
     content = [
         {
             "type": "media",
@@ -5181,8 +5184,13 @@ def test_convert_to_parts_missing_mime_type_in_media() -> None:
             # Missing mime_type
         }
     ]
-    with pytest.raises(ValueError, match="Missing mime_type in media part"):
-        _convert_to_parts(content)
+
+    parts = _convert_to_parts(content)
+
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "gs://bucket/file.pdf"
+    assert parts[0].file_data.mime_type is None
 
 
 def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
@@ -8479,3 +8487,289 @@ def test_stream_reasoning_and_tool_calls_share_one_index_space() -> None:
 
     assert [block["index"] for block in _dict_blocks(aggregated)] == [0]
     assert [chunk["index"] for chunk in aggregated.tool_call_chunks] == [1, 2]
+
+
+# --- Agentic video understanding (per-part `media_processing`) ---
+
+_AGENTIC_MODEL = "gemini-3.7-flash"
+
+_YOUTUBE_URL = "https://www.youtube.com/watch?v=9hE5-98ZeCg"
+
+
+def _video_media_block(**overrides: Any) -> dict[str, Any]:
+    """Build a `media` content block referencing an uploaded video."""
+    block: dict[str, Any] = {
+        "type": "media",
+        "file_uri": "https://example.invalid/files/lecture",
+        "mime_type": "video/mp4",
+    }
+    block.update(overrides)
+    return block
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        {
+            "type": "media",
+            "file_uri": "https://example.invalid/files/lecture",
+            "mime_type": "video/mp4",
+            "media_processing": "AGENTIC",
+        },
+        {
+            "type": "file",
+            "file_id": "https://example.invalid/files/lecture",
+            "mime_type": "video/mp4",
+            "media_processing": "AGENTIC",
+        },
+    ],
+)
+def test_media_processing_on_file_reference_blocks(block: dict[str, Any]) -> None:
+    """`media_processing` reaches the part for each file-reference block shape."""
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert len(parts) == 1
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "https://example.invalid/files/lecture"
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_uri"),
+    [
+        ({"type": "video", "url": _YOUTUBE_URL}, _YOUTUBE_URL),
+        ({"type": "video", "url": "https://youtu.be/9hE5"}, "https://youtu.be/9hE5"),
+        ({"type": "video", "url": "gs://bucket/v.mp4"}, "gs://bucket/v.mp4"),
+        ({"type": "video", "file_id": "files/abc123"}, "files/abc123"),
+    ],
+)
+def test_provider_resolved_uris_are_not_downloaded(
+    block: dict[str, Any], expected_uri: str
+) -> None:
+    """URIs Gemini resolves itself become `file_data` instead of inline bytes."""
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].inline_data is None
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == expected_uri
+
+
+def test_provider_resolved_uri_carries_media_processing() -> None:
+    """The standard `video` block can request agentic processing."""
+    block = {
+        "type": "video",
+        "url": _YOUTUBE_URL,
+        "mime_type": "video/mp4",
+        "media_processing": "AGENTIC",
+    }
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].file_data is not None
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+
+
+def test_other_urls_are_still_downloaded_inline() -> None:
+    """Arbitrary URLs keep the existing download-and-inline behavior."""
+    block = {"type": "image", "url": "https://example.invalid/cat.jpg"}
+
+    with patch(
+        "langchain_google_genai._image_utils.ImageBytesLoader._bytes_from_url",
+        return_value=b"raw-bytes",
+    ):
+        parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].file_data is None
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.data == b"raw-bytes"
+
+
+def test_media_file_uri_without_mime_type() -> None:
+    """A `file_uri` needs no MIME type; the API infers it (e.g. YouTube URLs)."""
+    block = {"type": "media", "file_uri": "https://www.youtube.com/watch?v=abc123"}
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "https://www.youtube.com/watch?v=abc123"
+    assert parts[0].file_data.mime_type is None
+
+
+def test_media_inline_data_still_requires_mime_type() -> None:
+    """Inline bytes carry no type information, so a MIME type stays required."""
+    block = {"type": "media", "data": base64.b64encode(b"video").decode()}
+
+    with pytest.raises(ValueError, match="Missing mime_type in media part"):
+        _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+
+def test_media_processing_on_inline_data_block() -> None:
+    """`media_processing` reaches the part for inline (base64) video data."""
+    block = {
+        "type": "video",
+        "base64": base64.b64encode(b"fake_video_data").decode(),
+        "mime_type": "video/mp4",
+        "media_processing": "AGENTIC",
+    }
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert len(parts) == 1
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+    assert parts[0].inline_data is not None
+
+
+def test_media_processing_mixed_modes_across_videos() -> None:
+    """Different videos in one message can use different processing modes."""
+    content = [
+        _video_media_block(file_uri="lecture", media_processing="AGENTIC"),
+        _video_media_block(file_uri="experiment", media_processing="STATIC"),
+        {"type": "text", "text": "Compare them."},
+    ]
+
+    parts = _convert_to_parts(content, model=_AGENTIC_MODEL)
+
+    assert [part.media_processing for part in parts] == [
+        MediaProcessing.AGENTIC,
+        MediaProcessing.STATIC,
+        None,
+    ]
+
+
+def test_media_processing_omitted_leaves_field_unset() -> None:
+    """Blocks without `media_processing` are unchanged."""
+    parts = _convert_to_parts([_video_media_block()], model=_AGENTIC_MODEL)
+
+    assert parts[0].media_processing is None
+
+
+def _agentic_candidate() -> Candidate:
+    """Build a response candidate shaped like an agentic video response."""
+    return Candidate(
+        content=Content(
+            role="model",
+            parts=[
+                Part(tool_call=ToolCall(id="call_1"), thought_signature=b"\x01"),
+                Part(
+                    tool_response=ToolResponse(id="call_1"),
+                    thought_signature=b"\x02",
+                ),
+                Part(text="VX9", thought_signature=b"\x03"),
+            ],
+        )
+    )
+
+
+def test_parse_agentic_media_processing_steps() -> None:
+    """Media processing steps surface as standard server tool blocks."""
+    message = _parse_response_candidate(_agentic_candidate(), model_name=_AGENTIC_MODEL)
+
+    assert isinstance(message.content, list)
+    call, result, text = message.content
+
+    assert call == {
+        "type": "server_tool_call",
+        "name": "media_processing",
+        "id": "call_1",
+        "args": {},
+        "extras": {"signature": base64.b64encode(b"\x01").decode()},
+    }
+    assert result == {
+        "type": "server_tool_result",
+        "tool_call_id": "call_1",
+        "status": "success",
+        "output": {},
+        "extras": {
+            "block_type": "media_processing",
+            "signature": base64.b64encode(b"\x02").decode(),
+        },
+    }
+    assert text["type"] == "text"  # type: ignore[index]
+
+
+def test_agentic_media_processing_steps_excluded_from_history() -> None:
+    """Media processing steps must not be replayed.
+
+    The API rejects echoed steps with "Tool type of tool_call part does not match
+    with tool call context", so a follow-up turn would fail outright if these
+    blocks were converted back into parts. Video context is preserved by the
+    original media part instead.
+    """
+    ai_message = _parse_response_candidate(
+        _agentic_candidate(), model_name=_AGENTIC_MODEL
+    )
+    history = [
+        HumanMessage(content=[_video_media_block(media_processing="AGENTIC")]),
+        ai_message,
+        HumanMessage("And at the 20 second mark?"),
+    ]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _, contents = _parse_chat_history(history, model=_AGENTIC_MODEL)
+
+    # Dropping these is expected, so it must not look like an unsupported tool.
+    assert [str(warning.message) for warning in caught] == []
+
+    user_turn, model_turn, follow_up = contents
+    # The video part still carries the mode, so the model can re-navigate it.
+    assert user_turn.parts is not None
+    assert user_turn.parts[0].media_processing == MediaProcessing.AGENTIC
+    # Only the text survives from the model turn.
+    assert model_turn.parts is not None
+    assert [part.text for part in model_turn.parts] == ["VX9"]
+    assert all(part.tool_call is None for part in model_turn.parts)
+    assert all(part.tool_response is None for part in model_turn.parts)
+    assert follow_up.parts is not None
+
+
+_MEDIA_PROCESSING_CALL_BLOCK = {
+    "type": "server_tool_call",
+    "name": "media_processing",
+    "id": "call_1",
+    "args": {},
+}
+
+_MEDIA_PROCESSING_RESULT_BLOCK = {
+    "type": "server_tool_result",
+    "tool_call_id": "call_1",
+    "status": "success",
+    "output": {},
+    "extras": {"block_type": "media_processing"},
+}
+
+
+@pytest.mark.parametrize(
+    "block", [_MEDIA_PROCESSING_CALL_BLOCK, _MEDIA_PROCESSING_RESULT_BLOCK]
+)
+def test_media_processing_blocks_are_never_replayed(block: dict[str, Any]) -> None:
+    """Media processing steps produce no parts when replayed.
+
+    The result shape in particular must not be misread as a code execution result.
+    """
+    assert _convert_to_parts([block], model=_AGENTIC_MODEL) == []
+
+
+def test_media_processing_blocks_dropped_from_v1_content() -> None:
+    """The v1 replay path drops the steps too, not just the native one."""
+    v1_message = AIMessage(
+        content=[
+            _MEDIA_PROCESSING_CALL_BLOCK,
+            _MEDIA_PROCESSING_RESULT_BLOCK,
+            {"type": "text", "text": "VX9"},
+        ],
+        response_metadata={"model_provider": "google_genai", "output_version": "v1"},
+    )
+
+    _, contents = _parse_chat_history(
+        [
+            HumanMessage(content=[_video_media_block(media_processing="AGENTIC")]),
+            v1_message,
+        ],
+        model=_AGENTIC_MODEL,
+    )
+
+    model_turn = contents[1]
+    assert model_turn.parts is not None
+    assert [part.text for part in model_turn.parts] == ["VX9"]
