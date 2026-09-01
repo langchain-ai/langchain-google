@@ -1833,6 +1833,7 @@ def test_anthropic_format_output() -> None:
     assert len(message.tool_calls) == 1
     assert message.tool_calls[0]["name"] == "calculator"
     assert message.tool_calls[0]["args"] == {"number": 42}
+    assert message.response_metadata["model_provider"] == "anthropic"
     assert message.usage_metadata == {
         "input_tokens": 4,  # 2 + 1 + 1 (original + cache_read + cache_creation)
         "output_tokens": 1,
@@ -1842,6 +1843,49 @@ def test_anthropic_format_output() -> None:
             "cache_read": 1,
         },
     }
+
+
+def test_anthropic_format_output_single_text_sets_model_provider() -> None:
+    """Single-text `_format_output` branch stamps `model_provider` (#1754)."""
+
+    @dataclass
+    class Usage:
+        input_tokens: int
+        output_tokens: int
+        cache_creation_input_tokens: int | None
+        cache_read_input_tokens: int | None
+
+    @dataclass
+    class Message:
+        def model_dump(self):
+            return {
+                "content": [{"type": "text", "text": "Hello"}],
+                "model": "baz",
+                "role": "assistant",
+                "usage": Usage(
+                    input_tokens=2,
+                    output_tokens=1,
+                    cache_creation_input_tokens=None,
+                    cache_read_input_tokens=None,
+                ),
+                "type": "message",
+            }
+
+        usage: Usage
+
+    test_msg = Message(
+        usage=Usage(
+            input_tokens=2,
+            output_tokens=1,
+            cache_creation_input_tokens=None,
+            cache_read_input_tokens=None,
+        )
+    )
+    model = ChatAnthropicVertex(project="test-project", location="test-location")
+    message = model._format_output(test_msg).generations[0].message
+    assert isinstance(message, AIMessage)
+    assert message.content == "Hello"
+    assert message.response_metadata["model_provider"] == "anthropic"
 
 
 def test_anthropic_format_output_with_chain_of_thoughts() -> None:
@@ -1902,6 +1946,7 @@ def test_anthropic_format_output_with_chain_of_thoughts() -> None:
     assert isinstance(message, AIMessage)
     assert len(message.content) == 3
     assert message.content == test_msg.model_dump()["content"]
+    assert message.response_metadata["model_provider"] == "anthropic"
     assert message.usage_metadata == {
         "input_tokens": 4,  # 2 + 1 + 1 (original + cache_read + cache_creation)
         "output_tokens": 1,
