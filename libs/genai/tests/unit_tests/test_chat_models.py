@@ -8496,6 +8496,29 @@ _AGENTIC_MODEL = "gemini-3.7-flash"
 _YOUTUBE_URL = "https://www.youtube.com/watch?v=9hE5-98ZeCg"
 
 
+def test_tool_use_prompt_tokens_counted_as_input() -> None:
+    """Server-side tool use tokens are input tokens, so the parts must sum."""
+    response = GenerateContentResponse(
+        candidates=[Candidate(content=Content(role="model", parts=[Part(text="ok")]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=58,
+            candidates_token_count=61,
+            thoughts_token_count=152,
+            tool_use_prompt_token_count=131,
+            total_token_count=402,
+        ),
+    )
+
+    message = _response_to_result(response).generations[0].message
+    assert isinstance(message, AIMessage)
+    usage = message.usage_metadata
+
+    assert usage is not None
+    assert usage["input_tokens"] == 58 + 131
+    assert usage["output_tokens"] == 61 + 152
+    assert usage["input_tokens"] + usage["output_tokens"] == usage["total_tokens"]
+
+
 def _video_media_block(**overrides: Any) -> dict[str, Any]:
     """Build a `media` content block referencing an uploaded video."""
     block: dict[str, Any] = {
