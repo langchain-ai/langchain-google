@@ -26,6 +26,7 @@ from typing import (
     Literal,
     cast,
 )
+from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
 from google.genai.client import Client
@@ -522,6 +523,29 @@ def _is_gemini_25_model(model_name: str) -> bool:
     return "gemini-2.5" in model_name
 
 
+_PROVIDER_RESOLVED_HOSTS = (
+    "youtube.com",
+    "youtu.be",
+    "generativelanguage.googleapis.com",
+)
+
+
+def _provider_resolved_uri(block: Mapping[str, Any]) -> str | None:
+    """Return a URI Gemini fetches itself, rather than one to download and inline."""
+    file_id = block.get("file_id")
+    if isinstance(file_id, str) and file_id:
+        return file_id
+    url = block.get("url")
+    if not isinstance(url, str) or not url:
+        return None
+    if url.startswith("gs://"):
+        return url
+    host = urlparse(url).hostname or ""
+    if any(host == h or host.endswith(f".{h}") for h in _PROVIDER_RESOLVED_HOSTS):
+        return url
+    return None
+
+
 def _server_tool_name(tool_type: Any) -> str:
     """Derive a block type from a Gemini `ToolType` on a server tool part.
 
@@ -672,7 +696,18 @@ def _convert_to_parts(
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
-                    if "source_type" in part:
+                    resolved_uri = (
+                        None if "source_type" in part else _provider_resolved_uri(part)
+                    )
+                    part_kwargs: dict[str, Any] = {}
+                    if resolved_uri is not None:
+                        part_kwargs = {
+                            "file_data": FileData(
+                                file_uri=resolved_uri, mime_type=part.get("mime_type")
+                            )
+                        }
+                        bytes_ = b""
+                    elif "source_type" in part:
                         # Catch legacy v0 formats
                         # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
@@ -696,28 +731,29 @@ def _convert_to_parts(
                         )
                         raise ValueError(msg)
 
-                    mime_type = part.get("mime_type")
-                    if not mime_type:
-                        # Guess MIME type based on data field if not provided
-                        source = cast(
-                            "str",
-                            part.get("url") or part.get("base64") or part.get("data"),
-                        )
-                        mime_type, _ = mimetypes.guess_type(source)
+                    if resolved_uri is None:
+                        mime_type = part.get("mime_type")
                         if not mime_type:
-                            # Last resort - try to guess based on file bytes
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                    blob_kwargs: dict[str, Any] = {
-                        "data": bytes_,
-                    }
-                    if mime_type:
-                        blob_kwargs["mime_type"] = mime_type
+                            # Guess MIME type based on data field if not provided
+                            source = cast(
+                                "str",
+                                part.get("url")
+                                or part.get("base64")
+                                or part.get("data"),
+                            )
+                            mime_type, _ = mimetypes.guess_type(source)
+                            if not mime_type:
+                                # Last resort - try to guess based on file bytes
+                                kind = filetype.guess(bytes_)
+                                if kind:
+                                    mime_type = kind.mime
+                        blob_kwargs: dict[str, Any] = {
+                            "data": bytes_,
+                        }
+                        if mime_type:
+                            blob_kwargs["mime_type"] = mime_type
 
-                    part_kwargs: dict[str, Any] = {
-                        "inline_data": Blob(**blob_kwargs),
-                    }
+                        part_kwargs = {"inline_data": Blob(**blob_kwargs)}
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
                             warnings.warn(
@@ -2684,8 +2720,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         message = HumanMessage(
             content=[
                 {
-                    "type": "media",
-                    "file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "type": "video",
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                     "mime_type": "video/mp4",
                     "media_processing": "AGENTIC",
                 },
@@ -2695,8 +2731,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         response = model.invoke([message])
         ```
 
-        Videos uploaded through the Files API work the same way, and each video
-        sets its own mode, so modes can be mixed in one request:
+        Videos uploaded through the Files API use `file_id`, and each video sets
+        its own mode, so modes can be mixed in one request:
 
         ```python
         from google import genai
@@ -2709,14 +2745,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         message = HumanMessage(
             content=[
                 {
-                    "type": "media",
-                    "file_uri": lecture.uri,
+                    "type": "video",
+                    "file_id": lecture.uri,
                     "mime_type": lecture.mime_type,
                     "media_processing": "AGENTIC",
                 },
                 {
-                    "type": "media",
-                    "file_uri": experiment.uri,
+                    "type": "video",
+                    "file_id": experiment.uri,
                     "mime_type": experiment.mime_type,
                     "media_processing": "STATIC",
                 },
@@ -2726,20 +2762,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         response = model.invoke([message])
         ```
 
-        Inline base64 also supports agentic processing, subject to the usual
-        request size limit:
+        Inline base64 also works, subject to the usual request size limit:
 
         ```python
         import base64
         from pathlib import Path
 
-        video_bytes = Path("clip.mp4").read_bytes()
-
         message = HumanMessage(
             content=[
                 {
-                    "type": "media",
-                    "data": base64.b64encode(video_bytes).decode(),
+                    "type": "video",
+                    "base64": base64.b64encode(Path("clip.mp4").read_bytes()).decode(),
                     "mime_type": "video/mp4",
                     "media_processing": "AGENTIC",
                 },

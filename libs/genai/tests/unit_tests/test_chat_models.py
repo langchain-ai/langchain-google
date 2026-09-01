@@ -8493,6 +8493,8 @@ def test_stream_reasoning_and_tool_calls_share_one_index_space() -> None:
 
 _AGENTIC_MODEL = "gemini-3.7-flash"
 
+_YOUTUBE_URL = "https://www.youtube.com/watch?v=9hE5-98ZeCg"
+
 
 def _video_media_block(**overrides: Any) -> dict[str, Any]:
     """Build a `media` content block referencing an uploaded video."""
@@ -8530,6 +8532,56 @@ def test_media_processing_on_file_reference_blocks(block: dict[str, Any]) -> Non
     assert parts[0].media_processing == MediaProcessing.AGENTIC
     assert parts[0].file_data is not None
     assert parts[0].file_data.file_uri == "https://example.invalid/files/lecture"
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_uri"),
+    [
+        ({"type": "video", "url": _YOUTUBE_URL}, _YOUTUBE_URL),
+        ({"type": "video", "url": "https://youtu.be/9hE5"}, "https://youtu.be/9hE5"),
+        ({"type": "video", "url": "gs://bucket/v.mp4"}, "gs://bucket/v.mp4"),
+        ({"type": "video", "file_id": "files/abc123"}, "files/abc123"),
+    ],
+)
+def test_provider_resolved_uris_are_not_downloaded(
+    block: dict[str, Any], expected_uri: str
+) -> None:
+    """URIs Gemini resolves itself become `file_data` instead of inline bytes."""
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].inline_data is None
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == expected_uri
+
+
+def test_provider_resolved_uri_carries_media_processing() -> None:
+    """The standard `video` block can request agentic processing."""
+    block = {
+        "type": "video",
+        "url": _YOUTUBE_URL,
+        "mime_type": "video/mp4",
+        "media_processing": "AGENTIC",
+    }
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].file_data is not None
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+
+
+def test_other_urls_are_still_downloaded_inline() -> None:
+    """Arbitrary URLs keep the existing download-and-inline behavior."""
+    block = {"type": "image", "url": "https://example.invalid/cat.jpg"}
+
+    with patch(
+        "langchain_google_genai._image_utils.ImageBytesLoader._bytes_from_url",
+        return_value=b"raw-bytes",
+    ):
+        parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].file_data is None
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.data == b"raw-bytes"
 
 
 def test_media_file_uri_without_mime_type() -> None:
