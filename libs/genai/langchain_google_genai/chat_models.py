@@ -130,6 +130,7 @@ from langchain_google_genai._common import (
     get_user_agent,
 )
 from langchain_google_genai._compat import (
+    _MEDIA_PROCESSING_TOOL_NAME,
     _REASONING_BLOCK_TYPES,
     _classify_model_provider,
     _convert_from_v1_to_generativelanguage_v1beta,
@@ -158,7 +159,12 @@ _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
 _GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
-    {"media", "thinking", "executable_code", "code_execution_result"}
+    {
+        "media",
+        "thinking",
+        "executable_code",
+        "code_execution_result",
+    }
 )
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
@@ -516,6 +522,23 @@ def _is_gemini_25_model(model_name: str) -> bool:
     return "gemini-2.5" in model_name
 
 
+def _server_tool_name(tool_type: Any) -> str:
+    """Derive a block type from a Gemini `ToolType` on a server tool part.
+
+    Agentic video responses currently omit `tool_type`, so media processing is
+    assumed when it is absent.
+
+    Args:
+        tool_type: `ToolType` enum member, raw string, or `None`.
+
+    Returns:
+        Lower-cased tool name.
+    """
+    if tool_type is None:
+        return "media_processing"
+    return str(getattr(tool_type, "value", tool_type)).lower()
+
+
 def _validate_video_metadata(video_metadata: object) -> None:
     """Validate user-supplied video metadata before sending to the API.
 
@@ -638,13 +661,14 @@ def _convert_to_parts(
                 elif part.get("type") == "file" and "file_id" in part:
                     # Handle FileContentBlock with file_id (uploaded file reference)
                     mime_type = part.get("mime_type", "application/octet-stream")
-                    parts.append(
-                        Part(
-                            file_data=FileData(
-                                file_uri=part["file_id"], mime_type=mime_type
-                            )
+                    file_part_kwargs: dict[str, Any] = {
+                        "file_data": FileData(
+                            file_uri=part["file_id"], mime_type=mime_type
                         )
-                    )
+                    }
+                    if "media_processing" in part:
+                        file_part_kwargs["media_processing"] = part["media_processing"]
+                    parts.append(Part(**file_part_kwargs))
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
@@ -707,6 +731,8 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "media_processing" in part:
+                        part_kwargs["media_processing"] = part["media_processing"]
                     thought_signature = None
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
@@ -743,13 +769,16 @@ def _convert_to_parts(
                 elif part["type"] == "media":
                     # Handle `media` following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
-                    if "mime_type" not in part:
-                        msg = f"Missing mime_type in media part: {part}"
-                        raise ValueError(msg)
-                    mime_type = part["mime_type"]
+                    # Inline bytes carry no type information, so a MIME type is
+                    # required. A `file_uri` is resolved server-side and the API
+                    # infers the type.
+                    mime_type = part.get("mime_type")
                     media_part_kwargs: dict[str, Any] = {}
 
                     if "data" in part:
+                        if not mime_type:
+                            msg = f"Missing mime_type in media part: {part}"
+                            raise ValueError(msg)
                         data = part["data"]
                         if isinstance(data, str):
                             clean_data = re.sub(r"\s+", "", data)
@@ -797,6 +826,8 @@ def _convert_to_parts(
                             media_part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "media_processing" in part:
+                        media_part_kwargs["media_processing"] = part["media_processing"]
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
                         if isinstance(sig, str):
@@ -844,6 +875,13 @@ def _convert_to_parts(
                         )
                     )
                 elif part["type"] == "server_tool_call":
+                    if part.get("name") == _MEDIA_PROCESSING_TOOL_NAME:
+                        # Media processing steps are returned by the server for
+                        # observability but cannot be replayed: the GenerateContent API
+                        # rejects echoed steps with "Tool type of tool_call part does
+                        # not match with tool call context". Video context is preserved
+                        # instead by keeping the original media part in history.
+                        continue
                     if part.get("name") == "code_interpreter":
                         args = part.get("args", {})
                         code = args.get("code", "")
@@ -874,6 +912,15 @@ def _convert_to_parts(
                     )
                     parts.append(executable_code_part)
                 elif part["type"] == "server_tool_result":
+                    extras = part.get("extras")
+                    if (
+                        isinstance(extras, Mapping)
+                        and extras.get("block_type") == _MEDIA_PROCESSING_TOOL_NAME
+                    ):
+                        # Paired with the media processing call skipped above.
+                        # Replaying it would also be rejected, and it must not be
+                        # misread as a code execution result.
+                        continue
                     output = part.get("output", "")
                     status = part.get("status", "success")
                     outcome = (
@@ -1790,6 +1837,34 @@ def _parse_response_candidate(
             }
             content = _append_to_content(content, execution_result)
 
+        # Server-side media processing steps (e.g., agentic video understanding).
+        media_call = getattr(part, "tool_call", None)
+        if media_call is not None:
+            media_call_block: dict[str, Any] = {
+                "type": "server_tool_call",
+                "name": _server_tool_name(media_call.tool_type),
+                "id": media_call.id or str(uuid.uuid4()),
+                "args": dict(media_call.args or {}),
+            }
+            if thought_sig:
+                media_call_block["extras"] = {"signature": thought_sig}
+            content = _append_to_content(content, media_call_block)
+
+        media_result = getattr(part, "tool_response", None)
+        if media_result is not None:
+            media_result_block: dict[str, Any] = {
+                "type": "server_tool_result",
+                "tool_call_id": media_result.id or "",
+                "status": "success",
+                "output": dict(media_result.response or {}),
+                # `ServerToolResult` has no `name`, so the originating tool is
+                # recorded here, mirroring how code execution results are tagged.
+                "extras": {"block_type": _server_tool_name(media_result.tool_type)},
+            }
+            if thought_sig:
+                media_result_block["extras"]["signature"] = thought_sig
+            content = _append_to_content(content, media_result_block)
+
         if part.inline_data and part.inline_data.data and part.inline_data.mime_type:
             if part.inline_data.mime_type.startswith("audio/"):
                 buffer = io.BytesIO()
@@ -2586,16 +2661,92 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         message = HumanMessage(
             content=[
-                {"type": "text", "text": "Summarize the video in 3 sentences."},
                 {
                     "type": "media",
                     "file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                    "mime_type": "video/mp4",
                 },
+                {"type": "text", "text": "Summarize the video in 3 sentences."},
             ]
         )
         response = model.invoke([message])
         print(response.text)
+        ```
+
+        Video inputs default to static processing, sampling frames at a fixed rate.
+        On Gemini 3 and later, setting `media_processing` to `"AGENTIC"` instead
+        lets the model navigate the timeline itself and load only the frames it
+        needs, which is more token-efficient on long-form content. Note that
+        `mime_type` is required whenever `media_processing` is set:
+
+        ```python
+        model = ChatGoogleGenerativeAI(model="gemini-3.7-flash")
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "media",
+                    "file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "mime_type": "video/mp4",
+                    "media_processing": "AGENTIC",
+                },
+                {"type": "text", "text": "Summarize the video in 3 sentences."},
+            ]
+        )
+        response = model.invoke([message])
+        ```
+
+        Videos uploaded through the Files API work the same way, and each video
+        sets its own mode, so modes can be mixed in one request:
+
+        ```python
+        from google import genai
+
+        client = genai.Client()
+        lecture = client.files.upload(file="lecture.mp4")
+        experiment = client.files.upload(file="experiment.mp4")
+        # Wait for `client.files.get(name=...).state` to reach `ACTIVE` first.
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "media",
+                    "file_uri": lecture.uri,
+                    "mime_type": lecture.mime_type,
+                    "media_processing": "AGENTIC",
+                },
+                {
+                    "type": "media",
+                    "file_uri": experiment.uri,
+                    "mime_type": experiment.mime_type,
+                    "media_processing": "STATIC",
+                },
+                {"type": "text", "text": "Compare the lecture with the experiment."},
+            ]
+        )
+        response = model.invoke([message])
+        ```
+
+        Inline base64 also supports agentic processing, subject to the usual
+        request size limit:
+
+        ```python
+        import base64
+        from pathlib import Path
+
+        video_bytes = Path("clip.mp4").read_bytes()
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "media",
+                    "data": base64.b64encode(video_bytes).decode(),
+                    "mime_type": "video/mp4",
+                    "media_processing": "AGENTIC",
+                },
+                {"type": "text", "text": "What happens at 00:11?"},
+            ]
+        )
+        response = model.invoke([message])
         ```
 
     ???+ example "Image generation"
