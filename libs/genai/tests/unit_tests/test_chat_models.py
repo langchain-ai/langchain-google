@@ -7949,6 +7949,82 @@ async def test_context_overflow_error_stream_async() -> None:
             [chunk async for chunk in chat.astream("test")]
 
 
+def _streaming_model_call_site_error(
+    error: Exception, *, is_async: bool = False
+) -> Mock:
+    """Patch `Client` so `generate_content_stream` raises when invoked."""
+    mock_client = Mock()
+    if is_async:
+        mock_aio = Mock()
+        mock_client.return_value.aio = mock_aio
+        mock_aio.models.generate_content_stream = AsyncMock(side_effect=error)
+    else:
+        mock_models = Mock()
+        mock_client.return_value.models = mock_models
+        mock_models.generate_content_stream = Mock(side_effect=error)
+    return mock_client
+
+
+def test_context_overflow_error_stream_sync_on_call() -> None:
+    """Token overflow raised when opening the stream is classified."""
+    mock_client = _streaming_model_call_site_error(_CONTEXT_OVERFLOW_CLIENT_ERROR)
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            list(chat.stream("test"))
+
+
+async def test_context_overflow_error_stream_async_on_call() -> None:
+    """Token overflow raised when opening the async stream is classified."""
+    mock_client = _streaming_model_call_site_error(
+        _CONTEXT_OVERFLOW_CLIENT_ERROR, is_async=True
+    )
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            [chunk async for chunk in chat.astream("test")]
+
+
+def test_stream_error_classification_on_call() -> None:
+    """Non-overflow `ClientError` at stream open is classified like invoke."""
+    error = ClientError(
+        code=429,
+        response_json={"error": {"message": "slow down", "status": "EXHAUSTED"}},
+        response=None,
+    )
+    mock_client = _streaming_model_call_site_error(error)
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(ModelRateLimitError) as exc_info:
+            list(chat.stream("test"))
+
+    assert exc_info.value.is_retryable is True
+
+
 @pytest.mark.parametrize(
     ("error", "model_error_type"),
     [
