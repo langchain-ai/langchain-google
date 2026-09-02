@@ -32,6 +32,7 @@ import filetype  # type: ignore[import-untyped]
 from google.genai.client import Client
 from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
+    AutomaticFunctionCallingConfig,
     Blob,
     Candidate,
     CodeExecutionResult,
@@ -4129,6 +4130,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 for parameter in ignored_parameters:
                     request_params.pop(parameter, None)
 
+        # LangChain runs its own tool-execution loop and only ever sends tool
+        # *declarations* (schemas) to the API, never Python callables. Disable
+        # the SDK's Automatic Function Calling by default so it does not run its
+        # AFC loop or emit the "Direct use of automatic function calling (AFC)
+        # in Models.generate_content is not recommended" warning. A caller may
+        # still override this by passing `automatic_function_calling` explicitly.
+        automatic_function_calling = kwargs.pop(
+            "automatic_function_calling",
+            AutomaticFunctionCallingConfig(disable=True),
+        )
+
         return GenerateContentConfig(
             tools=list(formatted_tools) if formatted_tools else None,
             tool_config=formatted_tool_config,
@@ -4138,6 +4150,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options=http_options,
             image_config=image_config_obj,
             labels=labels,
+            automatic_function_calling=automatic_function_calling,
             **request_params,
             **kwargs,
         )
