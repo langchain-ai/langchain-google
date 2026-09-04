@@ -3813,6 +3813,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Prepare the request configuration for the API call."""
+        # Constructor keywords that aren't declared fields are collected into
+        # `model_kwargs` by `_build_model_kwargs`. Merge them in here so they take the
+        # same path as invoke-time kwargs and reach `GenerateContentConfig`; per-call
+        # values win over the ones fixed at construction.
+        kwargs = {**self.model_kwargs, **kwargs}
+
         # Process tools and functions
         formatted_tools = self._format_tools(tools, functions)
 
