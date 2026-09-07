@@ -24,16 +24,16 @@ def test_vertex_initialization() -> None:
 
 
 @pytest.mark.release
-def test_vertex_invoke() -> None:
+async def test_vertex_invoke() -> None:
     llm = VertexAI(model=_DEFAULT_MODEL_NAME, temperature=0)
-    output = llm.invoke("Say foo:")
+    output = await llm.ainvoke("Say foo:")
     assert isinstance(output, str)
 
 
 @pytest.mark.release
-def test_vertex_generate() -> None:
+async def test_vertex_generate() -> None:
     llm = VertexAI(model=_DEFAULT_MODEL_NAME, temperature=0)
-    output = llm.generate(["Say foo:"])
+    output = await llm.agenerate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     usage_metadata = output.generations[0][0].generation_info["usage_metadata"]  # type: ignore
@@ -43,9 +43,9 @@ def test_vertex_generate() -> None:
 
 @pytest.mark.release
 @pytest.mark.xfail(reason="VertexAI doesn't always respect number of candidates")
-def test_vertex_generate_multiple_candidates() -> None:
+async def test_vertex_generate_multiple_candidates() -> None:
     llm = VertexAI(temperature=0.3, n=2, model=_DEFAULT_MODEL_NAME)
-    output = llm.generate(["Say foo:"])
+    output = await llm.agenerate(["Say foo:"])
     assert isinstance(output, LLMResult)
     assert len(output.generations) == 1
     assert len(output.generations[0]) == 2
@@ -93,7 +93,7 @@ def test_vertex_call_count_tokens() -> None:
 
 
 @pytest.mark.extended
-def test_structured_output_schema_json() -> None:
+async def test_structured_output_schema_json() -> None:
     model = VertexAI(
         rate_limiter=rate_limiter,
         model=_DEFAULT_MODEL_NAME,
@@ -112,7 +112,7 @@ def test_structured_output_schema_json() -> None:
         },
     )
 
-    response = model.invoke("List a few popular cookie recipes")
+    response = await model.ainvoke("List a few popular cookie recipes")
 
     assert isinstance(response, str)
     parsed_response = json.loads(response)

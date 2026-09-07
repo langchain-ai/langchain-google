@@ -247,7 +247,9 @@ def test_public_endpoint_vector_searcher(
 @pytest.mark.parametrize(
     "vector_store_class", ["vector_store", "datastore_vector_store"]
 )
-def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest) -> None:
+async def test_vector_store(
+    vector_store_class: str, request: pytest.FixtureRequest
+) -> None:
     vertexai.init(api_transport="grpc")
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
 
@@ -258,7 +260,7 @@ def test_vector_store(vector_store_class: str, request: pytest.FixtureRequest) -
         assert isinstance(doc, Document)
         assert isinstance(score, float)
 
-    docs = vector_store.similarity_search(query, k=2)
+    docs = await vector_store.asimilarity_search(query, k=2)
     assert len(docs) == 2
     for doc in docs:
         assert isinstance(doc, Document)
@@ -335,11 +337,11 @@ def test_add_texts_with_embeddings(
         # "datastore_vector_store" Waiting for the bug to be fixed as its stream
     ],
 )
-def test_vector_store_filtering(
+async def test_vector_store_filtering(
     vector_store_class: str, request: pytest.FixtureRequest
 ) -> None:
     vector_store: VectorSearchVectorStore = request.getfixturevalue(vector_store_class)
-    documents = vector_store.similarity_search(
+    documents = await vector_store.asimilarity_search(
         "I want some pants",
         filter=[Namespace(name="color", allow_tokens=["blue"])],
         numeric_filter=[NumericNamespace(name="price", value_float=20.0, op="LESS")],
@@ -351,18 +353,20 @@ def test_vector_store_filtering(
 
 
 @pytest.mark.long
-def test_vector_store_update_index(
+async def test_vector_store_update_index(
     vector_store: VectorSearchVectorStore, sample_documents: list[Document]
 ) -> None:
-    vector_store.add_documents(documents=sample_documents, is_complete_overwrite=True)
+    await vector_store.aadd_documents(
+        documents=sample_documents, is_complete_overwrite=True
+    )
 
 
 @pytest.mark.extended
-def test_vector_store_stream_update_index(
+async def test_vector_store_stream_update_index(
     datastore_vector_store: VectorSearchVectorStoreDatastore,
     sample_documents: list[Document],
 ) -> None:
-    datastore_vector_store.add_documents(
+    await datastore_vector_store.aadd_documents(
         documents=sample_documents, is_complete_overwrite=True
     )
 
