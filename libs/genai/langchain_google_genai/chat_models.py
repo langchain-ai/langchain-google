@@ -2107,10 +2107,6 @@ def _response_to_result(
             generation_info["model_name"] = response.model_version or ""
             # Set for final chunk
             model_name_for_metadata = response.model_version
-            # Surface finish_message on the final chunk only (same gate as
-            # finish_reason / model_name) so MALFORMED_FUNCTION_CALL and other
-            # discarded candidates keep the API's only diagnostic. ChatVertexAI
-            # already exposes this field.
             finish_message = getattr(candidate, "finish_message", None)
             if finish_message:
                 generation_info["finish_message"] = finish_message
