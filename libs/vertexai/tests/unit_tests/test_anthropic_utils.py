@@ -958,6 +958,17 @@ def test_thinking_in_params_false_different_type() -> None:
     assert not _thinking_in_params(params)
 
 
+def test_thinking_in_params_adaptive() -> None:
+    """`adaptive` is Anthropic's recommended thinking mode for Claude 4.6+;
+    Claude Opus 4.7 supports it exclusively. `_thinking_in_params` must
+    treat it as thinking-enabled so callers (e.g. `_stream` / `_generate`
+    in `model_garden`) keep `coerce_content_to_string` set to `False` and
+    preserve the response's structured thinking blocks."""
+    params = {"thinking": {"type": "adaptive"}}
+
+    assert _thinking_in_params(params)
+
+
 def test_documents_in_params_true() -> None:
     """Test _documents_in_params when document with citations is enabled."""
     params = {
