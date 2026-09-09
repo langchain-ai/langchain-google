@@ -103,6 +103,17 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
         elif key == "properties":
             converted_schema["properties"] = _get_properties_from_schema(value)
             continue
+        elif key == "oneOf":
+            # Gemini supports anyOf, but not exclusive oneOf. Pydantic's tagged
+            # variants remain disjoint when their Literal values are preserved.
+            converted_schema["anyOf"] = [
+                _format_json_schema_to_gapic(variant) for variant in value
+            ]
+        elif key == "discriminator":
+            # The variants' Literal fields carry the discriminator values.
+            continue
+        elif key == "const" and isinstance(value, str):
+            converted_schema["enum"] = [value]
         elif key == "allOf":
             if len(value) > 1:
                 logger.warning(
@@ -508,6 +519,9 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         if not isinstance(v, dict):
             logger.warning(f"Value '{v}' is not supported in schema, ignoring v={v}")
             continue
+        if "oneOf" in v:
+            properties[k] = _format_json_schema_to_gapic(v)
+            continue
         properties_item: dict[str, str | int | dict | list] = {}
 
         # Preserve description and other schema properties before manipulation
@@ -559,6 +573,8 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
 
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
+        elif isinstance(v.get("const"), str):
+            properties_item["enum"] = [v["const"]]
 
         # Prefer description from the filtered schema, fall back to original
         description = v.get("description") or original_description
@@ -612,6 +628,8 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
     elif isinstance(schema, dict):
+        if "oneOf" in schema:
+            return _format_json_schema_to_gapic(schema)
         items["type"] = _get_type_from_schema(schema)
         if items["type"] == types.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
