@@ -1,4 +1,5 @@
 from tempfile import NamedTemporaryFile
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -108,3 +109,38 @@ def test_image_bytes_loader() -> None:
     )
 
     assert recovered_b64 == base64_image
+
+
+def _ok_response(content: bytes = b"") -> Mock:
+    """Build a `requests` mock response with `ok=True`."""
+    response = Mock()
+    response.ok = True
+    response.content = content
+    return response
+
+
+@patch("langchain_google_vertexai._image_utils.requests.get")
+def test_image_bytes_loader_url_fetch_passes_timeout(mock_get: Mock) -> None:
+    """When `ImageBytesLoader` is constructed with a `timeout`, that timeout
+    must reach the underlying `requests.get`. Without this a slow or stalled
+    media URL can block request preparation indefinitely (mirrors the
+    langchain-google-genai fix in PR #1693 for the same code path)."""
+    mock_get.return_value = _ok_response(b"image-bytes")
+
+    loader = ImageBytesLoader(timeout=2.5)
+    result = loader._bytes_from_url("https://example.com/image.png")
+
+    assert result == b"image-bytes"
+    mock_get.assert_called_once_with("https://example.com/image.png", timeout=2.5)
+
+
+@patch("langchain_google_vertexai._image_utils.requests.get")
+def test_image_bytes_loader_url_fetch_no_timeout_by_default(mock_get: Mock) -> None:
+    """Default behavior must remain backwards compatible: when no `timeout`
+    is supplied, `requests.get` is called without the `timeout` kwarg."""
+    mock_get.return_value = _ok_response(b"image-bytes")
+
+    loader = ImageBytesLoader()
+    loader._bytes_from_url("https://example.com/image.png")
+
+    mock_get.assert_called_once_with("https://example.com/image.png")
