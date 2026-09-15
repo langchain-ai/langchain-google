@@ -27,8 +27,22 @@ except ImportError as e:
     raise ImportError(msg) from e
 
 
+def _get_trace_policy() -> Any:
+    """Use tracing optimizations when supported by the installed LangChain."""
+    try:
+        from langchain.agents.middleware.types import TracePolicy, omit_payload
+    except ImportError:
+        return None
+    return TracePolicy(process_inputs=omit_payload)
+
+
+_TRACE_POLICY = _get_trace_policy()
+
+
 class VertexPromptCachingMiddleware(AgentMiddleware):
     """Cache stable prompt content for Claude models on Vertex AI."""
+
+    trace_policy = _TRACE_POLICY
 
     def __init__(
         self,
