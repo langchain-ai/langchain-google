@@ -30,7 +30,10 @@ except ImportError as e:
 def _get_trace_policy() -> Any:
     """Use tracing optimizations when supported by the installed LangChain."""
     try:
-        from langchain.agents.middleware.types import TracePolicy, omit_payload
+        from langchain.agents.middleware.types import (  # type: ignore[attr-defined]
+            TracePolicy,
+            omit_payload,
+        )
     except ImportError:
         return None
     return TracePolicy(process_inputs=omit_payload)

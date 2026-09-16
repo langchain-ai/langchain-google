@@ -4,12 +4,15 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool, tool
 from langgraph.runtime import Runtime
 
 from langchain_google_vertexai.middleware import VertexPromptCachingMiddleware
+from langchain_google_vertexai.middleware.prompt_caching import (
+    ModelRequest,
+    ModelResponse,
+)
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
 
