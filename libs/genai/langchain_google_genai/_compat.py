@@ -15,6 +15,9 @@ _ModelProviderKind = Literal["native", "foreign", "unknown"]
 _REASONING_BLOCK_TYPES = frozenset({"reasoning", "thinking", "reasoning_content"})
 
 
+_MEDIA_PROCESSING_TOOL_NAME = "media_processing"
+
+
 def _classify_model_provider(model_provider: str | None) -> _ModelProviderKind:
     """Classify a source provider for Gemini content replay."""
     if model_provider is None:
@@ -346,6 +349,12 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             continue
 
         elif block_dict["type"] == "server_tool_call":
+            if block_dict.get("name") == _MEDIA_PROCESSING_TOOL_NAME:
+                # Agentic video steps are informational. The GenerateContent API rejects
+                # them when they are echoed back ("Tool type of tool_call part does not
+                # match with tool call context"), so they are dropped on replay; the
+                # original media part is what preserves video context.
+                continue
             if block_dict.get("name") == "code_interpreter":
                 # LangChain v0 format
                 args = cast("dict", block_dict.get("args", {}))
@@ -367,6 +376,9 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         elif block_dict["type"] == "server_tool_result":
             extras = cast("dict", block_dict.get("extras", {}))
+            if extras.get("block_type") == _MEDIA_PROCESSING_TOOL_NAME:
+                # Paired with the media processing call dropped above.
+                continue
             if extras.get("block_type") == "code_execution_result":
                 # LangChain v0 format
                 raw_outcome = extras.get("outcome", "")
