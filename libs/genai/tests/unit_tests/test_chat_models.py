@@ -47,6 +47,7 @@ from langchain_core.exceptions import (
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    OutputParserException,
 )
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -86,6 +87,8 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _GoogleJsonOutputParser,
+    _GooglePydanticOutputParser,
     _handle_client_error,
     _handle_server_error,
     _is_gemini_3_or_later,
@@ -6031,6 +6034,96 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
             f"got {config.thinking_config.include_thoughts}"
         )
         assert config.thinking_config.include_thoughts is False, msg
+
+
+def _reasoning_prefixed_json(answer: str) -> str:
+    """Text the model returns on Vertex AI when thinking leaks into the JSON part.
+
+    The reasoning prose and the answer share one text part, and the answer is
+    wrapped in a markdown fence.
+    """
+    return (
+        '{\n  "name": "reasoning",\n  "value": "Counties: [\\"Greece\\"] ... '
+        "Starting JSON now.\n\n```json\n" + answer + "\n```"
+    )
+
+
+class _PersonSchema(BaseModel):
+    name: str
+    value: int
+
+
+def test_structured_output_parser_recovers_fenced_json_after_reasoning_prefix() -> None:
+    """A reasoning prefix must not be parsed as the structured answer."""
+    parser = _GooglePydanticOutputParser(pydantic_object=_PersonSchema)
+    text = _reasoning_prefixed_json('{"name": "ok", "value": 7}')
+
+    assert parser.parse(text) == _PersonSchema(name="ok", value=7)
+
+
+def test_json_output_parser_recovers_fenced_json_after_reasoning_prefix() -> None:
+    """The raw dict parser shares the same recovery behavior."""
+    parser = _GoogleJsonOutputParser(pydantic_object=None)
+    text = _reasoning_prefixed_json('{"name": "ok", "value": 7}')
+
+    assert parser.parse(text) == {"name": "ok", "value": 7}
+
+
+def test_structured_output_parser_keeps_lenient_fallback_for_truncated_json() -> None:
+    """A max-tokens cut with no fence still recovers the partial object."""
+    parser = _GooglePydanticOutputParser(pydantic_object=_PersonSchema)
+
+    assert parser.parse('{"name": "ok", "value": 7') == _PersonSchema(
+        name="ok", value=7
+    )
+
+
+def test_structured_output_parser_raises_on_unparseable_text() -> None:
+    """Unparseable text still fails loudly instead of returning junk."""
+    parser = _GooglePydanticOutputParser(pydantic_object=_PersonSchema)
+
+    with pytest.raises(OutputParserException):
+        parser.parse("this is not json")
+
+
+def test_structured_output_ignores_reasoning_leaked_into_json_text_part() -> None:
+    """End-to-end: thinking in the JSON text part must not corrupt the result."""
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(
+                            text=_reasoning_prefixed_json(
+                                '{"name": "test", "value": 42}'
+                            ),
+                            thought_signature=DUMMY_THOUGHT_SIGNATURE,
+                        )
+                    ]
+                ),
+                finish_reason=FinishReason.STOP,
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=20,
+            total_token_count=30,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert llm.client is not None
+
+    structured_llm = llm.with_structured_output(_PersonSchema, method="json_schema")
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ):
+        result = structured_llm.invoke("test input")
+
+    assert result == _PersonSchema(name="test", value=42)
 
 
 @pytest.mark.parametrize(
