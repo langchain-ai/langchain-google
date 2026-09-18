@@ -2107,6 +2107,20 @@ def _response_to_result(
             generation_info["model_name"] = response.model_version or ""
             # Set for final chunk
             model_name_for_metadata = response.model_version
+            # Which quota served the request (Vertex backend only; issue #1947).
+            # Read off the response rather than the candidate, like `model_name`
+            # above, and reported in the same final chunk for the same reason:
+            # `generation_info` dicts are merged when streamed chunks are
+            # concatenated, and that merge concatenates string values, so a value
+            # repeated per chunk would arrive as "ON_DEMANDON_DEMAND...".
+            traffic_type = getattr(response.usage_metadata, "traffic_type", None)
+            if traffic_type is not None:
+                # Read through `getattr` like `finish_reason` above: a value the
+                # installed SDK has no member for still arrives as a name, but a
+                # response assembled by hand can carry a bare string.
+                generation_info["traffic_type"] = getattr(
+                    traffic_type, "name", str(traffic_type)
+                )
         generation_info["safety_ratings"] = (
             [safety_rating.model_dump() for safety_rating in candidate.safety_ratings]
             if candidate.safety_ratings

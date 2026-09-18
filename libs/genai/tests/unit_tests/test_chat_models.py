@@ -63,7 +63,7 @@ from langchain_core.messages.block_translators.google_genai import (
     _convert_to_v1_from_genai,
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
@@ -8796,3 +8796,126 @@ def test_media_processing_blocks_dropped_from_v1_content() -> None:
     model_turn = contents[1]
     assert model_turn.parts is not None
     assert [part.text for part in model_turn.parts] == ["VX9"]
+
+
+def _traffic_type_response(
+    traffic_type: str | None, *, finish: bool = True, text: str = "hi"
+) -> GenerateContentResponse:
+    """A one-candidate response whose usage metadata may report a traffic type."""
+    usage: dict[str, object] = {
+        "prompt_token_count": 10,
+        "candidates_token_count": 3,
+        "total_token_count": 13,
+    }
+    if traffic_type is not None:
+        usage["traffic_type"] = traffic_type
+    return GenerateContentResponse.model_validate(
+        {
+            "model_version": "gemini-2.5-flash",
+            "candidates": [
+                {
+                    "content": {"role": "model", "parts": [{"text": text}]},
+                    **({"finish_reason": FinishReason.STOP} if finish else {}),
+                }
+            ],
+            "usage_metadata": usage,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "traffic_type",
+    ["ON_DEMAND", "ON_DEMAND_PRIORITY", "ON_DEMAND_FLEX", "PROVISIONED_THROUGHPUT"],
+)
+def test_response_to_result_reports_traffic_type(traffic_type: str) -> None:
+    """The Vertex quota that served the request reaches `generation_info` (#1947).
+
+    `_response_to_result` already reads token counts off `usage_metadata`, so the
+    field was reachable but dropped, leaving callers on Priority Pay-Go with no
+    supported way to tell which quota was granted.
+    """
+    result = _response_to_result(_traffic_type_response(traffic_type))
+
+    generation_info = result.generations[0].generation_info
+    assert generation_info is not None
+    assert generation_info["traffic_type"] == traffic_type
+
+
+def test_response_to_result_omits_traffic_type_when_unreported() -> None:
+    """The Gemini API backend reports no traffic type, and none is invented."""
+    result = _response_to_result(_traffic_type_response(None))
+
+    generation_info = result.generations[0].generation_info
+    assert generation_info is not None
+    assert "traffic_type" not in generation_info
+
+
+def test_response_to_result_streams_traffic_type_once() -> None:
+    """Streamed chunks accumulate, so the value belongs on the final chunk only.
+
+    `generation_info` dicts are merged when chunks are concatenated and that merge
+    concatenates strings: reported on every chunk, a three-chunk stream would hand
+    the caller ``"ON_DEMANDON_DEMANDON_DEMAND"``. This is the same reason
+    `model_name` is set only where `finish_reason` is.
+    """
+
+    def streamed(text: str, *, finish: bool) -> ChatGenerationChunk:
+        result = _response_to_result(
+            _traffic_type_response("ON_DEMAND", finish=finish, text=text), stream=True
+        )
+        return cast("ChatGenerationChunk", result.generations[0])
+
+    chunks = [
+        streamed("he", finish=False),
+        streamed("llo", finish=False),
+        streamed("!", finish=True),
+    ]
+    # Not on the intermediate chunks, exactly as `model_name` is not.
+    assert [c.generation_info for c in chunks[:-1]] == [
+        {"safety_ratings": []},
+        {"safety_ratings": []},
+    ]
+
+    accumulated = chunks[0]
+    for c in chunks[1:]:
+        accumulated = accumulated + c
+
+    assert accumulated.generation_info is not None
+    assert accumulated.generation_info["traffic_type"] == "ON_DEMAND"
+
+
+def test_response_to_result_passes_through_an_unknown_traffic_type() -> None:
+    """A quota tier newer than the installed SDK is passed on, not dropped."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        response = _traffic_type_response("ON_DEMAND_TURBO")
+
+    result = _response_to_result(response)
+
+    generation_info = result.generations[0].generation_info
+    assert generation_info is not None
+    assert generation_info["traffic_type"] == "ON_DEMAND_TURBO"
+
+
+def test_invoke_surfaces_traffic_type_on_response_metadata() -> None:
+    """End to end: the reported quota reaches `message.response_metadata` (#1947).
+
+    `generation_info` is merged into `response_metadata` by `langchain-core`, which
+    is how `finish_reason` and `model_name` get there, so reporting the field once
+    is enough for a caller reading the message.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_models.generate_content = Mock(
+        return_value=_traffic_type_response("ON_DEMAND_PRIORITY", text="ok")
+    )
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+
+    message = llm.invoke("which quota served this?")
+
+    assert message.response_metadata["traffic_type"] == "ON_DEMAND_PRIORITY"
