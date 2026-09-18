@@ -580,6 +580,32 @@ def _make_message_chunk_from_anthropic_event(
             content=[content_block],
             tool_call_chunks=[tool_call_chunk],
         )
+    elif (
+        event.type == "content_block_start"
+        and event.content_block is not None
+        and event.content_block.type == "redacted_thinking"
+    ):
+        # A redacted_thinking block carries its whole payload on the start
+        # event and never emits deltas; dropping it here loses the block.
+        content_block = event.content_block.model_dump()
+        content_block["index"] = event.index
+        message_chunk = AIMessageChunk(content=[content_block])
+    elif (
+        event.type == "content_block_start"
+        and event.content_block is not None
+        and event.content_block.type == "thinking"
+    ):
+        # Open the thinking block here so the aggregated block always has a
+        # `thinking` field, even when the block only ever emits a
+        # signature_delta (e.g. summarized adaptive thinking with an empty
+        # summary). The deltas that follow share this index and are merged
+        # into it by AIMessageChunk addition. Without this, the replayed block
+        # lacks `thinking` and the API rejects the next turn.
+        content_block = event.content_block.model_dump()
+        content_block["index"] = event.index
+        content_block["type"] = "thinking"
+        content_block.setdefault("thinking", "")
+        message_chunk = AIMessageChunk(content=[content_block])
     elif event.type == "content_block_delta":
         if event.delta.type == "text_delta":
             if coerce_content_to_string:
@@ -596,6 +622,10 @@ def _make_message_chunk_from_anthropic_event(
                 content_block.pop("text")
             content_block["index"] = event.index
             content_block["type"] = "thinking"
+            if event.delta.type == "signature_delta":
+                # Guarantee the field the API requires on replay, whether or
+                # not any thinking_delta ever arrives for this block.
+                content_block.setdefault("thinking", "")
             message_chunk = AIMessageChunk(content=[content_block])
         elif event.delta.type == "input_json_delta":
             content_block = event.delta.model_dump()
