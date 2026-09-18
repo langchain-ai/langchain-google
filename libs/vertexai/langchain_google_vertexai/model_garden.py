@@ -74,6 +74,23 @@ def _move_betas_to_extra_body(params: dict[str, Any]) -> bool:
     return True
 
 
+def _move_sampling_params_to_extra_body(params: dict[str, Any]) -> None:
+    """Move temperature/top_p/top_k into extra_body.
+
+    anthropic>=1 dropped these from `Messages.create()`'s signature.
+    """
+    sampling_params = {
+        key: params.pop(key)
+        for key in ("temperature", "top_p", "top_k")
+        if key in params
+    }
+    if not sampling_params:
+        return
+
+    extra_body = params.get("extra_body") or {}
+    params["extra_body"] = {**extra_body, **sampling_params}
+
+
 def _create_retry_decorator(
     *,
     max_retries: int = 3,
@@ -428,6 +445,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
+            _move_sampling_params_to_extra_body(params)
             has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return self.client.beta.messages.create(**params)
@@ -458,6 +476,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
+            _move_sampling_params_to_extra_body(params)
             has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return await self.async_client.beta.messages.create(**params)
@@ -492,6 +511,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
+            _move_sampling_params_to_extra_body(params)
             has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return self.client.beta.messages.create(**params, stream=True)
@@ -536,6 +556,7 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
+            _move_sampling_params_to_extra_body(params)
             has_betas = _move_betas_to_extra_body(params)
             if has_betas:
                 return await self.async_client.beta.messages.create(
