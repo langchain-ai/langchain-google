@@ -2458,7 +2458,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         await model.ainvoke(messages)
 
         # stream:
-        async for chunk in (await model.astream(messages))
+        async for chunk in model.astream(messages):
+            ...
 
         # batch:
         await model.abatch([messages])
