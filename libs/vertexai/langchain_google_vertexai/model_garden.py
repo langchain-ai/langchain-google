@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from operator import itemgetter
 from typing import (
@@ -72,6 +73,29 @@ def _move_betas_to_extra_body(params: dict[str, Any]) -> bool:
     extra_body = params.get("extra_body") or {}
     params["extra_body"] = {**extra_body, "anthropic_beta": betas}
     return True
+
+
+def _move_unsupported_sampling_params_to_extra_body(
+    messages_api: Any, params: dict[str, Any]
+) -> None:
+    """Forward sampling params through ``extra_body`` when the SDK rejects them."""
+    sampling_params = ("temperature", "top_p", "top_k")
+    try:
+        parameters = inspect.signature(messages_api.create).parameters
+    except (TypeError, ValueError):
+        return
+    if all(name in parameters for name in sampling_params):
+        return
+
+    extra_body = dict(params.get("extra_body") or {})
+    moved = False
+    for name in sampling_params:
+        value = params.pop(name, None)
+        if value is not None:
+            extra_body[name] = value
+            moved = True
+    if moved:
+        params["extra_body"] = extra_body
 
 
 def _create_retry_decorator(
@@ -429,6 +453,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
             has_betas = _move_betas_to_extra_body(params)
+            messages_api = (
+                self.client.beta.messages if has_betas else self.client.messages
+            )
+            _move_unsupported_sampling_params_to_extra_body(messages_api, params)
             if has_betas:
                 return self.client.beta.messages.create(**params)
             return self.client.messages.create(**params)
@@ -459,6 +487,12 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
             has_betas = _move_betas_to_extra_body(params)
+            messages_api = (
+                self.async_client.beta.messages
+                if has_betas
+                else self.async_client.messages
+            )
+            _move_unsupported_sampling_params_to_extra_body(messages_api, params)
             if has_betas:
                 return await self.async_client.beta.messages.create(**params)
             return await self.async_client.messages.create(**params)
@@ -493,6 +527,10 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
             has_betas = _move_betas_to_extra_body(params)
+            messages_api = (
+                self.client.beta.messages if has_betas else self.client.messages
+            )
+            _move_unsupported_sampling_params_to_extra_body(messages_api, params)
             if has_betas:
                 return self.client.beta.messages.create(**params, stream=True)
             return self.client.messages.create(**params, stream=True)
@@ -537,6 +575,12 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
             has_betas = _move_betas_to_extra_body(params)
+            messages_api = (
+                self.async_client.beta.messages
+                if has_betas
+                else self.async_client.messages
+            )
+            _move_unsupported_sampling_params_to_extra_body(messages_api, params)
             if has_betas:
                 return await self.async_client.beta.messages.create(
                     stream=True, **params
