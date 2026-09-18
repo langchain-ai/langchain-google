@@ -662,15 +662,21 @@ def _parse_chat_history_gemini(
             )
             parts = [part]
 
-            prev_content = vertex_messages[-1]
-            prev_content_is_tool_response = prev_content and prev_content.role == "user"
+            # Guard against an empty history (ToolMessage first, or only a
+            # leading SystemMessage): mirror the FunctionMessage branch above
+            # rather than indexing vertex_messages[-1] and raising IndexError.
+            if vertex_messages:
+                prev_content = vertex_messages[-1]
+                prev_content_is_tool_response = (
+                    prev_content and prev_content.role == "user"
+                )
 
-            if prev_content_is_tool_response:
-                prev_parts = list(prev_content.parts)
-                prev_parts.extend(parts)
-                # replacing last message
-                vertex_messages[-1] = Content(role=role, parts=prev_parts)
-                continue
+                if prev_content_is_tool_response:
+                    prev_parts = list(prev_content.parts)
+                    prev_parts.extend(parts)
+                    # replacing last message
+                    vertex_messages[-1] = Content(role=role, parts=prev_parts)
+                    continue
 
             vertex_messages.append(Content(role=role, parts=parts))
         else:
