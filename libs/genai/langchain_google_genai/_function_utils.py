@@ -103,6 +103,12 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
         elif key == "properties":
             converted_schema["properties"] = _get_properties_from_schema(value)
             continue
+        elif key == "enum":
+            if value is not None:
+                converted_schema["enum"] = [
+                    enum_value if isinstance(enum_value, str) else str(enum_value)
+                    for enum_value in value
+                ]
         elif key == "allOf":
             if len(value) > 1:
                 logger.warning(
