@@ -390,15 +390,22 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             if llm_model is not None:
                 llm_output["model_name"] = llm_model
         if len(content) == 1 and content[0]["type"] == "text":
-            msg = AIMessage(content=content[0]["text"])
+            msg = AIMessage(
+                content=content[0]["text"],
+                response_metadata={"model_provider": "anthropic"},
+            )
         elif any(block["type"] == "tool_use" for block in content):
             tool_calls = _extract_tool_calls(content)
             msg = AIMessage(
                 content=content,
                 tool_calls=tool_calls,
+                response_metadata={"model_provider": "anthropic"},
             )
         else:
-            msg = AIMessage(content=content)
+            msg = AIMessage(
+                content=content,
+                response_metadata={"model_provider": "anthropic"},
+            )
         # Collect token usage using the reusable function (matches langchain_anthropic)
         msg.usage_metadata = _create_usage_metadata(data.usage)
         return ChatResult(
