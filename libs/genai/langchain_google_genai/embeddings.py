@@ -1,7 +1,7 @@
 import os
 import re
 import string
-from typing import Any
+from typing import Annotated, Any
 
 from google.genai.client import Client
 from google.genai.errors import ClientError
@@ -109,12 +109,13 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     client: Any = None
     """The Google GenAI client instance."""
 
-    model: str = Field(...)
+    model: Annotated[str, Field()]
     """The name of the embedding model to use."""
 
-    task_type: str | None = Field(
-        default=None,
-    )
+    task_type: Annotated[
+        str | None,
+        Field(),
+    ] = None
     """The task type.
 
     Valid options include:
@@ -138,12 +139,18 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             ["GOOGLE_API_KEY", "GEMINI_API_KEY"], default=None
         ),
     )
+
     """The Google API key to use.
 
     If not provided, will check the env vars `GOOGLE_API_KEY` and `GEMINI_API_KEY`.
     """
 
-    credentials: Any = Field(default=None, exclude=True)
+    credentials: Annotated[
+        Any,
+        Field(
+            exclude=True,
+        ),
+    ] = None
     """Custom credentials for Vertex AI authentication.
 
     When provided, forces Vertex AI backend.
@@ -151,7 +158,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     Accepts a `google.auth.credentials.Credentials` object.
     """
 
-    vertexai: bool | None = Field(default=None)
+    vertexai: Annotated[
+        bool | None,
+        Field(),
+    ] = None
     """Whether to use Vertex AI backend.
 
     If `None` (default), backend is automatically determined:
@@ -162,7 +172,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     4. Otherwise, uses Gemini Developer API
     """
 
-    project: str | None = Field(default=None)
+    project: Annotated[
+        str | None,
+        Field(),
+    ] = None
     """Google Cloud project ID (Vertex AI only).
 
     Falls back to `GOOGLE_CLOUD_PROJECT` env var if not provided.
@@ -176,23 +189,31 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     Defaults to `GOOGLE_CLOUD_LOCATION` env var, then `'us-central1'`.
     """
 
-    base_url: str | None = Field(
-        default=None,
-    )
+    base_url: Annotated[
+        str | None,
+        Field(),
+    ] = None
     """The base URL to use for the API client."""
 
-    additional_headers: dict[str, str] | None = Field(
-        default=None,
-    )
+    additional_headers: Annotated[
+        dict[str, str] | None,
+        Field(),
+    ] = None
     """Additional HTTP headers to include in API requests."""
 
-    client_args: dict[str, Any] | None = Field(default=None)
+    client_args: Annotated[
+        dict[str, Any] | None,
+        Field(),
+    ] = None
     """Additional arguments to pass to the underlying HTTP client.
 
     Applied to both sync and async clients.
     """
 
-    api_version: str | None = Field(default=None)
+    api_version: Annotated[
+        str | None,
+        Field(),
+    ] = None
     """Override the API version path segment in request URLs.
 
     By default, the underlying `google-genai` SDK currently uses `v1beta1` for
@@ -201,15 +222,19 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     (e.g. `'v1'`).
     """
 
-    request_options: dict | None = Field(
-        default=None,
-    )
+    request_options: Annotated[
+        dict | None,
+        Field(),
+    ] = None
     """A dictionary of request options to pass to the Google API client.
 
     Example: `{'timeout': 10}`
     """
 
-    output_dimensionality: int | None = Field(default=None)
+    output_dimensionality: Annotated[
+        int | None,
+        Field(),
+    ] = None
     """Default output dimensionality for embeddings.
 
     If set, all embed calls use this dimension unless explicitly overridden.
