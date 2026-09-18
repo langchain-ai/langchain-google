@@ -2,6 +2,7 @@
 
 import base64
 import json
+import math
 import sys
 import warnings
 from dataclasses import dataclass
@@ -1609,6 +1610,56 @@ def test_validate_video_metadata_tolerates_unparseable_values(
                 },
             ),
         ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="search",
+                                args={"query": "everything", "limit": float("inf")},
+                            ),
+                        )
+                    ],
+                )
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    create_tool_call(
+                        name="search",
+                        args={"query": "everything", "limit": float("inf")},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
+        (
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="search",
+                                args={"query": "everything", "limit": float("-inf")},
+                            ),
+                        )
+                    ],
+                )
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    create_tool_call(
+                        name="search",
+                        args={"query": "everything", "limit": float("-inf")},
+                        id="00000000-0000-0000-0000-00000000000",
+                    ),
+                ],
+            ),
+        ),
     ],
 )
 def test_parse_response_candidate(raw_candidate, expected) -> None:
@@ -1631,6 +1682,32 @@ def test_parse_response_candidate(raw_candidate, expected) -> None:
                 res_kw = result.additional_kwargs[key]
                 exp_kw = value
                 assert res_kw == exp_kw
+
+
+def test_parse_response_candidate_nan_arg() -> None:
+    """A NaN tool-call arg should parse instead of raising SerializeToJsonError.
+
+    NaN isn't equal to itself, so this needs `math.isnan` instead of the
+    equality-based comparisons in `test_parse_response_candidate`.
+    """
+    candidate = Candidate(
+        content=Content(
+            role="model",
+            parts=[
+                Part(
+                    function_call=FunctionCall(
+                        name="search",
+                        args={"query": "everything", "limit": float("nan")},
+                    ),
+                )
+            ],
+        )
+    )
+    result = _parse_response_candidate(candidate)
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0]["name"] == "search"
+    assert result.tool_calls[0]["args"]["query"] == "everything"
+    assert math.isnan(result.tool_calls[0]["args"]["limit"])
 
 
 def test_parser_multiple_tools() -> None:
