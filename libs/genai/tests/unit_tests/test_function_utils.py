@@ -1536,6 +1536,74 @@ def test_tool_field_enum_array() -> None:
     assert items_property["enum"] == ["foo", "bar"]
 
 
+def test_tool_field_format_is_preserved() -> None:
+    """`format` (e.g. `date-time`) must reach the final Gemini schema.
+
+    `_dict_to_genai_schema` never copied `format` from the intermediate
+    dict into the final `schema_dict`, so it was silently dropped for every
+    property even though it passed the `_ALLOWED_SCHEMA_FIELDS` allowlist.
+    """
+
+    class ToolInfo(BaseModel):
+        relate_date: str = Field(
+            description="RFC 3339 date-time.", json_schema_extra={"format": "date-time"}
+        )
+
+    genai_tools = convert_to_genai_function_declarations(
+        [convert_to_openai_tool(ToolInfo)]
+    )
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+    properties = genai_tool_dict["function_declarations"][0]["parameters"]["properties"]
+
+    assert properties["relate_date"]["format"] == "date-time"
+
+
+def test_tool_field_example_is_preserved() -> None:
+    """`example`/`examples` should survive schema conversion for Gemini.
+
+    `google.genai.types.Schema` exposes a native `example` field, but the
+    conversion previously dropped both JSON Schema `example` and `examples`
+    keys because they weren't in `_ALLOWED_SCHEMA_FIELDS`.
+    """
+
+    class ToolInfo(BaseModel):
+        relate_date: str = Field(
+            description="RFC 3339 date-time.",
+            json_schema_extra={"example": "2026-08-10T00:00:00.000Z"},
+        )
+
+    genai_tools = convert_to_genai_function_declarations(
+        [convert_to_openai_tool(ToolInfo)]
+    )
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+    properties = genai_tool_dict["function_declarations"][0]["parameters"]["properties"]
+
+    assert properties["relate_date"]["example"] == "2026-08-10T00:00:00.000Z"
+
+
+def test_tool_field_integer_enum() -> None:
+    """Integer-valued enums must use `format: "enum"` with stringified values.
+
+    Gemini's `Schema.enum` field only accepts strings, even when the
+    underlying `type` is INTEGER/NUMBER/BOOLEAN (see the Google-documented
+    example: `{type: INTEGER, format: "enum", enum: ["101", "201", "301"]}`).
+    """
+
+    class ToolInfo(BaseModel):
+        status_id: Literal[100, 110, 120]
+
+    genai_tools = convert_to_genai_function_declarations(
+        [convert_to_openai_tool(ToolInfo)]
+    )
+    genai_tool_dict = tool_to_dict(genai_tools[0])
+    properties = genai_tool_dict["function_declarations"][0]["parameters"]["properties"]
+
+    status_property = properties["status_id"]
+    assert_property_type(status_property, Type.INTEGER, "status_id")
+    assert status_property["format"] == "enum"
+    assert status_property["enum"] == ["100", "110", "120"]
+
+
 def test_tool_with_non_class_args_schema() -> None:
     """Test that tools with non-class `args_schema` are handled gracefully.
 
