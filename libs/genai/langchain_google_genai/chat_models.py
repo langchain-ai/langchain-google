@@ -3710,16 +3710,32 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
-        # thinking_level takes precedence over thinking_budget for Gemini 3+ models
+        # `thinking_level` only takes precedence over `thinking_budget` for
+        # Gemini 3+ models -- it isn't a recognized field for earlier models,
+        # which must keep using `thinking_budget`. See GH issue #1462.
         if "thinking_level" in config and "thinking_budget" in config:
-            warnings.warn(
-                "Both 'thinking_level' and 'thinking_budget' were set after merging "
-                "thinking configuration values. 'thinking_level' takes precedence "
-                "for Gemini 3+ models; 'thinking_budget' will be ignored.",
-                UserWarning,
-                stacklevel=2,
-            )
-            config.pop("thinking_budget")
+            effective_model = kwargs.get("model", self.model) or ""
+            if _is_gemini_3_or_later(effective_model):
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values. 'thinking_level' "
+                    "takes precedence for Gemini 3+ models; 'thinking_budget' "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_budget")
+            else:
+                warnings.warn(
+                    "Both 'thinking_level' and 'thinking_budget' were set after "
+                    "merging thinking configuration values, but 'thinking_level' "
+                    f"is not supported by {effective_model!r} (pre-Gemini 3). "
+                    "'thinking_budget' will be used instead and 'thinking_level' "
+                    "will be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                config.pop("thinking_level")
 
         return ThinkingConfig(**config)
 
