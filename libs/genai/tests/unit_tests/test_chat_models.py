@@ -7392,6 +7392,101 @@ def test_finish_reason_as_integer() -> None:
     assert result.generations[0].generation_info["finish_reason"] == "UNKNOWN_15"  # type: ignore[index]
 
 
+def test_response_to_result_includes_finish_message() -> None:
+    """`finish_message` is copied into generation_info when the candidate has one.
+
+    Reproduces issue #1991: MALFORMED_FUNCTION_CALL discards content, so the
+    only diagnostic is `candidate.finish_message`.
+    """
+    finish_message = (
+        "Malformed function call: print(default_api.record_result(items=[...]))"
+    )
+    response = GenerateContentResponse.model_validate(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": []},
+                    "finish_reason": "MALFORMED_FUNCTION_CALL",
+                    "finish_message": finish_message,
+                    "safety_ratings": [],
+                }
+            ],
+            "model_version": MODEL_NAME,
+        }
+    )
+
+    result = _response_to_result(response, stream=False)
+    info = result.generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == "MALFORMED_FUNCTION_CALL"
+    assert info["finish_message"] == finish_message
+
+
+def test_response_to_result_omits_empty_finish_message() -> None:
+    """Do not add `finish_message` when the candidate has none."""
+    response = GenerateContentResponse.model_validate(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "ok"}]},
+                    "finish_reason": "STOP",
+                    "safety_ratings": [],
+                }
+            ],
+            "model_version": MODEL_NAME,
+        }
+    )
+
+    result = _response_to_result(response, stream=False)
+    info = result.generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == "STOP"
+    assert "finish_message" not in info
+
+
+def test_response_to_result_stream_finish_message_on_final_chunk() -> None:
+    """`finish_message` is only on the final streaming chunk (when finish_reason)."""
+    finish_message = "Malformed function call: print(default_api.record_result())"
+    intermediate = GenerateContentResponse.model_validate(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": ""}]},
+                    "safety_ratings": [],
+                }
+            ],
+            "model_version": MODEL_NAME,
+        }
+    )
+    final = GenerateContentResponse.model_validate(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": []},
+                    "finish_reason": "MALFORMED_FUNCTION_CALL",
+                    "finish_message": finish_message,
+                    "safety_ratings": [],
+                }
+            ],
+            "model_version": MODEL_NAME,
+        }
+    )
+
+    mid_info = (
+        _response_to_result(intermediate, stream=True).generations[0].generation_info
+    )
+    final_info = _response_to_result(final, stream=True).generations[0].generation_info
+
+    assert mid_info is not None
+    assert "finish_message" not in mid_info
+    assert "finish_reason" not in mid_info
+    assert final_info is not None
+    assert final_info["finish_message"] == finish_message
+    assert final_info["finish_reason"] == "MALFORMED_FUNCTION_CALL"
+
+
 def test_image_config_in_init() -> None:
     """Test that `image_config` is properly initialized."""
     llm = ChatGoogleGenerativeAI(
