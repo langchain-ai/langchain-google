@@ -1,14 +1,19 @@
 """Unit tests for _anthropic_utils.py."""
 
 import base64
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from anthropic.types import (
+    MessageDeltaUsage,
     RawContentBlockDeltaEvent,
+    RawMessageDeltaEvent,
     SignatureDelta,
     ThinkingDelta,
+    Usage,
 )
+from anthropic.types.raw_message_delta_event import Delta
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -20,6 +25,7 @@ from langchain_core.messages.content import create_image_block, create_text_bloc
 from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
+    _create_usage_metadata,
     _documents_in_params,
     _format_image,
     _format_message_anthropic,
@@ -1696,3 +1702,71 @@ def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
     ]
     _, formatted = _format_messages_anthropic(messages, project="test-project")
     assert formatted[-1]["content"][0]["thinking"] == "considering...  "
+
+
+def test_create_usage_metadata_reports_reasoning_tokens_from_object() -> None:
+    """Newer SDKs model `output_tokens_details` as an object."""
+    usage = Usage.model_validate(
+        {
+            "input_tokens": 70,
+            "output_tokens": 188,
+            "output_tokens_details": {"thinking_tokens": 68},
+        }
+    )
+    # The SDK we test against may keep the extra field as a dict; emulate the
+    # object form explicitly as well.
+    usage.output_tokens_details = SimpleNamespace(thinking_tokens=68)  # type: ignore[attr-defined]
+
+    metadata = _create_usage_metadata(usage)
+
+    assert metadata["output_tokens"] == 188
+    assert metadata["output_token_details"] == {"reasoning": 68}
+
+
+def test_create_usage_metadata_reports_reasoning_tokens_from_dict() -> None:
+    """Older SDKs keep unknown `output_tokens_details` as a plain extra dict."""
+    usage = Usage.model_validate(
+        {
+            "input_tokens": 70,
+            "output_tokens": 188,
+            "output_tokens_details": {"thinking_tokens": 68},
+        }
+    )
+    assert isinstance(usage.output_tokens_details, dict)  # type: ignore[attr-defined]
+
+    metadata = _create_usage_metadata(usage)
+
+    assert metadata["output_token_details"] == {"reasoning": 68}
+
+
+def test_create_usage_metadata_without_reasoning_tokens_is_unchanged() -> None:
+    usage = Usage.model_validate({"input_tokens": 70, "output_tokens": 20})
+
+    metadata = _create_usage_metadata(usage)
+
+    assert "output_token_details" not in metadata
+    assert metadata == {"input_tokens": 70, "output_tokens": 20, "total_tokens": 90}
+
+
+def test_streaming_reports_reasoning_tokens_in_message_delta() -> None:
+    """The final usage delta must carry reasoning tokens into the aggregate."""
+    delta_usage = MessageDeltaUsage.model_validate(
+        {"output_tokens": 148, "output_tokens_details": {"thinking_tokens": 60}}
+    )
+    chunk = _make_message_chunk_from_anthropic_event(
+        RawMessageDeltaEvent(
+            type="message_delta",
+            delta=Delta(stop_reason="end_turn", stop_sequence=None),
+            usage=delta_usage,
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+
+    assert chunk is not None
+    assert chunk.usage_metadata == {
+        "input_tokens": 0,
+        "output_tokens": 148,
+        "total_tokens": 148,
+        "output_token_details": {"reasoning": 60},
+    }
