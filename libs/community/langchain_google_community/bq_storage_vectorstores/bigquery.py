@@ -468,6 +468,8 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         k: int = 5,
         expire_hours_temp_table: int = 12,
         options: Optional[dict[str, Any]] = None,
+        with_scores: bool = True,
+        with_embeddings: bool = False,
     ) -> List[List[List[Any]]]:
         """Multi-purpose batch search function. Accepts either embeddings or queries
         but not both. Optionally returns similarity scores and/or matched embeddings
@@ -486,12 +488,19 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 "int_property": 123}`.
                 - If a string is provided, it is assumed to be a valid SQL WHERE clause.
             k: The number of top results to return per query. Defaults to 5.
-            with_scores: If True, returns the relevance scores of the results along with
-                the documents
-            with_embeddings: If True, returns the embeddings of the results along with
-                the documents
+            expire_hours_temp_table: Lifetime of the temporary table holding the
+                query embeddings. Defaults to 12.
             options: (Optional) A dictionary representing additional options for
                 VECTOR_SEARCH.
+            with_scores: If True (default), returns the relevance scores of the
+                results along with the documents.
+            with_embeddings: If True, returns the embeddings of the results along
+                with the documents. Defaults to False.
+
+        Returns:
+            One list per query. Each entry is a `Document` when neither flag is
+            set, otherwise a list of `[document, score]`, `[document, embedding]`
+            or `[document, score, embedding]` depending on the flags.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
@@ -520,7 +529,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             k=k,
             num_embeddings=len(embeddings),
             table_to_query=table_ref,
-            fields_to_exclude=[self.embedding_field],
+            fields_to_exclude=[] if with_embeddings else [self.embedding_field],
             options=options,
         )
 
@@ -535,12 +544,24 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             api_method=bigquery.enums.QueryApiMethod.QUERY,
         )
 
-        return self._create_langchain_documents(
+        results = self._create_langchain_documents(
             search_results=list(search_results),
             k=k,
             num_queries=len(embeddings),
-            with_embeddings=False,
+            with_embeddings=with_embeddings,
         )
+
+        # Shape each record according to the requested fields, matching
+        # `similarity_search_by_vectors`.
+        for i, query_results in enumerate(results):
+            if not with_scores and not with_embeddings:
+                results[i] = [x[0] for x in query_results]
+            elif not with_embeddings:
+                results[i] = [[x[0], x[1]] for x in query_results]
+            elif not with_scores:
+                results[i] = [[x[0], x[2]] for x in query_results]
+
+        return results
 
     def similarity_search_by_vectors(
         self,
