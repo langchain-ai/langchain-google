@@ -7372,6 +7372,7 @@ def test_finish_reason_as_integer() -> None:
     mock_candidate = Mock(spec=Candidate)
     mock_candidate.finish_reason = 15  # Raw integer, not an enum
     mock_candidate.safety_ratings = []
+    mock_candidate.url_context_metadata = None
     mock_candidate.content = Content(
         parts=[Part.from_text(text="Test response")],
         role="model",
