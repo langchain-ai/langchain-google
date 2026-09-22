@@ -711,6 +711,125 @@ def test_parse_history_gemini() -> None:
     assert system_instructions.parts[0].text == system_input
 
 
+def test_parse_history_gemini_does_not_merge_tool_and_human_messages() -> None:
+    """Test that tool responses and following human messages remain separate."""
+    messages = [
+        HumanMessage(content="What's the weather in London?"),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "get_weather",
+                    "args": {"city": "London"},
+                    "id": "call_1",
+                }
+            ],
+        ),
+        ToolMessage(
+            content='{"temp_c": 12}',
+            tool_call_id="call_1",
+            name="get_weather",
+        ),
+        HumanMessage(content="Thanks! Now what about Berlin?"),
+    ]
+
+    _, history = _parse_chat_history_gemini(messages, ImageBytesLoader())
+
+    assert len(history) == 4
+
+    assert history[-2].role == "user"
+    assert len(history[-2].parts) == 1
+    assert history[-2].parts[0].function_response.name == "get_weather"
+
+    assert history[-1].role == "user"
+    assert len(history[-1].parts) == 1
+    assert history[-1].parts[0].text == "Thanks! Now what about Berlin?"
+
+
+def test_parse_history_gemini_does_not_merge_human_and_tool_messages() -> None:
+    """Test that human messages and following tool responses remain separate."""
+    messages = [
+        HumanMessage(content="Hello"),
+        ToolMessage(
+            content='{"temp_c": 12}',
+            tool_call_id="call_1",
+            name="get_weather",
+        ),
+    ]
+
+    _, history = _parse_chat_history_gemini(messages, ImageBytesLoader())
+
+    assert len(history) == 2
+
+    assert history[0].role == "user"
+    assert len(history[0].parts) == 1
+    assert history[0].parts[0].text == "Hello"
+
+    assert history[1].role == "user"
+    assert len(history[1].parts) == 1
+    assert history[1].parts[0].function_response.name == "get_weather"
+
+
+def test_parse_history_gemini_merges_consecutive_tool_messages() -> None:
+    """Test that consecutive tool responses are still merged."""
+    messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "get_weather",
+                    "args": {"city": "Paris"},
+                    "id": "call_1",
+                },
+                {
+                    "name": "get_weather",
+                    "args": {"city": "London"},
+                    "id": "call_2",
+                },
+            ],
+        ),
+        ToolMessage(
+            content='{"temp_c": 18}',
+            tool_call_id="call_1",
+            name="get_weather",
+        ),
+        ToolMessage(
+            content='{"temp_c": 12}',
+            tool_call_id="call_2",
+            name="get_weather",
+        ),
+    ]
+
+    _, history = _parse_chat_history_gemini(messages, ImageBytesLoader())
+
+    assert len(history) == 2
+
+    assert history[0].role == "model"
+
+    assert history[1].role == "user"
+    assert len(history[1].parts) == 2
+    assert history[1].parts[0].function_response.name == "get_weather"
+    assert history[1].parts[1].function_response.name == "get_weather"
+
+
+def test_parse_history_gemini_does_not_merge_human_and_function_messages() -> None:
+    """Test that human messages and function responses remain separate."""
+    messages = [
+        HumanMessage(content="Hello"),
+        FunctionMessage(
+            name="get_weather",
+            content='{"temp_c": 12}',
+        ),
+    ]
+
+    _, history = _parse_chat_history_gemini(messages, ImageBytesLoader())
+
+    assert len(history) == 2
+
+    assert history[0].parts[0].text == "Hello"
+    assert history[1].parts[0].function_response.name == "get_weather"
+
+
 def test_parse_history_gemini_number() -> None:
     """Ensure that numeric strings are parsed correctly as text.
 
