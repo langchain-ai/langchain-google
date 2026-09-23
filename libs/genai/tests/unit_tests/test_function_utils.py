@@ -8,6 +8,7 @@ from google.genai.types import (
     FunctionCallingConfig,
     FunctionCallingConfigMode,
     FunctionDeclaration,
+    GoogleSearch,
     Schema,
     Tool,
     ToolConfig,
@@ -29,7 +30,9 @@ from langchain_google_genai._function_utils import (
     _format_to_genai_function_declaration,
     _FunctionDeclarationLike,
     _tool_choice_to_tool_config,
+    coerce_json_encoded_args,
     convert_to_genai_function_declarations,
+    get_container_arg_types,
     tool_to_dict,
 )
 
@@ -1647,3 +1650,76 @@ def test_tool_with_union_int_float() -> None:
         assert b_property.get("type") is None, (
             "When 'any_of' is present, 'type' field must NOT be set."
         )
+
+
+def test_get_container_arg_types() -> None:
+    """Only array/object args are collected, including under `any_of`."""
+
+    @tool
+    def write_todos(
+        todos: list[str],
+        meta: dict,
+        note: str,
+        extra: list[int] | None = None,
+    ) -> str:
+        """Write todos."""
+        return ""
+
+    tools = convert_to_genai_function_declarations([write_todos])
+
+    assert get_container_arg_types(tools) == {
+        "write_todos": {"todos": "ARRAY", "meta": "OBJECT", "extra": "ARRAY"}
+    }
+
+
+def test_get_container_arg_types_ignores_non_function_tools() -> None:
+    """Built-in tools carry no function declarations and must be skipped."""
+    assert get_container_arg_types([Tool(google_search=GoogleSearch())]) == {}
+    assert get_container_arg_types(None) == {}
+
+
+def test_coerce_json_encoded_args() -> None:
+    """Container args the model JSON-encoded are decoded, everything else is not."""
+    declared = {"todos": "ARRAY", "meta": "OBJECT"}
+
+    args = {
+        "todos": '[{"content": "a"}]',
+        "meta": '{"k": "v"}',
+        # A string-typed arg holding a JSON payload isn't declared, so it survives
+        "note": '{"still": "a string"}',
+    }
+
+    assert coerce_json_encoded_args(args, declared) == {
+        "todos": [{"content": "a"}],
+        "meta": {"k": "v"},
+        "note": '{"still": "a string"}',
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not json at all",
+        '[{"content": "a"}',  # truncated
+        '{"k": "v"}',  # decodes to a dict, but the arg is declared as an array
+        '"a plain json string"',
+        "null",
+    ],
+)
+def test_coerce_json_encoded_args_passes_through(value: str) -> None:
+    """Values that don't decode to the declared container are left untouched.
+
+    The tool then raises its usual validation error instead of a confusing one.
+    """
+    assert coerce_json_encoded_args({"todos": value}, {"todos": "ARRAY"}) == {
+        "todos": value
+    }
+
+
+def test_coerce_json_encoded_args_leaves_parsed_values_alone() -> None:
+    """Args the model already returned parsed are untouched."""
+    args: dict[str, Any] = {"todos": [{"content": "a"}], "count": 2}
+
+    assert coerce_json_encoded_args(args, {"todos": "ARRAY"}) == args
+    assert coerce_json_encoded_args(args, None) == args
+    assert coerce_json_encoded_args(args, {}) == args
