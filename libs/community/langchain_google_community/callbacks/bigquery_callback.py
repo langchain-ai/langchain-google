@@ -1159,7 +1159,7 @@ def _prepare_arrow_batch(rows: list[dict[str, Any]], arrow_schema: Any) -> Any:
                 if value is not None:
                     if isinstance(value, (dict, list)):
                         try:
-                            value = json.dumps(value)
+                            value = json.dumps(value, ensure_ascii=False)
                         except (TypeError, ValueError):
                             value = str(value)
                     elif isinstance(value, (str, bytes)):
@@ -1183,18 +1183,18 @@ def _prepare_arrow_batch(rows: list[dict[str, Any]], arrow_schema: Any) -> Any:
 
                         if not is_already_json:
                             try:
-                                value = json.dumps(value)
+                                value = json.dumps(value, ensure_ascii=False)
                             except (TypeError, ValueError):
                                 value = str(value)
                     else:
                         try:
-                            value = json.dumps(value)
+                            value = json.dumps(value, ensure_ascii=False)
                         except (TypeError, ValueError):
                             value = str(value)
             elif isinstance(value, (dict, list)) and not is_struct and not is_list:
                 if value is not None and not isinstance(value, (str, bytes)):
                     try:
-                        value = json.dumps(value)
+                        value = json.dumps(value, ensure_ascii=False)
                     except (TypeError, ValueError):
                         value = str(value)
 
@@ -1729,7 +1729,8 @@ class _LangChainContentParserMixin:
                 part_data["mime_type"] = "application/json"
                 part_data["text"] = f"Tool Call: {part.get('name')}"
                 part_data["part_attributes"] = json.dumps(
-                    {"tool_id": part.get("id"), "name": part.get("name")}
+                    {"tool_id": part.get("id"), "name": part.get("name")},
+                    ensure_ascii=False,
                 )
                 summary_text = f"[TOOL: {part.get('name')}]"
 
@@ -2928,7 +2929,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         await self._log(
             event_type,
             run_id,
-            content=json.dumps(inputs, default=str),
+            content=json.dumps(inputs, default=str, ensure_ascii=False),
             parent_run_id=parent_run_id,
             attributes=attributes,
             metadata=metadata,
@@ -2976,7 +2977,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         await self._log(
             event_type,
             run_id,
-            content=json.dumps(outputs, default=str),
+            content=json.dumps(outputs, default=str, ensure_ascii=False),
             parent_run_id=parent_run_id,
             attributes=attributes,
             metadata=metadata,
@@ -3107,7 +3108,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         await self._log(
             "RETRIEVER_END",
             run_id,
-            content=json.dumps(docs, default=str),
+            content=json.dumps(docs, default=str, ensure_ascii=False),
             parent_run_id=parent_run_id,
             metadata=metadata,
             latency_measurement=latency_measurement,
@@ -3165,7 +3166,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             "AGENT_ACTION",
             run_id,
             content=json.dumps(
-                {"tool": action.tool, "input": str(action.tool_input)}, default=str
+                {"tool": action.tool, "input": str(action.tool_input)},
+                default=str,
+                ensure_ascii=False,
             ),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
@@ -3182,7 +3185,9 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         await self._log(
             "AGENT_FINISH",
             run_id,
-            content=json.dumps({"output": finish.return_values}, default=str),
+            content=json.dumps(
+                {"output": finish.return_values}, default=str, ensure_ascii=False
+            ),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
@@ -4075,7 +4080,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._log(
             event_type,
             run_id,
-            content=json.dumps(inputs, default=str),
+            content=json.dumps(inputs, default=str, ensure_ascii=False),
             parent_run_id=parent_run_id,
             attributes=attributes,
             metadata=metadata,
@@ -4117,7 +4122,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._log(
             event_type,
             run_id,
-            content=json.dumps(outputs, default=str),
+            content=json.dumps(outputs, default=str, ensure_ascii=False),
             parent_run_id=parent_run_id,
             attributes=attributes,
             metadata=metadata,
@@ -4277,7 +4282,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             "AGENT_ACTION",
             run_id,
             content=json.dumps(
-                {"tool": action.tool, "input": str(action.tool_input)}, default=str
+                {"tool": action.tool, "input": str(action.tool_input)},
+                default=str,
+                ensure_ascii=False,
             ),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
@@ -4294,7 +4301,9 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._log(
             "AGENT_FINISH",
             run_id,
-            content=json.dumps({"output": finish.return_values}, default=str),
+            content=json.dumps(
+                {"output": finish.return_values}, default=str, ensure_ascii=False
+            ),
             parent_run_id=parent_run_id,
             metadata=kwargs.get("metadata"),
         )
@@ -4340,7 +4349,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._log(
             "RETRIEVER_END",
             run_id,
-            content=json.dumps(docs, default=str),
+            content=json.dumps(docs, default=str, ensure_ascii=False),
             parent_run_id=parent_run_id,
             metadata=metadata,
             latency_measurement=latency_measurement,
@@ -4464,7 +4473,9 @@ class GraphExecutionContext:
         self.handler._log(
             "INVOCATION_STARTING",
             self._run_id,
-            content=json.dumps({"graph_name": self.graph_name}, default=str),
+            content=json.dumps(
+                {"graph_name": self.graph_name}, default=str, ensure_ascii=False
+            ),
             attributes=self.handler._build_langgraph_attributes(metadata=self.metadata),
             metadata=self.metadata,
         )
@@ -4499,7 +4510,9 @@ class GraphExecutionContext:
             self.handler._log(
                 "INVOCATION_COMPLETED",
                 self._run_id,
-                content=json.dumps({"graph_name": self.graph_name}, default=str),
+                content=json.dumps(
+                    {"graph_name": self.graph_name}, default=str, ensure_ascii=False
+                ),
                 attributes=self.handler._build_langgraph_attributes(
                     metadata=self.metadata
                 ),
@@ -4558,7 +4571,9 @@ class AsyncGraphExecutionContext:
         await self.handler._log(
             "INVOCATION_STARTING",
             self._run_id,
-            content=json.dumps({"graph_name": self.graph_name}, default=str),
+            content=json.dumps(
+                {"graph_name": self.graph_name}, default=str, ensure_ascii=False
+            ),
             attributes=self.handler._build_langgraph_attributes(metadata=self.metadata),
             metadata=self.metadata,
         )
@@ -4593,7 +4608,9 @@ class AsyncGraphExecutionContext:
             await self.handler._log(
                 "INVOCATION_COMPLETED",
                 self._run_id,
-                content=json.dumps({"graph_name": self.graph_name}, default=str),
+                content=json.dumps(
+                    {"graph_name": self.graph_name}, default=str, ensure_ascii=False
+                ),
                 attributes=self.handler._build_langgraph_attributes(
                     metadata=self.metadata
                 ),
