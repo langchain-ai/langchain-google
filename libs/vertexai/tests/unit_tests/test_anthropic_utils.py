@@ -1,14 +1,25 @@
 """Unit tests for _anthropic_utils.py."""
 
 import base64
+import copy
 from unittest.mock import patch
 
 import pytest
 from anthropic.types import (
+    ContentBlockParam,
+    Message,
+    MessageDeltaUsage,
     RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawMessageDeltaEvent,
+    RawMessageStartEvent,
     SignatureDelta,
+    TextDelta,
     ThinkingDelta,
+    ToolUseBlock,
+    Usage,
 )
+from anthropic.types.raw_message_delta_event import Delta
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -18,8 +29,10 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.content import create_image_block, create_text_block
 from langchain_core.messages.tool import tool_call as create_tool_call
+from pydantic import TypeAdapter, ValidationError
 
 from langchain_google_vertexai._anthropic_utils import (
+    _convert_v1_block_to_anthropic,
     _documents_in_params,
     _format_image,
     _format_message_anthropic,
@@ -929,7 +942,8 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
                 "type": "thinking",
                 "thinking": "thoughts of the model...",
             }
-        ]
+        ],
+        response_metadata={"model_provider": "anthropic"},
     )
     assert signature_chunk == AIMessageChunk(
         content=[
@@ -938,7 +952,8 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
                 "type": "thinking",
                 "signature": "thoughts-signature",
             }
-        ]
+        ],
+        response_metadata={"model_provider": "anthropic"},
     )
     assert isinstance(thinking_chunk, AIMessageChunk)
     assert isinstance(signature_chunk, AIMessageChunk)
@@ -1696,3 +1711,302 @@ def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
     ]
     _, formatted = _format_messages_anthropic(messages, project="test-project")
     assert formatted[-1]["content"][0]["thinking"] == "considering...  "
+
+
+def test_format_messages_v1_tool_call_round_trip() -> None:
+    """v1 `tool_call` blocks convert to a single Anthropic `tool_use` (#1930)."""
+    ai_message = AIMessage(
+        content=[
+            {
+                "type": "tool_call",
+                "id": "toolu_vrtx_01",
+                "name": "reference_lookup",
+                "args": {"query": "test"},
+            }
+        ],
+        tool_calls=[
+            {
+                "type": "tool_call",
+                "id": "toolu_vrtx_01",
+                "name": "reference_lookup",
+                "args": {"query": "test"},
+            }
+        ],
+    )
+    messages = [
+        HumanMessage("test"),
+        ai_message,
+        ToolMessage(
+            content="result",
+            tool_call_id="toolu_vrtx_01",
+            name="reference_lookup",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="my-project")
+
+    assert formatted[1]["content"] == [
+        {
+            "type": "tool_use",
+            "name": "reference_lookup",
+            "input": {"query": "test"},
+            "id": "toolu_vrtx_01",
+        }
+    ]
+
+
+def test_format_messages_v1_tool_call_preserves_caller() -> None:
+    """v1 `tool_call` with programmatic `caller` survives dedup (#1933)."""
+    caller = {"type": "code_execution_20250825"}
+    tool_call_id = "toolu_vrtx_01"
+    ai_message = AIMessage(
+        content=[
+            {
+                "type": "tool_call",
+                "id": tool_call_id,
+                "name": "get_weather",
+                "args": {"location": "Boston"},
+                "extras": {"caller": caller},
+            }
+        ],
+        tool_calls=[
+            {
+                "type": "tool_call",
+                "id": tool_call_id,
+                "name": "get_weather",
+                "args": {"location": "Boston"},
+            }
+        ],
+    )
+    messages = [
+        HumanMessage("What's the weather in Boston?"),
+        ai_message,
+        ToolMessage(
+            content="It's sunny.",
+            tool_call_id=tool_call_id,
+            name="get_weather",
+        ),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="my-project")
+
+    tool_use_blocks = [
+        block
+        for block in formatted[1]["content"]
+        if block.get("type") == "tool_use" and block.get("id") == tool_call_id
+    ]
+    assert len(tool_use_blocks) == 1
+    assert tool_use_blocks[0]["caller"] == caller
+
+
+def test_format_messages_v1_tool_call_validates_as_content_block_param() -> None:
+    """Formatted v1 tool_call payload validates as Anthropic ContentBlockParam."""
+    ai_message = AIMessage(
+        content=[
+            {
+                "type": "tool_call",
+                "id": "toolu_vrtx_01",
+                "name": "reference_lookup",
+                "args": {"query": "test"},
+            }
+        ],
+        tool_calls=[
+            {
+                "type": "tool_call",
+                "id": "toolu_vrtx_01",
+                "name": "reference_lookup",
+                "args": {"query": "test"},
+            }
+        ],
+    )
+    _, formatted = _format_messages_anthropic(
+        [
+            HumanMessage("test"),
+            ai_message,
+            ToolMessage(
+                content="result",
+                tool_call_id="toolu_vrtx_01",
+                name="reference_lookup",
+            ),
+        ],
+        project="my-project",
+    )
+
+    adapter: TypeAdapter[ContentBlockParam] = TypeAdapter(ContentBlockParam)
+    for block in formatted[1]["content"]:
+        adapter.validate_python(block)
+
+    with pytest.raises(ValidationError):
+        adapter.validate_python(
+            {
+                "type": "tool_call",
+                "id": "toolu_vrtx_01",
+                "name": "reference_lookup",
+                "args": {"query": "test"},
+            }
+        )
+
+
+def test_convert_v1_tool_call_chunk_partial_and_valid_json() -> None:
+    """`tool_call_chunk` args: invalid JSON becomes `{}`; valid JSON parses."""
+    invalid = _convert_v1_block_to_anthropic(
+        {
+            "type": "tool_call_chunk",
+            "id": "toolu_1",
+            "name": "reference_lookup",
+            "args": '{"que',
+        }
+    )
+    assert invalid == {
+        "type": "tool_use",
+        "name": "reference_lookup",
+        "input": {},
+        "id": "toolu_1",
+    }
+
+    valid = _convert_v1_block_to_anthropic(
+        {
+            "type": "tool_call_chunk",
+            "id": "toolu_1",
+            "name": "reference_lookup",
+            "args": '{"query": "test"}',
+        }
+    )
+    assert valid == {
+        "type": "tool_use",
+        "name": "reference_lookup",
+        "input": {"query": "test"},
+        "id": "toolu_1",
+    }
+
+
+def test_convert_v1_non_standard_strips_nested_streaming_keys() -> None:
+    """Unwrap `non_standard` and strip nested streaming metadata (#1930)."""
+    converted = _convert_v1_block_to_anthropic(
+        {
+            "type": "non_standard",
+            "value": {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "t",
+                "input": {},
+                "caller": None,
+                "index": 0,
+                "partial_json": "x",
+            },
+        }
+    )
+    assert converted == {
+        "type": "tool_use",
+        "id": "toolu_1",
+        "name": "t",
+        "input": {},
+    }
+    assert "caller" not in converted
+    assert "index" not in converted
+    assert "partial_json" not in converted
+
+
+def test_format_messages_v1_tool_call_does_not_mutate_input() -> None:
+    """Formatting must not mutate shared message content (agent checkpoints)."""
+    original_block = {
+        "type": "tool_call",
+        "id": "toolu_vrtx_01",
+        "name": "reference_lookup",
+        "args": {"query": "test"},
+    }
+    ai_message = AIMessage(
+        content=[original_block],
+        tool_calls=[
+            {
+                "type": "tool_call",
+                "id": "toolu_vrtx_01",
+                "name": "reference_lookup",
+                "args": {"query": "test"},
+            }
+        ],
+    )
+    messages = [
+        HumanMessage("test"),
+        ai_message,
+        ToolMessage(
+            content="result",
+            tool_call_id="toolu_vrtx_01",
+            name="reference_lookup",
+        ),
+    ]
+    content_before = copy.deepcopy(ai_message.content)
+
+    _format_messages_anthropic(messages, project="my-project")
+
+    assert ai_message.content == content_before
+    assert original_block == {
+        "type": "tool_call",
+        "id": "toolu_vrtx_01",
+        "name": "reference_lookup",
+        "args": {"query": "test"},
+    }
+
+
+def test_make_message_chunk_sets_model_provider() -> None:
+    """Streaming chunks stamp `model_provider=\"anthropic\"` (#1754)."""
+    message_start = _make_message_chunk_from_anthropic_event(
+        event=RawMessageStartEvent(
+            type="message_start",
+            message=Message(
+                id="msg_1",
+                type="message",
+                role="assistant",
+                content=[],
+                model="claude-sonnet-4-6",
+                stop_reason=None,
+                stop_sequence=None,
+                usage=Usage(input_tokens=1, output_tokens=0),
+            ),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=True,
+    )
+    assert message_start is not None
+    assert message_start.response_metadata["model_provider"] == "anthropic"
+
+    content_block_start = _make_message_chunk_from_anthropic_event(
+        event=RawContentBlockStartEvent(
+            type="content_block_start",
+            index=0,
+            content_block=ToolUseBlock(
+                type="tool_use",
+                id="toolu_1",
+                name="reference_lookup",
+                input={},
+            ),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+    assert content_block_start is not None
+    assert content_block_start.response_metadata["model_provider"] == "anthropic"
+
+    content_block_delta = _make_message_chunk_from_anthropic_event(
+        event=RawContentBlockDeltaEvent(
+            type="content_block_delta",
+            index=0,
+            delta=TextDelta(type="text_delta", text="hello"),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=True,
+    )
+    assert content_block_delta is not None
+    assert content_block_delta.response_metadata["model_provider"] == "anthropic"
+
+    message_delta = _make_message_chunk_from_anthropic_event(
+        event=RawMessageDeltaEvent(
+            type="message_delta",
+            delta=Delta(stop_reason="end_turn", stop_sequence=None),
+            usage=MessageDeltaUsage(output_tokens=5),
+        ),
+        stream_usage=True,
+        coerce_content_to_string=True,
+    )
+    assert message_delta is not None
+    assert message_delta.response_metadata["model_provider"] == "anthropic"
