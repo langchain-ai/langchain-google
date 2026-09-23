@@ -16,7 +16,10 @@ from google.cloud.discoveryengine_v1beta import (
 )
 from langchain_core.embeddings import FakeEmbeddings
 
-from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
+from langchain_google_community.vertex_ai_search import (
+    VertexAISearchRetriever,
+    VertexAISearchSummaryTool,
+)
 
 
 @pytest.fixture
@@ -542,3 +545,109 @@ def test_convert_unstructured_search_response_extractive_answers(
         assert "relevance_score" not in documents[1].metadata
         assert "previous_segments" not in documents[1].metadata
         assert "next_segments" not in documents[1].metadata
+
+
+def _make_summary_search_response(
+    include_metadata: bool,
+) -> SearchResponse:
+    """Build a mock SearchResponse with a summary, optionally with metadata."""
+    if not include_metadata:
+        return SearchResponse(summary=SearchResponse.Summary(summary_text="hello"))
+
+    summary_with_metadata = SearchResponse.Summary.SummaryWithMetadata(
+        summary="hello",
+        citation_metadata=SearchResponse.Summary.CitationMetadata(
+            citations=[SearchResponse.Summary.Citation(start_index=0, end_index=5)]
+        ),
+        references=[
+            SearchResponse.Summary.Reference(
+                title="doc1",
+                document="projects/p/locations/l/dataStores/d/branches/0/documents/doc1",
+            )
+        ],
+    )
+    return SearchResponse(
+        summary=SearchResponse.Summary(
+            summary_text="hello", summary_with_metadata=summary_with_metadata
+        )
+    )
+
+
+def test_summary_tool_default_response_format_returns_str(
+    mock_stable_client: MagicMock,
+) -> None:
+    """Test that the default `response_format="content"` still returns a str.
+
+    Regression test for GH issue #1836: default behavior must stay
+    backward-compatible even though citation metadata is now available.
+    """
+    mock_stable_client.search.return_value = _make_summary_search_response(
+        include_metadata=True
+    )
+
+    tool = VertexAISearchSummaryTool(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        credentials=ga_credentials.AnonymousCredentials(),
+        name="vertex_search_summary",
+        description="test tool",
+    )
+
+    result = tool._run("query_value")
+    assert result == "hello"
+    assert isinstance(result, str)
+
+
+def test_summary_tool_content_and_artifact_includes_citations(
+    mock_stable_client: MagicMock,
+) -> None:
+    """Test `response_format="content_and_artifact"` surfaces citation metadata.
+
+    Regression test for GH issue #1836: `VertexAISearchSummaryTool` silently
+    dropped `summary_with_metadata` (citations/references) even when
+    `summary_include_citations=True`.
+    """
+    mock_stable_client.search.return_value = _make_summary_search_response(
+        include_metadata=True
+    )
+
+    tool = VertexAISearchSummaryTool(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        credentials=ga_credentials.AnonymousCredentials(),
+        name="vertex_search_summary",
+        description="test tool",
+        response_format="content_and_artifact",
+        summary_include_citations=True,
+    )
+
+    content, artifact = tool._run("query_value")
+    assert content == "hello"
+    assert artifact is not None
+    assert artifact["citation_metadata"]["citations"][0]["end_index"] == "5"
+    assert artifact["references"][0]["title"] == "doc1"
+
+    # Plain .run() must still surface only the string content
+    assert tool.run("query_value") == "hello"
+
+
+def test_summary_tool_content_and_artifact_no_metadata_in_response(
+    mock_stable_client: MagicMock,
+) -> None:
+    """Test artifact is `None` when the response carries no summary metadata."""
+    mock_stable_client.search.return_value = _make_summary_search_response(
+        include_metadata=False
+    )
+
+    tool = VertexAISearchSummaryTool(
+        project_id="mock-project",
+        data_store_id="mock-data-store",
+        credentials=ga_credentials.AnonymousCredentials(),
+        name="vertex_search_summary",
+        description="test tool",
+        response_format="content_and_artifact",
+    )
+
+    content, artifact = tool._run("query_value")
+    assert content == "hello"
+    assert artifact is None
