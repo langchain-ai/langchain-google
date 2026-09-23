@@ -11,6 +11,25 @@ from langchain_google_community.sheets import (
     SheetsToolkit,
 )
 
+# Substrings that mark a Google Sheets API error as "unavailable in this
+# environment" rather than a genuine tool failure: the API is not enabled on
+# the project (`SERVICE_DISABLED` / "API has not been used"), or the API key is
+# restricted from calling it (`API_KEY_SERVICE_BLOCKED` / "are blocked", as
+# happens in the langchain-google CI project). When matched, the affected
+# integration test is skipped instead of failed.
+_SHEETS_API_UNAVAILABLE_MARKERS = (
+    "SERVICE_DISABLED",
+    "API has not been used",
+    "API_KEY_SERVICE_BLOCKED",
+    "are blocked",
+)
+
+
+def _is_sheets_api_unavailable(error: Exception) -> bool:
+    """Return whether the error means the Sheets API is unavailable in CI."""
+    message = str(error)
+    return any(marker in message for marker in _SHEETS_API_UNAVAILABLE_MARKERS)
+
 
 @pytest.fixture
 def sheets_api_key() -> str:
@@ -50,7 +69,7 @@ def test_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) -> None:
         assert len(result["values"]) > 0
         assert "A1:C3" in result["range"]
     except Exception as e:
-        if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
+        if _is_sheets_api_unavailable(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
         raise
 
@@ -77,7 +96,7 @@ def test_batch_read_sheet_data(sheets_api_key: str, test_spreadsheet_id: str) ->
         assert "results" in result
         assert len(result["results"]) == 2
     except Exception as e:
-        if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
+        if _is_sheets_api_unavailable(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
         raise
 
@@ -104,7 +123,7 @@ def test_get_spreadsheet_info(sheets_api_key: str, test_spreadsheet_id: str) -> 
         assert "sheets" in result
         assert len(result["sheets"]) > 0
     except Exception as e:
-        if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
+        if _is_sheets_api_unavailable(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
         raise
 
@@ -136,7 +155,7 @@ def test_toolkit_functionality(sheets_api_key: str, test_spreadsheet_id: str) ->
         assert "values" in result
         assert "A1:B2" in result["range"]
     except Exception as e:
-        if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
+        if _is_sheets_api_unavailable(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
         raise
 
@@ -157,6 +176,6 @@ def test_error_handling_invalid_range(
                 }
             )
     except Exception as e:
-        if "SERVICE_DISABLED" in str(e) or "API has not been used" in str(e):
+        if _is_sheets_api_unavailable(e):
             pytest.skip("Google Sheets API not enabled in CI environment")
         raise
