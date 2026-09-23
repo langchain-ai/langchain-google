@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import string
@@ -15,6 +16,8 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     get_user_agent,
 )
+
+logger = logging.getLogger(__name__)
 
 _MAX_TOKENS_PER_BATCH = 20000
 _DEFAULT_BATCH_SIZE = 100
@@ -445,20 +448,50 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 output_dimensionality=effective_dimensionality,
             )
 
+            # Wrap each text in its own Content so the SDK returns one
+            # embedding per text (a bare list[str] is merged into a single
+            # Content on some SDK paths). See #1704.
+            contents = [{"parts": [{"text": text}]} for text in batch]
+
             try:
                 result = self.client.models.embed_content(
                     model=self.model,
-                    contents=[{"parts": [{"text": text}]} for text in batch],
+                    contents=contents,
                     config=config,
                 )
+                embeddings.extend([list(e.values) for e in result.embeddings])
+            except ValueError as e:
+                # The Vertex AI embedContent path only supports one content per
+                # request for some models (e.g. `gemini-embedding-2-preview`).
+                # Fall back to per-text requests in that case; re-raise any
+                # unrelated ValueError.
+                if "only supports one content" not in str(e):
+                    raise
+                logger.warning(
+                    "Batch embed_content not supported; falling back to "
+                    "per-text requests (batch size: %d).",
+                    len(contents),
+                )
+                for content in contents:
+                    try:
+                        result = self.client.models.embed_content(
+                            model=self.model,
+                            contents=[content],
+                            config=config,
+                        )
+                    except ClientError as e2:
+                        msg = f"Error embedding content ({e2.status}): {e2}"
+                        raise GoogleGenerativeAIError(msg) from e2
+                    except Exception as e2:
+                        msg = f"Error embedding content: {e2}"
+                        raise GoogleGenerativeAIError(msg) from e2
+                    embeddings.extend([list(e.values) for e in result.embeddings])
             except ClientError as e:
                 msg = f"Error embedding content ({e.status}): {e}"
                 raise GoogleGenerativeAIError(msg) from e
             except Exception as e:
                 msg = f"Error embedding content: {e}"
                 raise GoogleGenerativeAIError(msg) from e
-
-            embeddings.extend([list(e.values) for e in result.embeddings])
         return embeddings
 
     def embed_query(
@@ -563,20 +596,48 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
                 output_dimensionality=effective_dimensionality,
             )
 
+            # See embed_documents for the rationale on Content wrapping (#1704).
+            contents = [{"parts": [{"text": text}]} for text in batch]
+
             try:
                 result = await self.client.aio.models.embed_content(
                     model=self.model,
-                    contents=[{"parts": [{"text": text}]} for text in batch],
+                    contents=contents,
                     config=config,
                 )
+                embeddings.extend([list(e.values) for e in result.embeddings])
+            except ValueError as e:
+                # The Vertex AI embedContent path only supports one content per
+                # request for some models (e.g. `gemini-embedding-2-preview`).
+                # Fall back to per-text requests in that case; re-raise any
+                # unrelated ValueError.
+                if "only supports one content" not in str(e):
+                    raise
+                logger.warning(
+                    "Batch embed_content not supported; falling back to "
+                    "per-text requests (batch size: %d).",
+                    len(contents),
+                )
+                for content in contents:
+                    try:
+                        result = await self.client.aio.models.embed_content(
+                            model=self.model,
+                            contents=[content],
+                            config=config,
+                        )
+                    except ClientError as e2:
+                        msg = f"Error embedding content ({e2.status}): {e2}"
+                        raise GoogleGenerativeAIError(msg) from e2
+                    except Exception as e2:
+                        msg = f"Error embedding content: {e2}"
+                        raise GoogleGenerativeAIError(msg) from e2
+                    embeddings.extend([list(e.values) for e in result.embeddings])
             except ClientError as e:
                 msg = f"Error embedding content ({e.status}): {e}"
                 raise GoogleGenerativeAIError(msg) from e
             except Exception as e:
                 msg = f"Error embedding content: {e}"
                 raise GoogleGenerativeAIError(msg) from e
-
-            embeddings.extend([list(e.values) for e in result.embeddings])
         return embeddings
 
     async def aembed_query(
