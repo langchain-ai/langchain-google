@@ -334,8 +334,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        # `httpx.Timeout` configures the Anthropic client; media fetches go
+        # through `requests`, which only understands numeric timeouts.
+        media_timeout = self.timeout if isinstance(self.timeout, (int, float)) else None
         system_message, formatted_messages = _format_messages_anthropic(
-            messages, self.project
+            messages, self.project, media_timeout
         )
         params = self._default_params
         params.update(kwargs)
