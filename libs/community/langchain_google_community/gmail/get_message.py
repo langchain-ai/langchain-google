@@ -1,12 +1,13 @@
 import base64
 import email
+from email import policy
 from typing import Dict, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
 
 from langchain_google_community.gmail.base import GmailBaseTool
-from langchain_google_community.gmail.utils import clean_email_body
+from langchain_google_community.gmail.utils import get_email_body
 
 
 class SearchArgsSchema(BaseModel):
@@ -44,23 +45,12 @@ class GmailGetMessage(GmailBaseTool):
         message_data = query.execute()
         raw_message = base64.urlsafe_b64decode(message_data["raw"])
 
-        email_msg = email.message_from_bytes(raw_message)
+        email_msg = email.message_from_bytes(raw_message, policy=policy.default)
 
         subject = email_msg["Subject"]
         sender = email_msg["From"]
 
-        message_body = ""
-        if email_msg.is_multipart():
-            for part in email_msg.walk():
-                ctype = part.get_content_type()
-                cdispo = str(part.get("Content-Disposition"))
-                if ctype == "text/plain" and "attachment" not in cdispo:
-                    message_body = part.get_payload(decode=True).decode("utf-8")  # type: ignore[union-attr]
-                    break
-        else:
-            message_body = email_msg.get_payload(decode=True).decode("utf-8")  # type: ignore[union-attr]
-
-        body = clean_email_body(message_body)
+        body = get_email_body(email_msg)
 
         return {
             "id": message_id,
