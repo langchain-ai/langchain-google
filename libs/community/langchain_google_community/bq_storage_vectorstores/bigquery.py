@@ -1,6 +1,8 @@
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
+from numbers import Real
 from threading import Lock, Thread
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
@@ -82,29 +84,27 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             ids: List of IDs of documents to retrieve from the `VectorStore`.
             filter: A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
         Returns:
             List of IDs from adding the texts into the `VectorStore`.
         """
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
         if ids and len(ids) > 0:
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ArrayQueryParameter("ids", "STRING", ids),
-                ]
-            )
+            id_parameters = [bigquery.ArrayQueryParameter("ids", "STRING", ids)]
             id_expr = f"{self.doc_id_field} IN UNNEST(@ids)"
         else:
-            job_config = None
+            id_parameters = []
             id_expr = "TRUE"
 
-        where_filter_expr = self._create_filters(filter)
+        where_filter_expr, filter_parameters = self._create_filters(filter)
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=id_parameters + filter_parameters
+        )
 
         job = self._bq_client.query(  # type: ignore[union-attr]
             f"""
@@ -208,12 +208,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 query embedding.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
             options: (Optional) A dictionary representing additional options for
@@ -250,48 +249,48 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         )
 
     def _create_filters(
-        self,
-        filter: Optional[Union[Dict[str, Any], str]] = None,
-    ) -> str:
-        """Creates a SQL WHERE clause based on the provided filter criteria.
+        self, filter: Optional[Union[Dict[str, Any], str]] = None
+    ) -> Tuple[str, List[Any]]:
+        """Build a parameterized WHERE clause from column-value pairs."""
+        from google.cloud import bigquery  # type: ignore[attr-defined]
 
-        This function generates a SQL WHERE clause from a given filter, which can either
-        be a dictionary of column-value pairs or a pre-formatted SQL string.
-        If no filter is provided, it returns a default clause that
-        evaluates to TRUE.
-
-        Args:
-            filter: (Optional) A dictionary or a string specifying filter criteria.
-                - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
-                "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
-
-        Returns:
-            A string representing the SQL WHERE clause. This clause can be directly
-            used in SQL queries to filter results. If no filter is provided, it returns
-            the string "TRUE" to indicate that no filtering should be applied.
-        """
-        if filter:
-            # Pull BQ Vector Store information if not already done.
-            if not self.table_schema:
-                self._validate_bq_table()
-            if isinstance(filter, Dict):  # If Dict filters is passed
-                filter_expressions = []
-                for column, value in filter.items():
-                    if self.table_schema[column] in ["INTEGER", "FLOAT"]:  # type: ignore[index]
-                        filter_expressions.append(f"{column} = {value}")
-                    else:
-                        filter_expressions.append(f"{column} = '{value}'")
-                where_filter_expr = " AND ".join(filter_expressions)
-            else:  # If SQL clauses filters is passed
-                where_filter_expr = filter
-        else:
-            where_filter_expr = "TRUE"
-        return where_filter_expr
+        if isinstance(filter, str):
+            raise ValueError("Raw SQL filters are not supported; use a dictionary.")
+        if not filter:
+            return "TRUE", []
+        if not self.table_schema:
+            self._validate_bq_table()
+        expressions = []
+        parameters = []
+        for index, (column, value) in enumerate(filter.items()):
+            if (
+                not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", column)
+                or column not in self.table_schema
+            ):
+                raise ValueError(f"Unknown filter column: {column}")
+            field_type = self.table_schema[column]
+            if field_type in ("INTEGER", "INT64"):
+                valid = isinstance(value, int) and not isinstance(value, bool)
+                parameter_type = "INT64"
+            elif field_type in ("FLOAT", "FLOAT64"):
+                valid = isinstance(value, Real) and not isinstance(value, bool)
+                parameter_type = "FLOAT64"
+            elif field_type == "STRING":
+                valid = isinstance(value, str)
+                parameter_type = "STRING"
+            elif field_type in ("BOOLEAN", "BOOL"):
+                valid = isinstance(value, bool)
+                parameter_type = "BOOL"
+            else:
+                raise ValueError(f"Unsupported filter column type: {field_type}")
+            if not valid:
+                raise ValueError(f"Invalid value for filter column: {column}")
+            parameter_name = f"filter_{index}"
+            expressions.append(f"`{column}` = @{parameter_name}")
+            parameters.append(
+                bigquery.ScalarQueryParameter(parameter_name, parameter_type, value)
+            )
+        return " AND ".join(expressions), parameters
 
     def _create_search_query(
         self,
@@ -303,7 +302,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         options: Optional[dict[str, Any]] = None,
     ) -> str:
         # Get where filter
-        where_filter_expr = self._create_filters(filter)
+        where_filter_expr, _ = self._create_filters(filter)
 
         if table_to_query is not None:
             embeddings_query = f"""
@@ -374,8 +373,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             options=options,
         )
 
+        _, filter_parameters = self._create_filters(filter)
         job_config = bigquery.QueryJobConfig(
-            query_parameters=[
+            query_parameters=filter_parameters
+            + [
                 bigquery.ArrayQueryParameter(f"emb_{i}", "FLOAT64", emb)
                 for i, emb in enumerate(embeddings)
             ],
@@ -479,12 +480,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 query represents a query text.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: The number of top results to return per query. Defaults to 5.
             with_scores: If True, returns the relevance scores of the results along with
                 the documents
@@ -524,7 +524,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             options=options,
         )
 
+        _, filter_parameters = self._create_filters(filter)
         job_config = bigquery.QueryJobConfig(
+            query_parameters=filter_parameters,
             use_query_cache=True,
             priority=bigquery.QueryPriority.INTERACTIVE,
         )
@@ -559,12 +561,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 floats.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             with_scores: (Optional) If True, include similarity scores in the result
@@ -606,12 +607,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             embedding: Embedding to look up documents similar to.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
@@ -636,12 +636,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             embedding: Embedding to look up documents similar to.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
@@ -662,12 +661,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             query: search query to search documents with.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
@@ -694,12 +692,11 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             query: search query to search documents with.
             filter: (Optional) A dictionary or a string specifying filter criteria.
                 - If a dictionary is provided, it should map column names to their
-                corresponding values. The method will generate SQL expressions based
-                on the data types defined in `self.table_schema`. The value is enclosed
-                in single quotes unless the column is of type "INTEGER" or "FLOAT", in
-                which case the value is used directly. E.g., `{"str_property": "foo",
+                corresponding values. Values are bound as query parameters for
+                STRING, INTEGER, FLOAT, and BOOLEAN columns.
+                E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - If a string is provided, it is assumed to be a valid SQL WHERE clause.
+                - Raw SQL string filters are rejected to prevent SQL injection.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
