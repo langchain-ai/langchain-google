@@ -305,13 +305,18 @@ def replace_defs_in_schema(original_schema: dict, defs: dict | None = None) -> d
     if new_defs is None or not isinstance(new_defs, dict):
         return original_schema.copy()
 
-    resulting_schema = {}
+    resulting_schema: dict[str, Any] = {}
 
     for key, value in original_schema.items():
         if key == "$defs":
             continue
 
-        if not isinstance(value, dict):
+        if isinstance(value, list):
+            resulting_schema[key] = [
+                replace_defs_in_schema({key: item}, defs=new_defs)[key]
+                for item in value
+            ]
+        elif not isinstance(value, dict):
             resulting_schema[key] = value
         elif "$ref" in value:
             new_value = value.copy()
