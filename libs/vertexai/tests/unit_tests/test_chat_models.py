@@ -21,6 +21,7 @@ from google.cloud.aiplatform_v1beta1.types import (
     Part,
     SafetySetting,
 )
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -2243,6 +2244,41 @@ def test_json_mode_pydantic_v1_backward_compatibility() -> None:
     assert "properties" in schema
     assert "name" in schema["properties"]
     assert "age" in schema["properties"]
+
+
+def test_structured_output_malformed_function_call_raises(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Test that a `MALFORMED_FUNCTION_CALL` candidate raises instead of `None`."""
+
+    class Answer(BaseModel):
+        answer: str
+
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(role="model", parts=[]),
+                finish_reason=Candidate.FinishReason.MALFORMED_FUNCTION_CALL,
+                finish_message="Malformed function call: print(default_api.Answer(",
+            )
+        ]
+    )
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mock_prediction_service:
+        mock_prediction_service.return_value.generate_content.return_value = response
+
+        for schema in (Answer, Answer.model_json_schema()):
+            with pytest.raises(OutputParserException, match="Malformed function call"):
+                llm.with_structured_output(schema).invoke("hi")
+
+        result = llm.with_structured_output(Answer, include_raw=True).invoke("hi")
+
+    assert isinstance(result, dict)
+    assert result["parsed"] is None
+    assert isinstance(result["parsing_error"], OutputParserException)
 
 
 def test_thought_signature_conversion() -> None:
