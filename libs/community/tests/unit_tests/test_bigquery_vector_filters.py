@@ -1,5 +1,7 @@
 """Regression tests for BigQuery vector store filters."""
 
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Union
 from unittest.mock import MagicMock
 
@@ -13,7 +15,13 @@ from langchain_google_community.bq_storage_vectorstores.bigquery import (
 
 def _store() -> BigQueryVectorStore:
     store = BigQueryVectorStore.model_construct()
-    store.table_schema = {"tenant_id": "STRING", "priority": "INTEGER"}
+    store.table_schema = {
+        "tenant_id": "STRING",
+        "priority": "INTEGER",
+        "created": "DATE",
+        "updated": "TIMESTAMP",
+        "amount": "NUMERIC",
+    }
     store._bq_client = MagicMock()
     store.project_id = "project"
     store.dataset_name = "dataset"
@@ -42,6 +50,44 @@ def test_filter_values_bound_in_search() -> None:
         "filter_0",
         "emb_0",
     ]
+
+
+def test_raw_sql_requires_opt_in() -> None:
+    store = _store()
+    with pytest.raises(ValueError, match="allow_raw_sql_filters"):
+        store.get_documents(filter='tenant_id="trusted"')
+    store.allow_raw_sql_filters = True
+    store.get_documents(filter='tenant_id="trusted"')
+    query, kwargs = store._bq_client.query.call_args
+    assert 'tenant_id="trusted"' in query[0]
+    assert kwargs["job_config"].query_parameters == []
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "expected"),
+    [
+        ("tenant_id", 2024, "2024"),
+        ("created", "2024-01-01", "2024-01-01"),
+        ("created", date(2024, 1, 1), "2024-01-01"),
+        ("updated", datetime(2024, 1, 1), "2024-01-01 00:00:00+00:00"),
+        ("amount", Decimal("1.25"), "1.25"),
+    ],
+)
+def test_filter_type_serialization(column: str, value: Any, expected: str) -> None:
+    store = _store()
+    store.get_documents(filter={column: value})
+    _, kwargs = store._bq_client.query.call_args
+    parameter = kwargs["job_config"].query_parameters[0]
+    assert parameter.to_api_repr()["parameterValue"]["value"] == expected
+
+
+def test_integral_scalar_filter() -> None:
+    import numpy as np
+
+    store = _store()
+    store.get_documents(filter={"priority": np.int64(1)})
+    _, kwargs = store._bq_client.query.call_args
+    assert kwargs["job_config"].query_parameters[0].value == 1
 
 
 @pytest.mark.parametrize(

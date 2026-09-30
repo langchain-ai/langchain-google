@@ -1,8 +1,9 @@
 import json
 import re
 import uuid
-from datetime import datetime, timedelta
-from numbers import Real
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from numbers import Integral, Real
 from threading import Lock, Thread
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
@@ -62,9 +63,13 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             provided).
         distance_type (Literal["COSINE", "EUCLIDEAN", "DOT_PRODUCT"]): The distance
             metric used for similarity search. Defaults to "EUCLIDEAN".
+        allow_raw_sql_filters: Enable raw SQL string filters for trusted input only.
+            Raw SQL is executed with the store's BigQuery credentials and can read or
+            modify other tables. Disabled by default.
     """
 
     distance_type: Literal["COSINE", "EUCLIDEAN", "DOT_PRODUCT"] = "EUCLIDEAN"
+    allow_raw_sql_filters: bool = False
     _creating_index: bool = False
     _have_index: bool = False
     _last_index_check: datetime = datetime.min
@@ -88,7 +93,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
         Returns:
             List of IDs from adding the texts into the `VectorStore`.
         """
@@ -212,7 +219,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: The number of top results to return for each query.
             batch_size: The size of batches to process embeddings.
             options: (Optional) A dictionary representing additional options for
@@ -255,7 +264,12 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         from google.cloud import bigquery  # type: ignore[attr-defined]
 
         if isinstance(filter, str):
-            raise ValueError("Raw SQL filters are not supported; use a dictionary.")
+            if not self.allow_raw_sql_filters:
+                raise ValueError(
+                    "Raw SQL filters require allow_raw_sql_filters=True; "
+                    "use a dictionary for untrusted input."
+                )
+            return filter, []
         if not filter:
             return "TRUE", []
         if not self.table_schema:
@@ -269,22 +283,36 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             ):
                 raise ValueError(f"Unknown filter column: {column}")
             field_type = self.table_schema[column]
+            if value is None:
+                raise ValueError(f"Invalid value for filter column: {column}")
             if field_type in ("INTEGER", "INT64"):
-                valid = isinstance(value, int) and not isinstance(value, bool)
                 parameter_type = "INT64"
+                if not isinstance(value, Integral) or isinstance(value, bool):
+                    raise ValueError(f"Invalid value for filter column: {column}")
+                value = int(value)
             elif field_type in ("FLOAT", "FLOAT64"):
-                valid = isinstance(value, Real) and not isinstance(value, bool)
                 parameter_type = "FLOAT64"
+                if not isinstance(value, Real) or isinstance(value, bool):
+                    raise ValueError(f"Invalid value for filter column: {column}")
+                value = float(value)
             elif field_type == "STRING":
-                valid = isinstance(value, str)
                 parameter_type = "STRING"
+                value = str(value)
             elif field_type in ("BOOLEAN", "BOOL"):
-                valid = isinstance(value, bool)
                 parameter_type = "BOOL"
+                if not isinstance(value, bool):
+                    raise ValueError(f"Invalid value for filter column: {column}")
+            elif field_type in ("DATE", "TIMESTAMP", "DATETIME"):
+                parameter_type = field_type
+                if not isinstance(value, (str, date)):
+                    raise ValueError(f"Invalid value for filter column: {column}")
+            elif field_type in ("NUMERIC", "BIGNUMERIC"):
+                parameter_type = field_type
+                if not isinstance(value, (str, Integral, Real, Decimal)):
+                    raise ValueError(f"Invalid value for filter column: {column}")
+                value = str(value)
             else:
                 raise ValueError(f"Unsupported filter column type: {field_type}")
-            if not valid:
-                raise ValueError(f"Invalid value for filter column: {column}")
             parameter_name = f"filter_{index}"
             expressions.append(f"`{column}` = @{parameter_name}")
             parameters.append(
@@ -484,7 +512,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: The number of top results to return per query. Defaults to 5.
             with_scores: If True, returns the relevance scores of the results along with
                 the documents
@@ -565,7 +595,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             with_scores: (Optional) If True, include similarity scores in the result
@@ -611,7 +643,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
@@ -640,7 +674,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
@@ -665,7 +701,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
@@ -696,7 +734,9 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 STRING, INTEGER, FLOAT, and BOOLEAN columns.
                 E.g., `{"str_property": "foo",
                 "int_property": 123}`.
-                - Raw SQL string filters are rejected to prevent SQL injection.
+                - SQL string filters require `allow_raw_sql_filters=True` on the
+                store and must only contain trusted SQL; they execute with the
+                store's BigQuery credentials.
             k: (Optional) The number of top-ranking similar documents to return per
                 embedding. Defaults to 5.
             options: (Optional) A dictionary representing additional options for
