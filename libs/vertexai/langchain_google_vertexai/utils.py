@@ -28,7 +28,7 @@ def create_context_cache(
     """Creates a cache for content in some model.
 
     Args:
-        model: `ChatVertexAI` model. Must be at least `gemini-2.5-pro` or
+        model: `ChatVertexAI` model. Must be at least `gemini-3.1-pro-preview` or
             `gemini-2.0-flash`.
         messages: List of messages to cache.
         expire_time: Timestamp of when this resource is considered expired.

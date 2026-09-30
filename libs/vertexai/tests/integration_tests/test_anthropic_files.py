@@ -7,13 +7,14 @@ import pytest
 from langchain_google_vertexai._image_utils import image_bytes_to_b64_string
 from langchain_google_vertexai._utils import load_image_from_gcs
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from tests.integration_tests.conftest import _get_text_content
 
 
 @pytest.mark.extended
 def test_pdf_gcs_uri() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5@20250929",
+        model="claude-sonnet-4-6",
         location="us-east5",
         temperature=0.8,
         project=os.environ["PROJECT_ID"],
@@ -30,14 +31,14 @@ def test_pdf_gcs_uri() -> None:
             }
         ]
     )
-    assert len(res.content) > 100
+    assert len(_get_text_content(res)) > 100
 
 
 @pytest.mark.extended
 def test_pdf_byts() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5@20250929",
+        model="claude-sonnet-4-6",
         location="us-east5",
         temperature=0.8,
         project=os.environ["PROJECT_ID"],
@@ -56,7 +57,7 @@ def test_pdf_byts() -> None:
             }
         ]
     )
-    assert len(res.content) > 100
+    assert len(_get_text_content(res)) > 100
 
 
 @pytest.mark.extended
@@ -64,7 +65,7 @@ def test_https_image() -> None:
     uri = "https://picsum.photos/seed/picsum/200/300.jpg"
 
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5@20250929",
+        model="claude-sonnet-4-6",
         location="us-east5",
         temperature=0.8,
         project=os.environ["PROJECT_ID"],
@@ -81,4 +82,4 @@ def test_https_image() -> None:
             }
         ]
     )
-    assert len(res.content) > 10
+    assert len(_get_text_content(res)) > 10

@@ -693,6 +693,33 @@ def test_format_dict_to_genai_function() -> None:
     assert function_declaration.parameters.required == []
 
 
+def test_format_dict_to_genai_function_property_only_parameters() -> None:
+    calculator = {
+        "function_declarations": [
+            {
+                "name": "search",
+                "description": "Search with query text.",
+                "parameters": {
+                    "properties": {
+                        "x": {"type": "string"},
+                    },
+                    "required": ["x"],
+                },
+            }
+        ]
+    }
+    schema = convert_to_genai_function_declarations([calculator])[0]
+    assert schema.function_declarations is not None
+    assert len(schema.function_declarations) > 0
+    function_declaration = schema.function_declarations[0]
+    assert function_declaration.name == "search"
+    assert function_declaration.parameters is not None
+    assert function_declaration.parameters.type == Type.OBJECT
+    assert function_declaration.parameters.required == ["x"]
+    assert function_declaration.parameters.properties is not None
+    assert function_declaration.parameters.properties["x"].type == Type.STRING
+
+
 @pytest.mark.parametrize("choice", [True, "foo", ["foo"], "any"])
 def test__tool_choice_to_tool_config(choice: Any) -> None:
     expected = ToolConfig(
@@ -867,6 +894,164 @@ def test_tool_with_doubly_nested_list_param() -> None:
     assert "description" in matrix_property
     assert "description" in items_level1
     assert "description" in items_level2
+
+
+def test_array_with_empty_items_schema() -> None:
+    """An array property whose items schema is an empty dict (`'items': {}`)
+    must still produce an `items` field in the converted schema.
+
+    Previously the empty ``{}`` items schema was dropped because it was treated
+    as falsy, and Gemini then rejected the tool with an error like
+    ``properties[filter_values].items: missing field``.
+
+    The tool definition below mirrors a real-world OpenAI-formatted tool
+    (`pylon_list_issues`) whose `filter_values` parameter is typed as
+    `Optional[list[Any]]`, which Pydantic serializes to
+    `{"anyOf": [{"items": {}, "type": "array"}, {"type": "null"}]}`.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "pylon_list_issues",
+            "description": "Search Pylon issues.",
+            "parameters": {
+                "properties": {
+                    "filter_values": {
+                        "anyOf": [
+                            {"items": {}, "type": "array"},
+                            {"type": "null"},
+                        ],
+                        "default": None,
+                    }
+                },
+                "type": "object",
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    fd = fds[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    filter_values = fd.parameters.properties["filter_values"]
+
+    assert filter_values.type == Type.ARRAY
+    assert filter_values.items is not None, (
+        "Expected 'filter_values' to have an items schema, but got None. "
+        "An empty items dict ({}) should not be silently dropped."
+    )
+    # An empty (typeless) items schema resolves to STRING; a missing type would
+    # re-trigger the Gemini "items: missing field" rejection.
+    assert filter_values.items.type == Type.STRING
+
+
+def test_nested_array_with_empty_inner_items_schema() -> None:
+    """A doubly-nested array whose innermost items schema is an empty dict
+    (`'items': {}`) must still produce an `items` field at every level.
+
+    Previously the innermost empty ``{}`` schema was dropped because it was
+    treated as falsy, and Gemini then rejected the tool with an error like
+    ``properties[values].items.items: missing field``.
+
+    The tool definition below mirrors a real-world OpenAI-formatted tool
+    (`google_sheets_write_range`) whose `values` parameter is typed as
+    `list[list[Any]]`, which Pydantic serializes to
+    `{"type": "array", "items": {"type": "array", "items": {}}}`.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "google_sheets_write_range",
+            "description": "Write data to Google Sheets.",
+            "parameters": {
+                "properties": {
+                    "values": {
+                        "items": {"items": {}, "type": "array"},
+                        "type": "array",
+                    }
+                },
+                "required": ["values"],
+                "type": "object",
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    fd = fds[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    values = fd.parameters.properties["values"]
+
+    # First level: values is an array with items.
+    assert values.type == Type.ARRAY
+    assert values.items is not None, (
+        "Expected 'values' to have a first-level items schema, but got None."
+    )
+
+    # Second level: the inner array must also have items.
+    assert values.items.type == Type.ARRAY
+    assert values.items.items is not None, (
+        "Expected inner array to have an items schema, but got None. "
+        "An empty items dict ({}) should not be silently dropped."
+    )
+    # The innermost typeless items schema resolves to STRING.
+    assert values.items.items.type == Type.STRING
+
+
+def test_array_with_empty_string_items_schema() -> None:
+    """An array whose items schema is an empty string must resolve to a valid
+    typed items schema, not an empty-value ``Type`` that Gemini rejects.
+
+    The ``v.get("items") is not None`` guard now admits falsy-but-present items
+    values; an empty string carries no type, so it must default to STRING rather
+    than constructing ``Type("")``.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "t",
+            "description": "d",
+            "parameters": {
+                "properties": {"arr": {"type": "array", "items": ""}},
+                "type": "object",
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    fd = fds[0]
+    assert fd.parameters is not None
+    assert fd.parameters.properties is not None
+    arr = fd.parameters.properties["arr"]
+
+    assert arr.type == Type.ARRAY
+    assert arr.items is not None
+    assert arr.items.type == Type.STRING
+
+
+def test_no_argument_tool_yields_none_parameters() -> None:
+    """A tool with no parameters must convert to ``parameters=None`` (no args),
+    not a schema with a spurious inferred type.
+    """
+
+    tool_def = {
+        "type": "function",
+        "function": {"name": "ping", "description": "Health check with no args."},
+    }
+
+    genai_tools = convert_to_genai_function_declarations([tool_def])
+    fds = genai_tools[0].function_declarations
+    assert fds is not None
+    assert fds[0].parameters is None
 
 
 def test_tool_with_union_types() -> None:

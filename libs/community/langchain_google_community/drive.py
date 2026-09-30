@@ -534,10 +534,39 @@ class GoogleDriveLoader(BaseLoader, BaseModel):
 
     def _load_documents_from_ids(self) -> List[Document]:
         """Load documents from a list of IDs."""
+        from googleapiclient.discovery import build  # type: ignore[import]
+
         if not self.document_ids:
             raise ValueError("document_ids must be set")
 
-        return [self._load_document_from_id(doc_id) for doc_id in self.document_ids]
+        creds = self._load_credentials()
+        service = build("drive", "v3", credentials=creds)
+
+        q = " or ".join(f"id = '{doc_id}'" for doc_id in self.document_ids)
+        results = (
+            service.files()
+            .list(
+                q=q,
+                fields="files(id, mimeType)",
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+        mime_types: Dict[str, str] = {
+            f["id"]: f["mimeType"] for f in results.get("files", [])
+        }
+
+        documents: List[Document] = []
+        for doc_id in self.document_ids:
+            mime_type = mime_types.get(doc_id)
+            if mime_type == "application/vnd.google-apps.spreadsheet":
+                documents.extend(self._load_sheet_from_id(doc_id))
+            elif mime_type == "application/pdf" or self.file_loader_cls is not None:
+                documents.extend(self._load_file_from_id(doc_id))
+            else:
+                documents.append(self._load_document_from_id(doc_id))
+        return documents
 
     def _load_file_from_id(self, id: str) -> List[Document]:
         """Load a file from an ID."""

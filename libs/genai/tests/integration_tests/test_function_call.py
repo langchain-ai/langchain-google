@@ -11,7 +11,7 @@ from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAI,
 )
 
-MODEL_NAMES = ["gemini-3-flash-preview"]
+MODEL_NAMES = ["gemini-3.5-flash"]
 
 
 @pytest.mark.parametrize(

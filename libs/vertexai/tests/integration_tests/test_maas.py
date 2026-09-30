@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import pytest
 from langchain_core.messages import (
@@ -15,8 +16,31 @@ from langchain_google_vertexai.model_garden_maas import (
     _MISTRAL_MODELS,
     get_vertex_maas_model,
 )
+from tests.integration_tests.conftest import _get_text_content
 
-model_names = _LLAMA_MODELS + _MISTRAL_MODELS
+# `us-east5` quota for `llama-4-maverick` is regularly exhausted by the
+# parametrized sweep (429 `RESOURCE_EXHAUSTED`), and pytest-retry's short
+# backoff isn't enough to recover. xfail with `strict=False` so we still
+# get an XPASS signal when quota is available, without blocking unrelated PRs.
+_QUOTA_EXHAUSTED_MODELS = frozenset({"meta/llama-4-maverick-17b-128e-instruct-maas"})
+
+
+def _model_param(model_name: str) -> Any:
+    if model_name in _QUOTA_EXHAUSTED_MODELS:
+        return pytest.param(
+            model_name,
+            marks=pytest.mark.xfail(
+                reason=(
+                    "us-east5 quota for llama-4-maverick is consistently "
+                    "exhausted in the integration-test project (429)"
+                ),
+                strict=False,
+            ),
+        )
+    return model_name
+
+
+model_names = [_model_param(m) for m in _LLAMA_MODELS + _MISTRAL_MODELS]
 # Fix tool support for new Mistral and Llama models
 model_names_with_tools_support = [
     "mistral-medium-3",
@@ -130,5 +154,5 @@ async def test_tools(model_name: str) -> None:
 
     assert isinstance(result, AIMessage)
     if model_name in _MISTRAL_MODELS:
-        assert "brown" in result.content
+        assert "brown" in _get_text_content(result)
     assert len(result.tool_calls) == 0

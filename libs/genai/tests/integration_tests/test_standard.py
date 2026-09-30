@@ -10,9 +10,11 @@ from langchain_tests.integration_tests import ChatModelIntegrationTests
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+pytestmark = pytest.mark.flaky(retries=3, delay=1)
+
 rate_limiter = InMemoryRateLimiter(requests_per_second=0.25)
 
-_FLASH_MODEL = "gemini-3-flash-preview"
+_FLASH_MODEL = "gemini-3.5-flash"
 _PRO_MODEL = "gemini-3.1-pro-preview"
 
 
@@ -168,6 +170,30 @@ for backend_name, backend_config in _get_backend_configs():
         @property
         def supports_pdf_tool_message(self) -> bool:
             return True
+
+        @pytest.mark.xfail(
+            not _has_multimodal_secrets(),
+            reason=(
+                "Multimodal tests require integration secrets (user agent to fetch "
+                "external resources)"
+            ),
+            run=False,
+        )
+        def test_audio_inputs(self, model: BaseChatModel) -> None:
+            """Skip audio tests in PR context - requires external resource fetching."""
+            super().test_audio_inputs(model)
+
+        @pytest.mark.xfail(
+            not _has_multimodal_secrets(),
+            reason=(
+                "Multimodal tests require integration secrets (user agent to fetch "
+                "external resources)"
+            ),
+            run=False,
+        )
+        def test_pdf_inputs(self, model: BaseChatModel) -> None:
+            """Skip PDF tests in PR context - requires external resource fetching."""
+            super().test_pdf_inputs(model)
 
         @property
         def supported_usage_metadata_details(

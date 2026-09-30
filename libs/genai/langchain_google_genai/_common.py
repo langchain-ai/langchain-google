@@ -3,6 +3,7 @@ from importlib import metadata
 from typing import Any
 
 from langchain_core.utils import from_env, secret_from_env
+from langchain_core.utils._gateway import _apply_gateway_config
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from typing_extensions import Self
 
@@ -16,6 +17,7 @@ from langchain_google_genai._enums import (
 _TELEMETRY_TAG = "remote_reasoning_engine"
 _TELEMETRY_ENV_VARIABLE_NAME = "GOOGLE_CLOUD_AGENT_ENGINE_ID"
 
+
 # Cache package version at module import time to avoid blocking I/O in async contexts
 try:
     LC_GOOGLE_GENAI_VERSION = metadata.version("langchain-google-genai")
@@ -28,6 +30,27 @@ class GoogleGenerativeAIError(Exception):
 
 
 SafetySettingDict = dict[HarmCategory, HarmBlockThreshold]
+
+
+def _will_use_vertexai(values: dict[str, Any]) -> bool:
+    """Predict whether construction will select the Vertex AI backend.
+
+    Mirrors the priority in `_BaseGoogleGenerativeAI._determine_backend`, but
+    runs at "before" validation time (before ``_use_vertexai`` is set) so the
+    LangSmith gateway can be applied to the Gemini Developer API backend only —
+    the gateway proxies that API, not Vertex AI.
+    """
+    vertexai = values.get("vertexai")
+    if vertexai is not None:
+        return bool(vertexai)
+    env_var = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower()
+    if env_var in ("true", "1", "yes"):
+        return True
+    if env_var in ("false", "0", "no"):
+        return False
+    if values.get("credentials") is not None:
+        return True
+    return values.get("project") is not None
 
 
 class _BaseGoogleGenerativeAI(BaseModel):
@@ -63,7 +86,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         # Either set GOOGLE_API_KEY env var or pass api_key directly
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key="MY_API_KEY")
+        llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", api_key="MY_API_KEY")
         ```
 
         **Vertex AI with API key**:
@@ -97,7 +120,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         # Either set GOOGLE_CLOUD_PROJECT env var or pass project directly
         # Location defaults to global or can be set via GOOGLE_CLOUD_LOCATION
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             project="my-project",
             # location="global",
         )
@@ -131,7 +154,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     ```python
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         client_args={"proxy": "socks5://user:pass@host:port"},
     )
     ```
@@ -188,7 +211,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
         )
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             credentials=credentials,
             project="my-project-id",
         )
@@ -201,10 +224,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
     If `None` (default), backend is automatically determined as follows:
 
     1. If the `GOOGLE_GENAI_USE_VERTEXAI` env var is set, uses Vertex AI
-    2. If the [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]
-        parameter is provided, uses Vertex AI
-    3. If the [`project`][langchain_google_genai.ChatGoogleGenerativeAI.project]
-        parameter is provided, uses Vertex AI
+    2. If the `credentials` parameter is provided, uses Vertex AI
+    3. If the `project` parameter is provided, uses Vertex AI
     4. Otherwise, uses Gemini Developer API
 
     Set explicitly to `True` or `False` to override auto-detection.
@@ -255,12 +276,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
     If not provided, defaults depend on the API being used:
 
-    - **Gemini Developer API** (
-        [`api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]/
-        [`google_api_key`][langchain_google_genai.ChatGoogleGenerativeAI.google_api_key]
-        ): `https://generativelanguage.googleapis.com/`
-    - **Vertex AI** (
-        [`credentials`][langchain_google_genai.ChatGoogleGenerativeAI.credentials]):
+    - **Gemini Developer API** (`api_key`/`google_api_key`):
+        `https://generativelanguage.googleapis.com/`
+    - **Vertex AI** (`credentials`):
         `https://{location}-aiplatform.googleapis.com/`
 
     !!! note "Backwards compatibility"
@@ -282,7 +300,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             additional_headers={
                 "X-Custom-Header": "value",
             },
@@ -299,8 +317,29 @@ class _BaseGoogleGenerativeAI(BaseModel):
 
         ```python
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             client_args={"proxy": "socks5://user:pass@host:port"},
+        )
+        ```
+    """
+
+    api_version: str | None = Field(default=None)
+    """Override the API version path segment in request URLs.
+
+    By default, the underlying `google-genai` SDK currently uses `v1beta1` for
+    Vertex AI and `v1beta` for the Gemini Developer API. Set this when
+    targeting a proxy or gateway that expects a different API version segment
+    (e.g. `'v1'`).
+
+    !!! example "Custom API gateway"
+
+        ```python
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.5-flash",
+            vertexai=True,
+            base_url="https://my-gateway.example.com/api/gemini",
+            api_version="v1",
+            additional_headers={"Authorization": "Bearer <token>"},
         )
         ```
     """
@@ -310,7 +349,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     model: str = Field(...)
     """Model name to use."""
 
-    temperature: float = 0.7
+    temperature: float | None = 0.7
     """Run inference with this temperature.
 
     Must be within `[0.0, 2.0]`.
@@ -318,10 +357,27 @@ class _BaseGoogleGenerativeAI(BaseModel):
     !!! note "Automatic override for Gemini 3.0+ models"
 
         If `temperature` is not explicitly set and the model is Gemini 3.0 or later,
-        it will be automatically set to `1.0` instead of the default `0.7` per the
+        it will be automatically set to `None` instead of the default `0.7` per the
         Google GenAI API best practices, as it can cause infinite loops, degraded
         reasoning performance, and failure on complex tasks.
+    """
 
+    frequency_penalty: float | None = None
+    """Penalize tokens proportionally to how often they have already appeared.
+
+    Scales with the count of prior appearances, so it discourages verbatim
+    repetition more strongly than `presence_penalty`.
+
+    Must be within `[-2.0, 2.0]`.
+    """
+
+    presence_penalty: float | None = None
+    """Penalize tokens that have already appeared at all in the generated text.
+
+    Applied once a token has appeared, regardless of how many times, so it
+    encourages introducing new topics rather than reducing repetition.
+
+    Must be within `[-2.0, 2.0]`.
     """
 
     top_p: float | None = None
@@ -351,7 +407,7 @@ class _BaseGoogleGenerativeAI(BaseModel):
     the `thinking_budget` parameter.
     """
 
-    n: int = 1
+    n: int = Field(default=1, alias="candidate_count")
     """Number of chat completions to generate for each prompt.
 
     Note that the API may not return the full `n` completions if duplicates are
@@ -516,6 +572,32 @@ class _BaseGoogleGenerativeAI(BaseModel):
     See: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
     """
 
+    @model_validator(mode="before")
+    @classmethod
+    def _resolve_gateway(cls, values: Any) -> Any:
+        """Resolve base URL and API key from LangSmith gateway settings.
+
+        Only applies to the Gemini Developer API backend (the gateway proxies the
+        Developer API, not Vertex AI). An explicit ``base_url``/``api_key`` always
+        wins. Otherwise, when ``LANGSMITH_GATEWAY`` is set, the base URL points at
+        the gateway and ``LANGSMITH_GATEWAY_API_KEY`` is preferred; for any other
+        endpoint the provider key (``GOOGLE_API_KEY``/``GEMINI_API_KEY``) wins.
+
+        Defined on the shared base so both `ChatGoogleGenerativeAI` and the legacy
+        `GoogleGenerativeAI` LLM resolve the gateway before their provider key is
+        used (the LLM forwards its resolved key into the chat model).
+        """
+        if isinstance(values, dict) and not _will_use_vertexai(values):
+            _apply_gateway_config(
+                values,
+                cls,
+                base_url_field="base_url",
+                api_key_field="google_api_key",
+                provider_path="gemini",
+                api_key_env=["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+            )
+        return values
+
     @model_validator(mode="after")
     def _resolve_project_from_credentials(self) -> Self:
         """Extract project from credentials if not explicitly set.
@@ -578,6 +660,8 @@ class _BaseGoogleGenerativeAI(BaseModel):
         return {
             "model": self.model,
             "temperature": self.temperature,
+            "frequency_penalty": self.frequency_penalty,
+            "presence_penalty": self.presence_penalty,
             "top_p": self.top_p,
             "top_k": self.top_k,
             "max_output_tokens": self.max_output_tokens,

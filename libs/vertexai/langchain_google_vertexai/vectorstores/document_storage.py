@@ -8,7 +8,7 @@ from typing import (
     Any,
 )
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import NotFound, ServiceUnavailable
 from google.cloud import storage  # type: ignore[attr-defined, unused-ignore]
 from google.cloud.storage import (  # type: ignore[attr-defined, unused-ignore, import-untyped]
     Blob,
@@ -154,9 +154,16 @@ class GCSDocumentStorage(DocumentStorage):
         """
         for i in range(0, len(keys), GCS_MAX_BATCH_SIZE):
             batch = keys[i : i + GCS_MAX_BATCH_SIZE]
-            with self._bucket.client.batch():
+            try:
+                with self._bucket.client.batch():
+                    for key in batch:
+                        self._delete_one(key)
+            except ServiceUnavailable:
                 for key in batch:
-                    self._delete_one(key)
+                    try:
+                        self._delete_one(key)
+                    except NotFound:
+                        pass
 
     def yield_keys(self, *, prefix: str | None = None) -> Iterator[str]:
         """Yields the keys present in the storage.

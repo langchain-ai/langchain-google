@@ -18,6 +18,7 @@ from typing_extensions import Self
 from langchain_google_genai._common import (
     _BaseGoogleGenerativeAI,
 )
+from langchain_google_genai._version import __version__
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         ```python
         from langchain_google_genai import GoogleGenerativeAI
 
-        llm = GoogleGenerativeAI(model="gemini-2.5-pro")
+        llm = GoogleGenerativeAI(model="gemini-3.1-pro-preview")
         ```
     """
 
@@ -64,6 +65,12 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         super().__init__(**kwargs)
 
     @model_validator(mode="after")
+    def _set_langchain_google_genai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-genai", __version__)
+        return self
+
+    @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
         if not any(self.model.startswith(prefix) for prefix in ("models/",)):
@@ -76,8 +83,11 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             project=self.project,
             location=self.location,
             temperature=self.temperature,
+            frequency_penalty=self.frequency_penalty,
+            presence_penalty=self.presence_penalty,
             top_p=self.top_p,
             top_k=self.top_k,
+            n=self.n,
             max_tokens=self.max_output_tokens,
             max_retries=self.max_retries,
             timeout=self.timeout,

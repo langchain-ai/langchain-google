@@ -56,7 +56,7 @@ cd libs/{LIBRARY}
 make format
 ```
 
-Additionally, you can run the formatter only on the files that have been modified in your current branch as compared to the master branch using the format_diff command:
+Additionally, you can run the formatter only on the files that have been modified in your current branch as compared to the main branch using the format_diff command:
 
 ```bash
 make format_diff
@@ -81,7 +81,7 @@ cd libs/{LIBRARY}
 make lint
 ```
 
-In addition, you can run the linter only on the files that have been modified in your current branch as compared to the master branch using the lint_diff command:
+In addition, you can run the linter only on the files that have been modified in your current branch as compared to the main branch using the lint_diff command:
 
 ```bash
 make lint_diff

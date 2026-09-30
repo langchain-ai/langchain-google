@@ -10,10 +10,10 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 import numpy as np
-from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
+from langchain_core.vectorstores.utils import maximal_marginal_relevance
 from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import Self
 

@@ -44,6 +44,7 @@ from langchain_google_genai._enums import (
     MediaResolution,
     Modality,
 )
+from langchain_google_genai._version import __version__
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from langchain_google_genai.llms import GoogleGenerativeAI
@@ -59,5 +60,6 @@ __all__ = [
     "HarmCategory",
     "MediaResolution",
     "Modality",
+    "__version__",
     "create_context_cache",
 ]

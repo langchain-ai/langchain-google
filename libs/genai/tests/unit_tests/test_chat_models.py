@@ -1,16 +1,21 @@
 """Test chat model integration."""
 
+import asyncio
 import base64
 import json
+import logging
 import os
 import warnings
-from collections.abc import Iterator
+import weakref
+from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event, get_ident
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from google.genai.errors import ClientError
+import requests
+from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -20,14 +25,31 @@ from google.genai.types import (
     FunctionResponse,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
+    HttpOptions,
+    HttpRetryOptions,
     Language,
+    MediaProcessing,
     Part,
+    ThinkingConfig,
     ThinkingLevel,
+    ToolCall,
+    ToolResponse,
 )
 from google.genai.types import (
     Outcome as CodeExecutionResultOutcome,
 )
 from google.protobuf.struct_pb2 import Struct
+from langchain_core._api import LangChainBetaWarning
+from langchain_core.exceptions import (
+    ContextOverflowError,
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelError,
+    ModelInvalidRequestError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+)
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
     AIMessage,
@@ -47,24 +69,38 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
-from langchain_google_genai import HarmBlockThreshold, HarmCategory, Modality
+from langchain_google_genai import (
+    HarmBlockThreshold,
+    HarmCategory,
+    Modality,
+    __version__,
+)
 from langchain_google_genai._compat import (
     _convert_from_v1_to_generativelanguage_v1beta,
 )
 from langchain_google_genai.chat_models import (
+    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY,
+    DUMMY_THOUGHT_SIGNATURE,
     ChatGoogleGenerativeAI,
     ChatGoogleGenerativeAIError,
+    GoogleContextOverflowError,
+    _ClientCleanup,
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _handle_client_error,
+    _handle_server_error,
     _is_gemini_3_or_later,
     _is_gemini_25_model,
+    _merge_http_options,
     _parse_chat_history,
     _parse_response_candidate,
     _response_to_result,
+    _uses_fixed_sampling_and_disallows_prefill,
+    _validate_video_metadata,
 )
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 FAKE_API_KEY = "fake-api-key"
 
@@ -88,6 +124,8 @@ def test_integration_initialization() -> None:
         "ls_model_type": "chat",
         "ls_temperature": 0.7,
     }
+    assert llm.metadata is not None
+    assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
     # Ensure temperature is propagated to request config
     msg = HumanMessage(content="test")
@@ -105,7 +143,7 @@ def test_integration_initialization() -> None:
         "ls_provider": "google_genai",
         "ls_model_name": MODEL_NAME,
         "ls_model_type": "chat",
-        "ls_temperature": 0.7,
+        "ls_temperature": None,
         "ls_max_tokens": 10,
     }
 
@@ -113,7 +151,7 @@ def test_integration_initialization() -> None:
     msg = HumanMessage(content="test")
     request = llm._prepare_request([msg])
     config = request["config"]
-    assert config.temperature == 0.7
+    assert getattr(config, "temperature", None) is None
     assert config.max_output_tokens == 10
 
     ChatGoogleGenerativeAI(
@@ -140,6 +178,33 @@ def test_integration_initialization() -> None:
         call_args = mock_warning.call_args[0][0]
         assert "Unexpected argument 'safety_setting'" in call_args
         assert "Did you mean: 'safety_settings'?" in call_args
+
+
+@pytest.mark.parametrize("response_metadata", [{}, {"output_version": "v1"}])
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_empty_ai_message_content_is_normalized_for_vertex(
+    response_metadata: dict[str, str], vertexai: bool
+) -> None:
+    """Test empty AI content lists never produce a partless model turn."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content=[], response_metadata=response_metadata),
+        HumanMessage(content="What is your name?"),
+    ]
+
+    request = llm._prepare_request(messages)
+
+    empty_ai_content = request["contents"][1]
+    assert empty_ai_content.role == "model"
+    assert empty_ai_content.parts is not None
+    assert len(empty_ai_content.parts) == 1
+    assert empty_ai_content.parts[0].text == ""
 
 
 def test_seed_initialization() -> None:
@@ -255,14 +320,7 @@ def test_api_key_masked_when_passed_via_constructor(
 
 def test_profile() -> None:
     model = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=SecretStr(FAKE_API_KEY),
-    )
-    assert model.profile
-    assert not model.profile["reasoning_output"]
-
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert model.profile
@@ -429,6 +487,52 @@ def test_parse_history() -> None:
         assert system_instruction == Content(parts=[Part(text=system_input)])
 
 
+@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+def test_fixed_sampling_models_reject_model_prefill(model: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    with pytest.raises(ValueError, match="does not support model prefilling"):
+        llm._prepare_request(
+            [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+        )
+
+
+def test_fixed_sampling_model_accepts_tool_response_as_final_turn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        HumanMessage(content="Look this up"),
+        AIMessage(
+            content="",
+            tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+        ),
+        ToolMessage(content="result", tool_call_id="call-1"),
+    ]
+
+    request = llm._prepare_request(messages)
+
+    assert request["contents"][-1].role == "user"
+    assert request["contents"][-1].parts[0].function_response is not None
+
+
+def test_other_models_preserve_model_prefill() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    request = llm._prepare_request(
+        [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+    )
+
+    assert request["contents"][-1].role == "model"
+
+
 @pytest.mark.parametrize("content", ['["a"]', '{"a":"b"}', "function output"])
 def test_parse_function_history(content: str | list[str | dict]) -> None:
     function_message = FunctionMessage(name="search_tool", content=content)
@@ -494,6 +598,324 @@ def test_additional_headers_support(headers: dict[str, str] | None) -> None:
             assert call_http_options.headers[key] == value
 
 
+def _mock_chat(**model_kwargs: Any) -> tuple[ChatGoogleGenerativeAI, Mock]:
+    """Build a `ChatGoogleGenerativeAI` whose client is mocked.
+
+    Returns the chat model and the `generate_content` mock so callers can
+    inspect the `config` forwarded to the API.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock(
+        return_value=GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="test response")]))],
+        )
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **model_kwargs,
+        )
+    return chat, mock_generate_content
+
+
+def test_per_request_http_options_dict_injects_headers() -> None:
+    """A per-invocation `http_options` dict reaches the request config."""
+    chat, mock_generate_content = _mock_chat()
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_object_injects_headers() -> None:
+    """A per-invocation `HttpOptions` object is accepted as well as a dict."""
+    chat, mock_generate_content = _mock_chat()
+
+    chat.invoke(
+        "test",
+        http_options=HttpOptions(headers={"Authorization": "Bearer token"}),
+    )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+def test_per_request_http_options_preserves_model_timeout() -> None:
+    """Per-request headers merge without clobbering the model's timeout.
+
+    The `timeout` derived from the model config must survive when the
+    per-request `http_options` only sets headers (previously this collided and
+    raised a duplicate-keyword error).
+    """
+    chat, mock_generate_content = _mock_chat(timeout=30)
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.headers == {"Authorization": "Bearer token"}
+    assert http_options.timeout == 30 * 1000  # seconds -> milliseconds
+
+
+def test_merge_http_options_precedence() -> None:
+    """Explicit per-request fields win; headers merge; base fields persist."""
+    base = HttpOptions(timeout=5000, base_url="https://internal")
+    override = HttpOptions(
+        base_url="https://gateway",
+        headers={"Authorization": "Bearer token"},
+    )
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.base_url == "https://gateway"  # override wins
+    assert merged.timeout == 5000  # base persists (not set on override)
+    assert merged.headers == {"Authorization": "Bearer token"}
+
+
+def test_merge_http_options_merges_header_dicts() -> None:
+    """Headers from base and override combine, with override keys winning."""
+    base = HttpOptions(headers={"X-Base": "1", "X-Shared": "base"})
+    override = HttpOptions(headers={"X-Override": "2", "X-Shared": "override"})
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.headers == {
+        "X-Base": "1",
+        "X-Override": "2",
+        "X-Shared": "override",
+    }
+
+
+def test_merge_http_options_preserves_nested_retry_model() -> None:
+    """Per-request `retry_options` remain SDK model objects after merging."""
+    override_retry_options = HttpRetryOptions(attempts=9)
+    base = HttpOptions(retry_options=HttpRetryOptions(attempts=3))
+    override = HttpOptions(retry_options=override_retry_options)
+
+    merged = _merge_http_options(base, override)
+
+    assert merged.retry_options is override_retry_options
+    assert merged.retry_options.attempts == 9
+
+
+async def test_per_request_http_options_async_injects_headers() -> None:
+    """Per-invocation `http_options` reaches the request config via `ainvoke`.
+
+    The async path threads kwargs through separate runnable plumbing than the
+    sync path, so it is verified independently.
+    """
+    with patch(
+        "langchain_google_genai.chat_models.ChatGoogleGenerativeAI.client", create=True
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        mock_method = AsyncMock(
+            return_value=GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+            )
+        )
+        # `llm.client` is typed `Client | None`; treat the mock as `Any` so
+        # attribute assignment on the async path isn't flagged by mypy.
+        mock_client: Any = llm.client
+        mock_client.aio.models.generate_content = mock_method
+
+        await llm.ainvoke(
+            "test",
+            http_options={"headers": {"Authorization": "Bearer token"}},
+        )
+
+    config = mock_method.call_args.kwargs["config"]
+    assert config.http_options is not None
+    assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["ainvoke", "astream"])
+async def test_async_image_download_does_not_block_event_loop(stream: bool) -> None:
+    """Image downloads run off-loop without changing prepared request options."""
+    loop = asyncio.get_running_loop()
+    event_loop_thread = get_ident()
+    loop_responded = Event()
+    image_url = "https://example.com/image"
+    image_bytes = base64.b64decode(SMALL_VIEWABLE_BASE64_IMAGE.split(",", 1)[1])
+    response = Mock(ok=True, content=image_bytes)
+
+    def download_image(url: str) -> Mock:
+        assert url == image_url
+        assert get_ident() != event_loop_thread
+        # The download cannot finish until the event loop processes this callback.
+        # The timeout only guards against a deadlock; no timing threshold or sleep
+        # is used to determine whether the loop remains responsive.
+        loop.call_soon_threadsafe(loop_responded.set)
+        assert loop_responded.wait(timeout=5)
+        return response
+
+    async def response_chunks() -> AsyncIterator[GenerateContentResponse]:
+        yield GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+        )
+
+    messages: list[BaseMessage] = [
+        SystemMessage(content="Describe images concisely."),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "What is in this image?"},
+                {"type": "image_url", "image_url": {"url": image_url}},
+            ]
+        ),
+    ]
+    request_options: dict[str, Any] = {
+        "stop": ["STOP"],
+        "tools": [
+            {
+                "name": "describe_image",
+                "description": "Describe the image.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"description": {"type": "string"}},
+                },
+            }
+        ],
+        "tool_choice": "any",
+        "safety_settings": {
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH
+        },
+        "generation_config": {"max_output_tokens": 32},
+        "cached_content": "cachedContents/image-test",
+        "timeout": 7,
+        "http_options": {"headers": {"X-Request-ID": "image-test"}},
+    }
+
+    with (
+        patch("langchain_google_genai.chat_models.Client") as mock_client,
+        patch("langchain_google_genai._image_utils.requests.get") as mock_get,
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        mock_get.return_value = response
+        expected_request = llm._prepare_request(messages, **request_options)
+        mock_get.reset_mock()
+        mock_get.side_effect = download_image
+        mock_models = mock_client.return_value.aio.models
+        mock_models.generate_content = AsyncMock(
+            return_value=GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+            )
+        )
+        mock_models.generate_content_stream = AsyncMock(return_value=response_chunks())
+
+        if stream:
+            chunks = [chunk async for chunk in llm.astream(messages, **request_options)]
+            assert "".join(chunk.text for chunk in chunks) == "ok"
+            mock_models.generate_content_stream.assert_awaited_once_with(
+                **expected_request
+            )
+            mock_models.generate_content.assert_not_awaited()
+        else:
+            result = await llm.ainvoke(messages, **request_options)
+            assert result.content == "ok"
+            mock_models.generate_content.assert_awaited_once_with(**expected_request)
+            mock_models.generate_content_stream.assert_not_awaited()
+
+    mock_get.assert_called_once_with(image_url)
+    assert loop_responded.is_set()
+    assert expected_request["contents"][0].parts == [
+        Part(text="What is in this image?"),
+        Part(inline_data=Blob(data=image_bytes, mime_type="image/png")),
+    ]
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["ainvoke", "astream"])
+async def test_async_image_download_error_propagates(stream: bool) -> None:
+    """Failed downloads surface unchanged before making a generation request."""
+    error = requests.HTTPError("Image download failed")
+    response = Mock(ok=False)
+    response.raise_for_status.side_effect = error
+    message = HumanMessage(
+        content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://example.com/missing.png"},
+            }
+        ]
+    )
+
+    with (
+        patch("langchain_google_genai.chat_models.Client") as mock_client,
+        patch(
+            "langchain_google_genai._image_utils.requests.get", return_value=response
+        ),
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        with pytest.raises(requests.HTTPError) as exc_info:
+            if stream:
+                async for _ in llm.astream([message]):
+                    pytest.fail("A failed image download must not yield a chunk")
+            else:
+                await llm.ainvoke([message])
+
+        assert exc_info.value is error
+        mock_client.return_value.aio.models.generate_content.assert_not_called()
+        mock_client.return_value.aio.models.generate_content_stream.assert_not_called()
+    response.raise_for_status.assert_called_once_with()
+
+
+def test_per_request_http_options_preserves_model_retries() -> None:
+    """Per-request headers merge without clobbering the model's `retry_options`.
+
+    Mirrors the timeout case for the second half of the merge contract.
+    """
+    chat, mock_generate_content = _mock_chat(max_retries=3)
+
+    chat.invoke(
+        "test",
+        http_options={"headers": {"Authorization": "Bearer token"}},
+    )
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.headers == {"Authorization": "Bearer token"}
+    assert http_options.retry_options is not None
+    assert http_options.retry_options.attempts == 3
+
+
+def test_per_request_http_options_overrides_model_retries() -> None:
+    """Per-request `retry_options` win over the model-derived retry default."""
+    retry_options = HttpRetryOptions(attempts=9)
+    chat, mock_generate_content = _mock_chat(max_retries=3)
+
+    chat.invoke("test", http_options=HttpOptions(retry_options=retry_options))
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.retry_options is retry_options
+    assert http_options.retry_options.attempts == 9
+
+
+def test_per_request_http_options_overrides_model_timeout() -> None:
+    """An explicit per-request `timeout` wins over the model-derived one."""
+    chat, mock_generate_content = _mock_chat(timeout=30)
+
+    # `HttpOptions.timeout` is in milliseconds (native google-genai unit).
+    chat.invoke("test", http_options={"timeout": 99_000})
+
+    http_options = mock_generate_content.call_args.kwargs["config"].http_options
+    assert http_options.timeout == 99_000
+
+
 def test_base_url_set_in_constructor() -> None:
     chat = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
@@ -517,6 +939,49 @@ def test_base_url_passed_to_client() -> None:
         call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
         assert call_http_options.base_url == "http://localhost:8000"
         assert "langchain-google-genai" in call_http_options.headers["user-agent"]
+
+
+def test_api_version_defaults_to_none() -> None:
+    """`api_version` is unset by default, deferring to the SDK's default."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version is None
+
+
+def test_api_version_forwarded_to_http_options_gemini() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the Gemini backend."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            api_version="v1",
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1"
+
+
+def test_api_version_forwarded_to_http_options_vertex() -> None:
+    """`api_version` is forwarded into `HttpOptions` for the Vertex backend.
+
+    Covers the API gateway proxy scenario: a custom `base_url` plus a
+    non-default `api_version` (e.g. `'v1'`) are both passed through
+    `HttpOptions`, overriding the SDK's `v1beta1` default for Vertex.
+    """
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            vertexai=True,
+            base_url="https://gateway.example.com/api/gemini",
+            api_version="v1",
+            additional_headers={"Authorization": "Bearer fake-token"},
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1"
+        assert call_http_options.base_url == "https://gateway.example.com/api/gemini"
 
 
 def test_async_client_property() -> None:
@@ -988,13 +1453,11 @@ def test_parse_response_candidate_includes_model_name() -> None:
     }
 
     response_candidate = Candidate.model_validate(raw_candidate)
-    result = _parse_response_candidate(
-        response_candidate, model_name="gemini-2.5-flash"
-    )
+    result = _parse_response_candidate(response_candidate, model_name=MODEL_NAME)
 
     assert hasattr(result, "response_metadata")
     assert result.response_metadata["model_provider"] == "google_genai"
-    assert result.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert result.response_metadata["model_name"] == MODEL_NAME
 
     # No name
 
@@ -1020,7 +1483,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk1_candidate = Candidate.model_validate(raw_chunk1)
     response1 = GenerateContentResponse(
-        candidates=[chunk1_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk1_candidate], model_version=MODEL_NAME
     )
 
     # Second chunk without finish_reason
@@ -1030,7 +1493,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk2_candidate = Candidate.model_validate(raw_chunk2)
     response2 = GenerateContentResponse(
-        candidates=[chunk2_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk2_candidate], model_version=MODEL_NAME
     )
 
     # Final chunk with finish_reason
@@ -1041,7 +1504,7 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     }
     chunk3_candidate = Candidate.model_validate(raw_chunk3)
     response3 = GenerateContentResponse(
-        candidates=[chunk3_candidate], model_version="gemini-2.5-flash"
+        candidates=[chunk3_candidate], model_version=MODEL_NAME
     )
 
     # Convert to LangChain messages (simulating what _stream does)
@@ -1058,13 +1521,13 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
     assert "model_name" not in msg2.response_metadata
 
     # Only the last chunk should have model_name
-    assert msg3.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert msg3.response_metadata["model_name"] == MODEL_NAME
 
     # Concatenate chunks (simulating user code with +=)
     full = msg1 + msg2 + msg3
 
     # Verify model_name is not duplicated
-    assert full.response_metadata["model_name"] == "gemini-2.5-flash"
+    assert full.response_metadata["model_name"] == MODEL_NAME
     assert full.response_metadata["model_name"].count("gemini") == 1, (
         "model_name should not be duplicated"
     )
@@ -1073,17 +1536,51 @@ def test_streaming_chunk_concatenation_no_model_name_duplication() -> None:
 def test_serialize() -> None:
     llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key="test-key")
     serialized = dumps(llm)
-    llm_loaded = loads(
-        serialized,
-        secrets_map={"GOOGLE_API_KEY": "test-key"},
-        valid_namespaces=["langchain_google_genai"],
-        allowed_objects="all",
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
     # Pydantic 2 equality will fail on complex attributes like clients with
     # different IDs
     llm.client = None
     llm_loaded.client = None
     assert llm == llm_loaded
+
+
+def test_serialize_with_thinking_config() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        thinking_config={"include_thoughts": True, "thinkingBudget": 2048},
+    )
+    serialized = dumps(llm)
+    assert "not_implemented" not in serialized
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+
+
+def test_thinking_config_object_is_stored_as_serializable_dict() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=2048),
+    )
+
+    assert llm.thinking_config == {"include_thoughts": True, "thinking_budget": 2048}
 
 
 @pytest.mark.parametrize(
@@ -1122,12 +1619,12 @@ def test_supports_thinking() -> None:
     )
     assert not llm_tts._supports_thinking()
     llm_normal = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=MODEL_NAME,
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_normal._supports_thinking()
     llm_pro = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
+        model="gemini-3.1-pro-preview",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_pro._supports_thinking()
@@ -1167,6 +1664,24 @@ def test_temperature_range_model_validation() -> None:
 
     with pytest.raises(ValueError):
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
+
+
+def test_temperature_default_by_model_version() -> None:
+    """Test that legacy models get 0.7 temperature by default.
+
+    Also ensures Gemini 3 models get None.
+    """
+    llm_gemini_3 = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_3.temperature is None
+
+    llm_gemini_2_5 = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_2_5.temperature == 0.7
 
 
 @patch("langchain_google_genai.chat_models.Client")
@@ -1390,6 +1905,7 @@ def test_max_retries_parameter_handling(
                                     },
                                     "grounding_chunk_indices": [0],
                                     "confidence_scores": [0.95],
+                                    "rendered_parts": None,
                                 }
                             ],
                             "web_search_queries": ["test query"],
@@ -1430,6 +1946,7 @@ def test_max_retries_parameter_handling(
                         },
                         "grounding_chunk_indices": [0],
                         "confidence_scores": [0.95],
+                        "rendered_parts": None,
                     }
                 ],
                 "image_search_queries": [],
@@ -1485,6 +2002,7 @@ def test_max_retries_parameter_handling(
                                     },
                                     "grounding_chunk_indices": [0],
                                     "confidence_scores": [0.95],
+                                    "rendered_parts": None,
                                 }
                             ],
                             "web_search_queries": ["test query"],
@@ -1526,6 +2044,7 @@ def test_max_retries_parameter_handling(
                         },
                         "grounding_chunk_indices": [0],
                         "confidence_scores": [0.95],
+                        "rendered_parts": None,
                     }
                 ],
                 "image_search_queries": ["cat images"],
@@ -1614,6 +2133,7 @@ def test_grounding_metadata_to_citations_conversion() -> None:
                             },
                             "grounding_chunk_indices": [0],
                             "confidence_scores": [0.95],
+                            "rendered_parts": None,
                         },
                         {
                             "segment": {
@@ -2037,6 +2557,44 @@ def test_thinking_config_merging_with_generation_config() -> None:
         assert result.usage_metadata["input_tokens"] == 20
         assert result.usage_metadata["output_tokens"] == 15
         assert result.usage_metadata["total_tokens"] == 35
+
+
+def test_constructor_thinking_config_is_propagated() -> None:
+    """Test that constructor-level `thinking_config` is sent in request config."""
+    mock_response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(parts=[Part(text="There are 2 O's in Google.")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=20,
+            candidates_token_count=15,
+            total_token_count=35,
+            cached_content_token_count=0,
+        ),
+    )
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"include_thoughts": True, "thinkingBudget": 2048},
+    )
+    assert llm.client is not None
+    assert llm.model_kwargs == {}
+
+    with patch.object(
+        llm.client.models, "generate_content", return_value=mock_response
+    ) as mock_client_method:
+        llm.invoke("How many O's are in Google?")
+
+        mock_client_method.assert_called_once()
+        config = mock_client_method.call_args.kwargs.get("config")
+        assert config is not None
+        assert config.thinking_config is not None
+        assert config.thinking_config.include_thoughts is True
+        assert config.thinking_config.thinking_budget == 2048
 
 
 def test_modalities_override_in_generation_config() -> None:
@@ -2496,6 +3054,7 @@ def test_thought_signature_conversion() -> None:
     expected = [{"text": "foo"}]
     assert result == expected
 
+    # Foreign reasoning blocks are dropped entirely (text and signature)
     reasoning_other_provider = {
         "type": "reasoning",
         "reasoning": "thinking...",
@@ -2503,6 +3062,53 @@ def test_thought_signature_conversion() -> None:
     }
     result = _convert_from_v1_to_generativelanguage_v1beta(
         [reasoning_other_provider],  # type: ignore[list-item]
+        "other_provider",
+    )
+    assert result == []
+
+
+def test_compat_image_url_block() -> None:
+    """Test that ImageContentBlock with url produces correct file_data."""
+    block = {
+        "type": "image",
+        "url": "https://example.com/image.jpg",
+        "mime_type": "image/png",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [block],  # type: ignore[list-item]
+        "google_genai",
+    )
+    assert len(result) == 1
+    assert "file_data" in result[0]
+    assert result[0]["file_data"]["file_uri"] == "https://example.com/image.jpg"
+    assert result[0]["file_data"]["mime_type"] == "image/png"
+
+
+def test_compat_file_url_block() -> None:
+    """Test that FileContentBlock with url produces correct file_data."""
+    block = {
+        "type": "file",
+        "url": "https://example.com/document.pdf",
+        "mime_type": "application/pdf",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [block],  # type: ignore[list-item]
+        "google_genai",
+    )
+    assert len(result) == 1
+    assert "file_data" in result[0]
+    assert result[0]["file_data"]["file_uri"] == "https://example.com/document.pdf"
+    assert result[0]["file_data"]["mime_type"] == "application/pdf"
+
+
+def test_compat_image_url_block_non_google_provider() -> None:
+    """Test that ImageContentBlock with url is ignored for non-google providers."""
+    block = {
+        "type": "image",
+        "url": "https://example.com/image.jpg",
+    }
+    result = _convert_from_v1_to_generativelanguage_v1beta(
+        [block],  # type: ignore[list-item]
         "other_provider",
     )
     assert result == []
@@ -2618,13 +3224,8 @@ def test_signature_round_trip_conversion() -> None:
     with patch.object(
         llm.client.models, "generate_content", return_value=mock_response
     ):
-        # First call - get response with signatures
         result = llm.invoke("Test message")
-
-        # Verify signatures were extracted
         assert isinstance(result.content, list)
-
-        # Find blocks with signatures
         sig_blocks = []
         for block in result.content:
             if isinstance(block, dict):
@@ -2637,7 +3238,6 @@ def test_signature_round_trip_conversion() -> None:
             f"Expected signature blocks, got content: {result.content}"
         )
 
-        # Now simulate passing this result back in a conversation
         with patch(
             "langchain_google_genai.chat_models._convert_from_v1_to_generativelanguage_v1beta"
         ) as mock_convert:
@@ -2647,14 +3247,11 @@ def test_signature_round_trip_conversion() -> None:
 
             mock_convert.side_effect = real_convert
 
-            # Create conversation with the signature-containing message
             conversation = [
                 HumanMessage(content="First message"),
-                result,  # This contains signatures
+                result,
                 HumanMessage(content="Follow up"),
             ]
-
-            # Set up mock for the follow-up response
             follow_up_response = GenerateContentResponse(
                 candidates=[
                     Candidate(content=Content(parts=[Part(text="Follow up response")]))
@@ -2666,10 +3263,7 @@ def test_signature_round_trip_conversion() -> None:
             ):
                 follow_up = llm.invoke(conversation)
 
-            # Verify conversion was called
             assert mock_convert.call_count >= 1
-
-            # Find calls with signatures
             calls_with_signatures = []
             for call in mock_convert.call_args_list:
                 content_blocks, model_provider = call[0]
@@ -2691,17 +3285,12 @@ def test_signature_round_trip_conversion() -> None:
                 "Expected at least one call to convert signatures"
             )
 
-            # Verify follow-up succeeded
             assert isinstance(follow_up, AIMessage)
             assert follow_up.content is not None
 
 
 def test_parse_response_candidate_adds_index_to_signature() -> None:
-    """Test _parse_response_candidate adds index to function_call_signature blocks."""
-    # Mock a candidate with thinking and function call with signature
     part1 = Part(text="Thinking...", thought=True)
-
-    # Signature must be bytes
     sig = b"mysig"
     part2 = Part(
         function_call=FunctionCall(name="tool", args={}), thought_signature=sig
@@ -2718,12 +3307,8 @@ def test_parse_response_candidate_adds_index_to_signature() -> None:
 
 
 def test_parse_chat_history_uses_index_for_signature() -> None:
-    """Test _parse_chat_history uses the index field to map signatures to tool calls."""
     sig_bytes = b"dummy_signature"
     sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
-
-    # Content with thinking block (index 0) and signature block (index 1)
-    # The signature block points to tool call index 0
     content = [{"type": "thinking", "thinking": "I should use the tool."}]
 
     tool_calls = [{"name": "my_tool", "args": {"param": "value"}, "id": "call_1"}]
@@ -2736,25 +3321,1552 @@ def test_parse_chat_history_uses_index_for_signature() -> None:
         },
     )
 
-    # Parse the history
     _, formatted_messages = _parse_chat_history([message])
-
-    # Check the result
     model_content = formatted_messages[0]
     assert model_content.role == "model"
     assert model_content.parts is not None
     assert len(model_content.parts) == 2
 
-    # First part should be the thinking text (thinking blocks come first)
     thinking_part = model_content.parts[0]
     assert thinking_part.thought is True
     assert thinking_part.text == "I should use the tool."
 
-    # Second part should be the function call with signature
     function_part = model_content.parts[1]
     assert function_part.function_call is not None
     assert function_part.function_call.name == "my_tool"
     assert function_part.thought_signature == sig_bytes
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_text", "expected_thought", "expected_signature"),
+    [
+        pytest.param(
+            "Let me look that up.",
+            "Let me look that up.",
+            None,
+            None,
+            id="string",
+        ),
+        pytest.param(
+            [{"type": "text", "text": "One moment."}],
+            "One moment.",
+            None,
+            None,
+            id="text-block",
+        ),
+        pytest.param(
+            [{"type": "thinking", "thinking": "Thinking.", "signature": "c2ln"}],
+            "Thinking.",
+            True,
+            b"sig",
+            id="v0-thinking",
+        ),
+        pytest.param(
+            [
+                {
+                    "type": "reasoning",
+                    "reasoning": "Thinking.",
+                    "extras": {"signature": "c2ln"},
+                }
+            ],
+            "Thinking.",
+            True,
+            b"sig",
+            id="v1-reasoning",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_preserves_content(
+    content: str | list[str | dict[Any, Any]],
+    expected_text: str,
+    expected_thought: bool | None,
+    expected_signature: bytes | None,
+) -> None:
+    """Preserve assistant content beside tool calls (regression for #1706)."""
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == expected_text
+    assert parts[0].thought is expected_thought
+    assert parts[0].thought_signature == expected_signature
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_content_blocks_round_trip() -> None:
+    """Preserve signed reasoning through v1 projection (regression for #1964)."""
+    sig_bytes = b"thinking_signature"
+    sig_b64 = base64.b64encode(sig_bytes).decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me think.", "signature": sig_b64}
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+    v1_message = message.model_copy(
+        update={
+            "content": message.content_blocks,
+            "response_metadata": {
+                **message.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+    assert v1_message.content[0]["type"] == "reasoning"  # type: ignore[index]
+    assert any(
+        isinstance(block, dict) and block.get("type") == "tool_call"
+        for block in v1_message.content
+    )
+
+    _, formatted_messages = _parse_chat_history([v1_message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    thought_parts = [part for part in parts if part.thought]
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(thought_parts) == 1
+    assert len(function_call_parts) == 1
+    assert thought_parts[0].text == "Let me think."
+    assert thought_parts[0].thought_signature == sig_bytes
+    assert function_call_parts[0].function_call is not None
+    assert function_call_parts[0].function_call.name == "search"
+    assert function_call_parts[0].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_tool_calls_normalizes_anthropic_tool_use() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Let me look that up."},
+            {
+                "type": "tool_use",
+                "id": "call_1",
+                "name": "search",
+                "input": {"q": "x"},
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Let me look that up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert parts[1].function_call.args == {"q": "x"}
+
+
+def test_parse_chat_history_tool_calls_drops_invalid_foreign_calls() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "function_call",
+                "name": "search",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+            {
+                "type": "function_call",
+                "name": "broken",
+                "arguments": "{",
+                "call_id": "call_bad",
+                "id": "fc_bad",
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        invalid_tool_calls=[
+            {
+                "name": "broken",
+                "args": "{",
+                "id": "call_bad",
+                "error": "Invalid JSON",
+            }
+        ],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_drops_foreign_web_search_pair() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "web_search_call",
+                "id": "ws_1",
+                "status": "completed",
+                "action": {
+                    "type": "search",
+                    "query": "weather",
+                    "sources": [{"type": "url", "url": "https://example.com/weather"}],
+                },
+            },
+            {
+                "type": "function_call",
+                "name": "lookup",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+        ],
+        tool_calls=[{"name": "lookup", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "lookup"
+    assert parts[0].code_execution_result is None
+
+
+def test_parse_chat_history_tool_calls_keeps_foreign_code_interpreter_pair() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "code_interpreter_call",
+                "id": "ci_1",
+                "code": "print(1)",
+                "outputs": ["1"],
+                "status": "completed",
+            },
+            {
+                "type": "function_call",
+                "name": "lookup",
+                "arguments": "{}",
+                "call_id": "call_1",
+                "id": "fc_1",
+            },
+        ],
+        tool_calls=[{"name": "lookup", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 3
+    assert parts[0].executable_code is not None
+    assert parts[0].executable_code.code == "print(1)"
+    assert parts[1].code_execution_result is not None
+    assert parts[1].code_execution_result.output == "['1']"
+    assert parts[2].function_call is not None
+    assert parts[2].function_call.name == "lookup"
+
+
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "redacted_thinking", "data": "encrypted"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [
+                {
+                    "type": "non_standard",
+                    "value": {"type": "redacted_thinking", "data": "encrypted"},
+                }
+            ],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_drops_foreign_non_standard_block(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response_metadata = {"model_provider": "anthropic"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert "Dropping" in caplog.text
+
+
+def test_parse_chat_history_without_tool_calls_drops_foreign_non_standard() -> None:
+    signature = base64.b64encode(b"anthropic_signature").decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Visible response."},
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "thinking",
+                    "thinking": "Private reasoning.",
+                    "signature": signature,
+                },
+            },
+        ],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == "Visible response."
+    assert parts[0].thought_signature is None
+
+
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "media", "mime_type": "image/png", "data": "invalid!!"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [{"type": "image", "mime_type": "image/png", "base64": "invalid!!"}],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_drops_malformed_foreign_media(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drop malformed foreign media without losing an otherwise valid tool call."""
+    response_metadata = {"model_provider": "openai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert "Dropping" in caplog.text
+
+
+def test_parse_chat_history_falls_back_for_foreign_server_tools(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Avoid a partless model turn when every foreign server-tool block is dropped."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "server_tool_call",
+                "name": "web_search",
+                "id": "srv_1",
+                "args": {"query": "x"},
+            },
+            {
+                "type": "server_tool_result",
+                "tool_call_id": "srv_1",
+                "status": "success",
+                "output": {},
+            },
+        ],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history(
+            [HumanMessage("hi"), message, HumanMessage("again")],
+            model=MODEL_NAME,
+        )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+    assert "AI message at index 1" in caplog.text
+    assert "2 content block(s) were dropped" in caplog.text
+
+
+def test_parse_chat_history_falls_back_for_unsupported_vertex_gcs() -> None:
+    """Avoid a partless model turn when Developer API replay drops Vertex GCS."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            }
+        ],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_parse_chat_history_falls_back_for_unsigned_v1_reasoning() -> None:
+    """Avoid a partless model turn when v1 reasoning has no thought signature."""
+    message = AIMessage(
+        content=[{"type": "reasoning", "reasoning": "hmm"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_parse_chat_history_falls_back_for_invalid_unknown_provider_media() -> None:
+    """Avoid a partless model turn when the only unknown-provider block is invalid."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "mime_type": "image/png",
+                "data": "not valid base64!!",
+            }
+        ]
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [HumanMessage("hi"), message, HumanMessage("again")],
+        model=MODEL_NAME,
+    )
+
+    parts = formatted_messages[1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+def test_filter_messages_empty_foreign_vertex_model_turn_remains_replayable() -> None:
+    """Preserve the Vertex empty-content workaround through foreign block filtering."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    message = AIMessage(
+        content=[],
+        response_metadata={"model_provider": "anthropic"},
+    )
+
+    request = llm._prepare_request([HumanMessage("hi"), message, HumanMessage("again")])
+
+    parts = request["contents"][1].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].text == ""
+
+
+@pytest.mark.parametrize(
+    ("output_version", "content"),
+    [
+        pytest.param(
+            None,
+            [{"type": "media", "mime_type": "image/png", "data": "invalid!!"}],
+            id="v0",
+        ),
+        pytest.param(
+            "v1",
+            [{"type": "image", "mime_type": "image/png", "base64": "invalid!!"}],
+            id="v1",
+        ),
+    ],
+)
+def test_parse_chat_history_rejects_malformed_native_media(
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+) -> None:
+    """Keep native replay strict so invalid input cannot silently change a request."""
+    response_metadata = {"model_provider": "google_genai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    with pytest.raises(ValueError, match="valid base64"):
+        _parse_chat_history([message])
+
+
+def test_convert_to_parts_still_raises_on_unknown_type() -> None:
+    with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
+        _convert_to_parts([{"type": "bogus"}])
+
+
+@pytest.mark.parametrize(
+    ("message_type", "content"),
+    [
+        pytest.param(
+            HumanMessage,
+            [{"text": "hi", "index": 0}],
+            id="human-index",
+        ),
+        pytest.param(
+            HumanMessage,
+            [{"text": "hi", "id": "x"}],
+            id="human-id",
+        ),
+        pytest.param(
+            SystemMessage,
+            [{"text": "hi", "index": 0}],
+            id="system-index",
+        ),
+        pytest.param(
+            SystemMessage,
+            [{"text": "hi", "id": "x"}],
+            id="system-id",
+        ),
+    ],
+)
+def test_parse_chat_history_tolerates_extra_keys_in_typeless_parts(
+    message_type: type[HumanMessage] | type[SystemMessage],
+    content: list[str | dict[Any, Any]],
+) -> None:
+    """Keep permissive typeless-dict fallback for human and system messages."""
+    system_instruction, formatted_messages = _parse_chat_history(
+        [message_type(content=content)]
+    )
+
+    if message_type is SystemMessage:
+        assert system_instruction is not None
+        parts = system_instruction.parts
+    else:
+        parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts == [Part(text=str(content[0]))]
+
+
+def test_convert_to_parts_accepts_projected_typeless_text() -> None:
+    """Keep valid projected text dictionaries on the v1beta conversion path."""
+    parts = _convert_to_parts(
+        [{"text": "hi"}],
+        allow_v1beta_dicts=True,
+    )
+
+    assert parts == [Part(text="hi")]
+
+
+def test_parse_chat_history_v1_projected_parts_round_trip() -> None:
+    """Convert every projected v1beta replay shape into a real Gemini part."""
+    projected_content = [
+        {"text": "hi", "thought_signature": "c2ln"},
+        {"inline_data": {"mime_type": "image/png", "data": "aW1hZ2U="}},
+        {
+            "file_data": {
+                "mime_type": "application/pdf",
+                "file_uri": "files/document",
+            }
+        },
+        {"thought": True, "text": "Thinking."},
+    ]
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with patch(
+        "langchain_google_genai.chat_models."
+        "_convert_from_v1_to_generativelanguage_v1beta",
+        return_value=projected_content,
+    ):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 4
+    assert parts[0].text == "hi"
+    assert parts[0].thought_signature == b"sig"
+    assert parts[1].inline_data == Blob(mime_type="image/png", data=b"image")
+    assert parts[2].file_data is not None
+    assert parts[2].file_data.mime_type == "application/pdf"
+    assert parts[2].file_data.file_uri == "files/document"
+    assert parts[3].thought is True
+    assert parts[3].text == "Thinking."
+
+
+def test_parse_chat_history_rejects_malformed_native_v1beta_projection() -> None:
+    """Surface invalid projected dictionaries during strict native v1 replay."""
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    with (
+        patch(
+            "langchain_google_genai.chat_models."
+            "_convert_from_v1_to_generativelanguage_v1beta",
+            return_value=[{"text": "hi", "index": 0}],
+        ),
+        pytest.raises(ValidationError),
+    ):
+        _parse_chat_history([message])
+
+
+def test_parse_chat_history_drops_malformed_foreign_v1beta_projection(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drop invalid projected dictionaries during lenient foreign v1 replay."""
+    message = AIMessage(
+        content=[{"type": "text", "text": "source"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    with (
+        patch(
+            "langchain_google_genai.chat_models."
+            "_convert_from_v1_to_generativelanguage_v1beta",
+            return_value=[{"text": "hi", "id": "x"}],
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts == [Part(text="")]
+    assert "Dropping content block that cannot be represented" in caplog.text
+
+
+def test_parse_chat_history_preserves_human_non_standard_media() -> None:
+    message = HumanMessage(
+        content_blocks=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "mime_type": "image/png",
+                    "data": base64.b64encode(b"image data").decode("ascii"),
+                },
+            }
+        ]
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == "image/png"
+    assert parts[0].inline_data.data == b"image data"
+
+
+def test_parse_chat_history_preserves_native_ai_non_standard_media() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "mime_type": "audio/mpeg",
+                    "file_uri": "files/native-audio",
+                },
+            }
+        ],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.mime_type == "audio/mpeg"
+    assert parts[0].file_data.file_uri == "files/native-audio"
+
+
+def test_parse_chat_history_tool_calls_drops_foreign_non_standard_media() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "media",
+                "mime_type": "image/png",
+                "data": base64.b64encode(b"foreign image").decode("ascii"),
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_foreign_reasoning_block(
+    output_version: str | None,
+) -> None:
+    """Drop foreign reasoning rather than replaying it as a thought (#1603).
+
+    Both the v1 and non-v1 conversions must drop it: `output_version` is stamped by
+    the producing integration, so it cannot decide whether foreign reasoning leaks.
+    """
+    response_metadata = {"model_provider": "openai"}
+    if output_version:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "I should search."}],
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+def test_parse_chat_history_drops_bedrock_v1_reasoning_block() -> None:
+    """Bedrock chain-of-thought must not leak into Gemini requests."""
+    bedrock_reply = AIMessage(
+        content=[
+            {
+                "type": "reasoning_content",
+                "reasoning_content": {
+                    "text": "Considering Paris.",
+                    "signature": "bedrock-sig",
+                },
+            },
+            {"type": "text", "text": "Paris."},
+        ],
+        response_metadata={"model_provider": "bedrock_converse"},
+    )
+    # Restamp as v1 content so replay goes through the v1 converter rather than
+    # the non-v1 path; both are covered, but this test pins the v1 one.
+    for_gemini = bedrock_reply.model_copy(
+        update={
+            "content": bedrock_reply.content_blocks,
+            "response_metadata": {
+                **bedrock_reply.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+
+    _, contents = _parse_chat_history(
+        [
+            HumanMessage(content="Capital of France?"),
+            for_gemini,
+            HumanMessage(content="Of Italy?"),
+        ]
+    )
+
+    model = next(c for c in contents if c.role == "model")
+    parts = model.parts
+    assert parts is not None
+    assert all(part.thought is not True for part in parts)
+    assert [(part.thought, part.thought_signature, part.text) for part in parts] == [
+        (None, None, "Paris.")
+    ]
+
+
+def test_convert_to_parts_openai_summary_reasoning_without_metadata() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "id": "rs_abc123",
+                "summary": [
+                    {"type": "summary_text", "text": "Let me think step by step..."}
+                ],
+            },
+            {"type": "text", "text": "The answer is 4."},
+        ],
+        tool_calls=[],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "Let me think step by step..."
+    assert parts[1].thought is not True
+    assert parts[1].text == "The answer is 4."
+
+
+def test_convert_to_parts_reasoning_summary_not_a_list_is_dropped() -> None:
+    assert _convert_to_parts([{"type": "reasoning", "summary": "notalist"}]) == []
+
+
+def test_parse_chat_history_tool_calls_unknown_provider_drops_foreign_block(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Let me look that up."},
+            {"type": "tool_use", "id": "call_1", "name": "search", "input": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Let me look that up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert "Dropping content block that cannot" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("model_provider", "output_version", "content", "expected"),
+    [
+        *[
+            pytest.param(
+                provider,
+                None,
+                [{"type": "thinking", "thinking": "Thinking.", "signature": "c2ln"}],
+                [("Thinking.", True)],
+                id=f"{provider}-v0-thinking",
+            )
+            for provider in ("google_genai", "google_vertexai")
+        ],
+        *[
+            pytest.param(
+                provider,
+                "v1",
+                [
+                    {
+                        "type": "reasoning",
+                        "reasoning": "Thinking.",
+                        "extras": {"signature": "c2ln"},
+                    },
+                    {
+                        "type": "text",
+                        "text": "Answer.",
+                        "extras": {"signature": "c2ln"},
+                    },
+                ],
+                [("Thinking.", True), ("Answer.", None)],
+                id=f"{provider}-v1-content",
+            )
+            for provider in ("google_genai", "google_vertexai")
+        ],
+        *[
+            pytest.param(
+                "google_vertexai",
+                output_version,
+                [{"type": "text", "text": "Answer.", "thought_signature": "c2ln"}],
+                [("Answer.", None)],
+                id=f"vertex-text-{output_version or 'v0'}",
+            )
+            for output_version in (None, "v1")
+        ],
+    ],
+)
+def test_parse_chat_history_preserves_native_signatures(
+    model_provider: str,
+    output_version: str | None,
+    content: list[str | dict[Any, Any]],
+    expected: list[tuple[str, bool | None]],
+) -> None:
+    """Treat Vertex and Developer API signatures as the same native format."""
+    response_metadata = {"model_provider": model_provider}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=content,
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == len(expected) + 1
+    assert [(part.text, part.thought) for part in parts[:-1]] == expected
+    assert all(part.thought_signature == b"sig" for part in parts[:-1])
+    assert parts[-1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_unknown_provider_preserves_signature() -> (
+    None
+):
+    signature = base64.b64encode(b"checkpoint_sig").decode("ascii")
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "reasoning": "Thinking.",
+                "extras": {"signature": signature},
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"output_version": "v1"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "Thinking."
+    assert parts[0].thought_signature == b"checkpoint_sig"
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_summary_reasoning_kept_without_metadata() -> (
+    None
+):
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "I should search."}],
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].thought is True
+    assert parts[0].text == "I should search."
+
+
+@pytest.mark.parametrize(
+    ("block", "response_metadata", "expected_signature"),
+    [
+        pytest.param(
+            {"type": "thinking", "thinking": "", "signature": "c2ln"},
+            {},
+            b"sig",
+            id="v0-thinking",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
+            {},
+            b"sig",
+            id="v0-reasoning",
+        ),
+        pytest.param(
+            {"type": "text", "text": "", "extras": {"signature": "c2ln"}},
+            {},
+            b"sig",
+            id="v0-text",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": "", "extras": {"signature": "c2ln"}},
+            {"model_provider": "google_genai", "output_version": "v1"},
+            b"sig",
+            id="v1-signed",
+        ),
+        pytest.param(
+            {"type": "reasoning", "reasoning": ""},
+            {"model_provider": "google_genai", "output_version": "v1"},
+            None,
+            id="v1-unsigned",
+        ),
+    ],
+)
+def test_parse_chat_history_handles_empty_thought_blocks(
+    block: dict[str, Any],
+    response_metadata: dict[str, Any],
+    expected_signature: bytes | None,
+) -> None:
+    """Retain signature-only thoughts while dropping genuinely empty thoughts."""
+    message = AIMessage(
+        content=[block],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [message], model="gemini-3.1-pro-preview"
+    )
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    content_parts = [part for part in parts if part.function_call is None]
+    if expected_signature is None:
+        assert content_parts == []
+    else:
+        assert len(content_parts) == 1
+        assert content_parts[0].thought_signature == expected_signature
+        assert content_parts[0].thought_signature != DUMMY_THOUGHT_SIGNATURE
+    assert len([part for part in parts if part.function_call is not None]) == 1
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_text", "expected_thought"),
+    [
+        pytest.param(
+            {"type": "text", "text": "Looking it up."},
+            "Looking it up.",
+            None,
+            id="text",
+        ),
+        pytest.param(
+            # Foreign reasoning is dropped outright, not merely de-signatured.
+            {"type": "reasoning", "reasoning": "I should search."},
+            None,
+            None,
+            id="reasoning",
+        ),
+        pytest.param(
+            {"type": "text", "text": ""},
+            None,
+            None,
+            id="signature-only",
+        ),
+    ],
+)
+def test_parse_chat_history_strips_foreign_signatures(
+    block: dict[str, Any],
+    expected_text: str | None,
+    expected_thought: bool | None,
+) -> None:
+    block["extras"] = {"signature": "b3BlbmFpX3NpZw=="}
+    message = AIMessage(
+        content=[block],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    content_parts = [part for part in parts if part.function_call is None]
+    if expected_text is None:
+        assert content_parts == []
+    else:
+        assert len(content_parts) == 1
+        assert content_parts[0].text == expected_text
+        assert content_parts[0].thought is expected_thought
+        assert content_parts[0].thought_signature is None
+    assert len([part for part in parts if part.function_call is not None]) == 1
+
+
+def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_call_chunk",
+                "name": "search",
+                "args": "{}",
+                "id": "call_1",
+                "index": 0,
+            }
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len([p for p in parts if p.function_call]) == 1
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+@pytest.mark.parametrize("index", [0, None], ids=["indexed", "unindexed"])
+def test_parse_chat_history_consumes_legacy_function_call_signature(
+    output_version: str | None,
+    index: int | None,
+) -> None:
+    """Map indexed and early unindexed signature sidecars to rebuilt calls."""
+    signature = base64.b64encode(b"legacy_sig").decode("ascii")
+    response_metadata = {"model_provider": "google_vertexai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    signature_block: dict[str, Any] = {
+        "type": "function_call_signature",
+        "signature": signature,
+    }
+    if index is not None:
+        signature_block["index"] = index
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Calling a tool."},
+            signature_block,
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Calling a tool."
+    assert parts[1].function_call is not None
+    assert parts[1].thought_signature == b"legacy_sig"
+
+
+@pytest.mark.parametrize(
+    ("model_provider", "file_uri"),
+    [
+        ("google_genai", "files/abc"),
+        ("google_vertexai", "gs://bucket/document.pdf"),
+    ],
+)
+def test_parse_chat_history_tool_calls_normalizes_native_blocks(
+    model_provider: str, file_uri: str
+) -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "file_data",
+                "file_uri": file_uri,
+                "mime_type": "application/pdf",
+            },
+            {
+                "type": "function_call",
+                "name": "search",
+                "args": {"q": "x"},
+                "id": "call_1",
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {"q": "x"}, "id": "call_1"}],
+        response_metadata={"model_provider": model_provider},
+    )
+
+    _, formatted_messages = _parse_chat_history(
+        [message], use_vertexai=model_provider == "google_vertexai"
+    )
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == file_uri
+    assert parts[0].file_data.mime_type == "application/pdf"
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+    assert parts[1].function_call.args == {"q": "x"}
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        pytest.param(
+            {
+                "type": "file_data",
+                "file_uri": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            },
+            id="file-data",
+        ),
+        pytest.param(
+            {"type": "image_url", "image_url": {"url": "gs://bucket/image.png"}},
+            id="nested-image-url",
+        ),
+    ],
+)
+def test_parse_chat_history_drops_vertex_gcs_for_gemini_backend(
+    block: dict[str, Any],
+) -> None:
+    """Filter Vertex-only GCS references according to the destination backend."""
+    message = AIMessage(
+        content=[block],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_vertexai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message], use_vertexai=False)
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+@pytest.mark.parametrize("vertexai", [False, True])
+def test_prepare_request_checks_target_backend_for_vertex_gcs_history(
+    vertexai: bool,
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    message = AIMessage(
+        content=[
+            {
+                "type": "image",
+                "url": "gs://bucket/image.png",
+                "mime_type": "image/png",
+            },
+            {
+                "type": "file",
+                "url": "gs://bucket/document.pdf",
+                "mime_type": "application/pdf",
+            },
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_vertexai",
+            "output_version": "v1",
+        },
+    )
+
+    request = llm._prepare_request([message])
+
+    parts = request["contents"][0].parts
+    assert parts is not None
+    file_uris = [
+        part.file_data.file_uri for part in parts if part.file_data is not None
+    ]
+    expected_uris = (
+        ["gs://bucket/image.png", "gs://bucket/document.pdf"] if vertexai else []
+    )
+    assert file_uris == expected_uris
+    assert len([part for part in parts if part.function_call is not None]) == 1
+
+
+@pytest.mark.parametrize(
+    ("block", "output_version", "expected_uri", "expected_mime_type"),
+    [
+        pytest.param(
+            {
+                "type": "media",
+                "file_uri": "files/native-audio",
+                "mime_type": "audio/mpeg",
+            },
+            None,
+            "files/native-audio",
+            "audio/mpeg",
+            id="v0-media",
+        ),
+        pytest.param(
+            {
+                "type": "non_standard",
+                "value": {
+                    "type": "media",
+                    "file_uri": "files/native-audio",
+                    "mime_type": "audio/mpeg",
+                },
+            },
+            "v1",
+            "files/native-audio",
+            "audio/mpeg",
+            id="v1-non-standard-media",
+        ),
+        pytest.param(
+            {"type": "file", "file_id": "files/abc", "mime_type": "application/pdf"},
+            "v1",
+            "files/abc",
+            "application/pdf",
+            id="v1-file-id",
+        ),
+    ],
+)
+def test_parse_chat_history_replays_native_file_blocks(
+    block: dict[str, Any],
+    output_version: str | None,
+    expected_uri: str,
+    expected_mime_type: str,
+) -> None:
+    """Replay native file shapes that core may otherwise wrap as non-standard."""
+    response_metadata = {"model_provider": "google_genai"}
+    call_block_type = "function_call"
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+        call_block_type = "tool_call"
+    message = AIMessage(
+        content=[
+            block,
+            {"type": call_block_type, "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == expected_uri
+    assert parts[0].file_data.mime_type == expected_mime_type
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_foreign_file_id_dropped() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "file",
+                "file_id": "file-openai-abc",
+                "mime_type": "application/pdf",
+            },
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "openai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+    assert parts[0].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_v1_text_signature_decoded() -> None:
+    signature = base64.b64encode(b"text_sig").decode("ascii")
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "hi", "extras": {"signature": signature}},
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts[0].text == "hi"
+    assert parts[0].thought_signature == b"text_sig"
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_mime_type", "expected_data"),
+    [
+        pytest.param(
+            {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"},
+            "image/png",
+            b"hello",
+            id="image",
+        ),
+        pytest.param(
+            {"type": "file", "base64": "d29ybGQ=", "mime_type": "text/plain"},
+            "text/plain",
+            b"world",
+            id="file",
+        ),
+    ],
+)
+def test_parse_chat_history_tool_calls_v1_preserves_inline_media(
+    block: dict[str, Any],
+    expected_mime_type: str,
+    expected_data: bytes,
+) -> None:
+    """Convert projected v1beta media dictionaries into real Gemini media parts."""
+    message = AIMessage(
+        content=[
+            block,
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.mime_type == expected_mime_type
+    assert parts[0].inline_data.data == expected_data
+    assert parts[0].text is None
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_preserves_code_execution() -> None:
+    """Keep projected code execution separate from the rebuilt function call."""
+    message = AIMessage(
+        content=[
+            {
+                "type": "server_tool_call",
+                "name": "code_interpreter",
+                "args": {"code": "print(1)", "language": "python"},
+                "id": "srv_1",
+            },
+            {
+                "type": "server_tool_result",
+                "extras": {"block_type": "code_execution_result", "outcome": 1},
+                "output": "1",
+            },
+            {"type": "tool_call", "id": "call_1", "name": "search", "args": {}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={
+            "model_provider": "google_genai",
+            "output_version": "v1",
+        },
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 3
+    executable_part = parts[0]
+    assert executable_part.executable_code is not None
+    assert executable_part.executable_code.code == "print(1)"
+    assert executable_part.executable_code.language == Language.PYTHON
+    result_part = parts[1]
+    assert result_part.code_execution_result is not None
+    assert result_part.code_execution_result.output == "1"
+    assert result_part.code_execution_result.outcome == (
+        CodeExecutionResultOutcome.OUTCOME_OK
+    )
+    assert parts[2].function_call is not None
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_tool_calls_skips_empty_text(
+    output_version: str | None,
+) -> None:
+    response_metadata = {"model_provider": "google_genai"}
+    if output_version is not None:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[{"type": "text", "text": ""}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_v1_no_duplicate_function_calls() -> None:
+    """Emit calls once when both v1 content and `tool_calls` contain them."""
+    message = AIMessage(
+        content="Searching now.",
+        tool_calls=[
+            {"name": "search", "args": {"q": "a"}, "id": "call_1"},
+            {"name": "search", "args": {"q": "b"}, "id": "call_2"},
+        ],
+        response_metadata={"model_provider": "google_genai"},
+    )
+    v1_message = message.model_copy(
+        update={
+            "content": message.content_blocks,
+            "response_metadata": {
+                **message.response_metadata,
+                "output_version": "v1",
+            },
+        }
+    )
+    assert any(
+        isinstance(block, dict) and block.get("type") == "tool_call"
+        for block in v1_message.content
+    )
+
+    _, formatted_messages = _parse_chat_history([v1_message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    function_call_parts = [part for part in parts if part.function_call]
+    assert len(function_call_parts) == 2
+    assert function_call_parts[0].function_call is not None
+    assert function_call_parts[1].function_call is not None
+    assert function_call_parts[0].function_call.args == {"q": "a"}
+    assert function_call_parts[1].function_call.args == {"q": "b"}
+    assert [part for part in parts if part.text == "Searching now."]
 
 
 def test_system_message_only_raises_error() -> None:
@@ -2944,6 +5056,152 @@ def test_convert_to_parts_media_with_video_metadata() -> None:
     assert result[0].video_metadata.end_offset == "20s"
 
 
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        {"start_offset": "1s", "end_offset": "5s"},
+        {"start_offset": "0s", "end_offset": "0s"},
+        {"start_offset": 0, "end_offset": 10},
+        {"start_offset": {"seconds": 1}, "end_offset": {"seconds": 5}},
+        {"startOffset": "1s", "endOffset": "5s"},
+        {},
+        {"end_offset": "5s"},
+        {"start_offset": "1s"},
+    ],
+)
+def test_validate_video_metadata_accepts_valid_offsets(
+    video_metadata: dict,
+) -> None:
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    ("video_metadata", "expected_substring"),
+    [
+        (
+            {"start_offset": "-1s", "end_offset": "5s"},
+            "start_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "0s", "end_offset": "-1s"},
+            "end_offset must be non-negative",
+        ),
+        (
+            {"start_offset": "10s", "end_offset": "5s"},
+            "must not exceed",
+        ),
+        (
+            {"startOffset": "5s", "endOffset": "1s"},
+            "must not exceed",
+        ),
+        (
+            {"start_offset": {"seconds": 30}, "end_offset": {"seconds": 5}},
+            "must not exceed",
+        ),
+    ],
+)
+def test_validate_video_metadata_rejects_invalid_offsets(
+    video_metadata: dict, expected_substring: str
+) -> None:
+    with pytest.raises(ValueError, match=expected_substring):
+        _validate_video_metadata(video_metadata)
+
+
+def test_validate_video_metadata_accepts_pydantic_instance() -> None:
+    """`VideoMetadata` instances should validate via attribute access."""
+    from google.genai.types import VideoMetadata
+
+    valid = VideoMetadata(start_offset="1s", end_offset="5s")
+    _validate_video_metadata(valid)
+
+
+def test_validate_video_metadata_rejects_invalid_pydantic_instance() -> None:
+    """Pydantic instances with bad offsets must raise the same clear ValueError."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="30s", end_offset="5s")
+    with pytest.raises(ValueError, match="must not exceed"):
+        _validate_video_metadata(bad)
+
+
+def test_validate_video_metadata_rejects_negative_pydantic_instance() -> None:
+    """Negative offsets reach the same guard via the attribute-access path."""
+    from google.genai.types import VideoMetadata
+
+    bad = VideoMetadata(start_offset="-1s", end_offset="5s")
+    with pytest.raises(ValueError, match="start_offset must be non-negative"):
+        _validate_video_metadata(bad)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `True` would be silently treated as 1 second without the bool
+        # guard, since `isinstance(True, int) is True`.
+        {"start_offset": True, "end_offset": "5s"},
+        {"start_offset": "5s", "end_offset": False},
+    ],
+)
+def test_validate_video_metadata_ignores_bool_offsets(
+    video_metadata: dict,
+) -> None:
+    """Booleans must not be coerced into integer durations."""
+    _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        "not a mapping",
+        12345,
+        ["seq", "of", "things"],
+        object(),
+    ],
+)
+def test_validate_video_metadata_rejects_non_mapping_input(
+    video_metadata: object,
+) -> None:
+    """Non-mapping, non-model input must surface a clear ValueError instead
+    of an opaque `AttributeError` from a missing `.get` method."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _validate_video_metadata(video_metadata)
+
+
+@pytest.mark.parametrize(
+    "video_metadata",
+    [
+        # `float(None)` would TypeError without the guard.
+        {"start_offset": {"seconds": None, "nanos": None}},
+        # `float('abc')` would ValueError without the guard.
+        {"start_offset": {"seconds": "abc"}},
+        # Garbage string with the `s` suffix.
+        {"start_offset": "abcs"},
+    ],
+)
+def test_validate_video_metadata_tolerates_unparseable_values(
+    video_metadata: dict,
+) -> None:
+    """Permissive `_to_seconds` returns `None` for unparseable shapes so
+    only true validation failures (negative offsets, start > end) raise."""
+    # Should not raise -- unparseable values are treated as "not present"
+    # and `model_validate` will surface a clearer error if needed.
+    _validate_video_metadata(video_metadata)
+
+
+def test_convert_to_parts_video_metadata_offset_validation() -> None:
+    """Invalid video offsets should raise ValueError before reaching the API."""
+    content = [
+        {
+            "type": "media",
+            "mime_type": "video/mp4",
+            "file_uri": "gs://bucket/video.mp4",
+            "video_metadata": {"start_offset": "30s", "end_offset": "5s"},
+        }
+    ]
+    with pytest.raises(ValueError, match="must not exceed"):
+        _convert_to_parts(content)
+
+
 def test_convert_to_parts_executable_code() -> None:
     """Test `_convert_to_parts` with executable code."""
     content = [
@@ -3053,7 +5311,7 @@ def test_convert_to_parts_invalid_image_url_format() -> None:
 
 
 def test_convert_to_parts_missing_mime_type_in_media() -> None:
-    """Test `_convert_to_parts` with missing `mime_type` in media."""
+    """A media `file_uri` without `mime_type` is sent as-is for the API to infer."""
     content = [
         {
             "type": "media",
@@ -3061,8 +5319,13 @@ def test_convert_to_parts_missing_mime_type_in_media() -> None:
             # Missing mime_type
         }
     ]
-    with pytest.raises(ValueError, match="Missing mime_type in media part"):
-        _convert_to_parts(content)
+
+    parts = _convert_to_parts(content)
+
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "gs://bucket/file.pdf"
+    assert parts[0].file_data.mime_type is None
 
 
 def test_convert_to_parts_media_missing_data_and_file_uri() -> None:
@@ -3905,6 +6168,26 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         assert config.thinking_config.include_thoughts is False, msg
 
 
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gemini-3.5-flash-lite", True),
+        ("gemini-3.6-flash", True),
+        ("models/gemini-3.6-flash", True),
+        ("publishers/google/models/gemini-3.5-flash-lite-001", True),
+        ("GEMINI-3.6-FLASH", True),
+        ("gemini-3.5-flash", False),
+        ("gemini-3.1-flash-lite", False),
+        ("gemini-3.6-flash-preview", False),
+        ("", False),
+    ],
+)
+def test_uses_fixed_sampling_and_disallows_prefill(
+    model: str, *, expected: bool
+) -> None:
+    assert _uses_fixed_sampling_and_disallows_prefill(model) is expected
+
+
 def test_is_new_gemini_model() -> None:
     assert _is_gemini_3_or_later("gemini-3.0-pro") is True
     assert _is_gemini_3_or_later("gemini-2.5-pro") is False
@@ -4097,6 +6380,244 @@ def test_thinking_budget_alone_still_works() -> None:
     assert config.thinking_config.thinking_level is None
 
 
+def test_thinking_config_flat_args_take_precedence() -> None:
+    """Test flat thinking args override matching raw `thinking_config` keys."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinking_budget": 2048, "include_thoughts": False},
+        thinking_budget=64,
+        include_thoughts=True,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 64
+    assert config.thinking_config.include_thoughts is True
+
+
+def test_thinking_config_cross_source_level_budget_warning() -> None:
+    """Test merged `thinking_level` and `thinking_budget` emit a warning."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinkingLevel": "low"},
+        thinking_budget=128,
+    )
+
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert len(warning_list) == 1
+    assert issubclass(warning_list[0].category, UserWarning)
+    assert "thinking_level' takes precedence" in str(warning_list[0].message)
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_config_single_source_level_budget_warning() -> None:
+    """Test raw `thinking_config` warns when it includes level and budget."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config={"thinkingLevel": "high", "thinkingBudget": 128},
+    )
+
+    with warnings.catch_warnings(record=True) as warning_list:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert len(warning_list) == 1
+    assert issubclass(warning_list[0].category, UserWarning)
+    assert "thinking_level' takes precedence" in str(warning_list[0].message)
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_config_object_is_propagated() -> None:
+    """Test `ThinkingConfig` constructor input is propagated to request config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=512),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.include_thoughts is True
+    assert config.thinking_config.thinking_budget == 512
+
+
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_level"),
+    [
+        ("minimal", ThinkingLevel.MINIMAL),
+        ("low", ThinkingLevel.LOW),
+        ("medium", ThinkingLevel.MEDIUM),
+        ("high", ThinkingLevel.HIGH),
+    ],
+)
+def test_reasoning_effort_is_alias_for_thinking_level(
+    reasoning_effort: str, expected_level: ThinkingLevel
+) -> None:
+    """Test `reasoning_effort` sets the same underlying `thinking_level` value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+    assert llm.thinking_level == reasoning_effort
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == expected_level
+    assert config.thinking_config.thinking_budget is None
+
+
+def test_thinking_level_wins_when_both_constructor_kwargs_given() -> None:
+    """Test `thinking_level` takes precedence when both are passed.
+
+    `reasoning_effort` is now the canonical field (`Field(alias="thinking_level")`),
+    but `thinking_level` -- Gemini's native name -- is the alias, and Pydantic's
+    alias-resolution precedence has the alias win over the field's own name when
+    both are supplied.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="low",
+        reasoning_effort="high",
+    )
+    assert llm.thinking_level == "low"
+
+
+def test_reasoning_effort_composes_with_include_thoughts() -> None:
+    """Test `include_thoughts` composes with `reasoning_effort`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="high",
+        include_thoughts=True,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+    assert config.thinking_config.include_thoughts is True
+
+
+def test_reasoning_effort_call_time_kwarg_override() -> None:
+    """Test a call-time `reasoning_effort` kwarg overrides the constructor value."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort="low",
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_reasoning_effort_call_time_kwarg_yields_to_thinking_level_kwarg() -> None:
+    """Test a call-time `thinking_level` kwarg wins over `reasoning_effort`.
+
+    Mirrors the construction-time alias-resolution precedence.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], thinking_level="low", reasoning_effort="high")
+    config = request["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == ThinkingLevel.LOW
+
+
+def test_reasoning_effort_not_leaked_as_unrecognized_kwarg() -> None:
+    """Test `reasoning_effort` doesn't leak through as a stray request kwarg."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], reasoning_effort="high")
+    assert "reasoning_effort" not in request
+
+
+def test_reasoning_effort_constructor_kwarg_does_not_warn() -> None:
+    """Test `reasoning_effort` doesn't log an unexpected-argument warning."""
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            reasoning_effort="high",
+        )
+    mock_warning.assert_not_called()
+
+
+_ALL_REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high"]
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_levels", "expected_default"),
+    [
+        ("gemini-3-flash-preview", _ALL_REASONING_EFFORT_LEVELS, "high"),
+        ("gemini-3-pro-image-preview", None, None),
+        ("gemini-3-pro-preview", ["low", "high"], "high"),
+        ("gemini-3.1-flash-image-preview", ["minimal", "high"], "minimal"),
+        ("gemini-3.1-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
+        (
+            "gemini-3.1-flash-lite-preview",
+            _ALL_REASONING_EFFORT_LEVELS,
+            "minimal",
+        ),
+        ("gemini-3.1-pro-preview", ["low", "medium", "high"], "high"),
+        (
+            "gemini-3.1-pro-preview-customtools",
+            ["low", "medium", "high"],
+            "high",
+        ),
+        ("gemini-3.5-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-3.5-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
+        ("gemini-3.6-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-2.5-pro", None, None),
+    ],
+)
+def test_reasoning_effort_profile_fields(
+    model_name: str,
+    expected_levels: list[str] | None,
+    expected_default: str | None,
+) -> None:
+    """Test reasoning effort profile fields match the supported model settings."""
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    assert llm.profile is not None
+    assert llm.profile.get("reasoning_effort_levels") == expected_levels
+    assert llm.profile.get("reasoning_effort_default") == expected_default
+
+
 def test_kwargs_override_max_output_tokens() -> None:
     """Test that max_output_tokens can be overridden via kwargs."""
     llm = ChatGoogleGenerativeAI(
@@ -4122,6 +6643,282 @@ def test_kwargs_override_stop() -> None:
     request = llm._prepare_request([msg], stop=["me"])
     config = request["config"]
     assert config.stop_sequences == ["me"]
+
+
+def test_kwargs_stop_sequences_overrides_constructor_stop() -> None:
+    """Test that per-call `stop_sequences` overrides constructor `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["you"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop_sequences=["me"])
+    config = request["config"]
+    assert config.stop_sequences == ["me"]
+
+
+def test_generation_config_constructor_fields_are_propagated() -> None:
+    """Test Google generation config field aliases are propagated."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        presence_penalty=0.1,
+        frequency_penalty=0.2,
+        candidate_count=2,
+        stop_sequences=["stop"],
+    )
+
+    assert llm.model_kwargs == {}
+    assert llm.n == 2
+    assert llm.stop == ["stop"]
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.presence_penalty == 0.1
+    assert config.frequency_penalty == 0.2
+    assert config.candidate_count == 2
+    assert config.stop_sequences == ["stop"]
+
+
+def test_generation_config_constructor_defaults_are_preserved() -> None:
+    """Test unset generation config fields keep default request semantics."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.presence_penalty is None
+    assert config.frequency_penalty is None
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+@pytest.mark.parametrize(
+    ("constructor_kwargs", "request_kwargs"),
+    [
+        ({"temperature": 0.2, "top_k": 10, "top_p": 0.8}, {}),
+        ({}, {"temperature": 0.2, "top_k": 10, "top_p": 0.8}),
+        (
+            {},
+            {
+                "generation_config": {
+                    "temperature": 0.2,
+                    "top_k": 10,
+                    "top_p": 0.8,
+                }
+            },
+        ),
+    ],
+)
+def test_fixed_sampling_models_omit_custom_sampling_parameters(
+    model: str,
+    constructor_kwargs: dict[str, Any],
+    request_kwargs: dict[str, Any],
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+        **constructor_kwargs,
+    )
+
+    # The warning firing for every source also proves the parameters actually
+    # reached the request before being stripped (a per-source positive control).
+    with pytest.warns(UserWarning, match="will be ignored"):
+        request = llm._prepare_request(
+            [HumanMessage(content="test")],
+            **request_kwargs,
+        )
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert {"temperature", "top_k", "top_p"}.isdisjoint(request_config)
+    assert request_config["max_output_tokens"] == 100
+
+
+def test_fixed_sampling_model_without_sampling_parameters_does_not_warn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        max_output_tokens=100,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        llm._prepare_request([HumanMessage(content="test")])
+
+    assert not [w for w in caught if "will be ignored" in str(w.message)]
+
+
+def test_other_models_preserve_custom_sampling_parameters() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        temperature=0.2,
+        top_k=10,
+        top_p=0.8,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        request = llm._prepare_request([HumanMessage(content="test")])
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert not [w for w in caught if "will be ignored" in str(w.message)]
+    assert request_config["temperature"] == 0.2
+    assert request_config["top_k"] == 10
+    assert request_config["top_p"] == 0.8
+
+
+def test_n_constructor_field_sets_candidate_count() -> None:
+    """Test LangChain `n` field still sets Google `candidate_count`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.candidate_count == 2
+
+
+def test_kwargs_override_generation_config_constructor_fields() -> None:
+    """Test per-call kwargs override model-level generation config fields."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        presence_penalty=0.1,
+        frequency_penalty=0.2,
+        candidate_count=2,
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request(
+        [msg],
+        candidate_count=3,
+        presence_penalty=0.0,
+        frequency_penalty=0.5,
+    )
+    config = request["config"]
+    assert config.presence_penalty == 0.0
+    assert config.frequency_penalty == 0.5
+    assert config.candidate_count == 3
+
+
+def test_constructor_stop_is_propagated() -> None:
+    """Test model-level `stop` is propagated when no per-call stop is passed."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg])
+    config = request["config"]
+    assert config.stop_sequences == ["stop"]
+
+
+def test_per_call_empty_stop_overrides_constructor_stop() -> None:
+    """Test a per-call empty `stop` list clears the model-level `stop`."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        stop=["stop"],
+    )
+
+    msg = HumanMessage(content="test")
+    request = llm._prepare_request([msg], stop=[])
+    config = request["config"]
+    # An empty list is a valid "clear the stops" signal and must not fall back
+    # to the model-level `stop`.
+    assert config.stop_sequences == []
+
+
+def test_n_and_candidate_count_alias_resolves_to_alias() -> None:
+    """Test passing both `n` and its `candidate_count` alias: alias wins.
+
+    Pins the standard Pydantic `populate_by_name=True` resolution order so a
+    future change to alias handling is caught.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        n=2,
+        candidate_count=5,
+    )
+
+    assert llm.n == 5
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.5, 2.1, 5.0])
+def test_penalty_out_of_range_raises(field: str, value: float) -> None:
+    """Test penalties outside `[-2.0, 2.0]` are rejected at construction."""
+    with pytest.raises(ValueError, match=f"{field} must be in the range"):
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            **{field: value},
+        )
+
+
+@pytest.mark.parametrize("field", ["frequency_penalty", "presence_penalty"])
+@pytest.mark.parametrize("value", [-2.0, 2.0])
+def test_penalty_range_bounds_are_allowed(field: str, value: float) -> None:
+    """Test penalties at the documented bounds are accepted."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        **{field: value},
+    )
+
+    assert getattr(llm, field) == value
+
+
+def test_penalties_in_identifying_params() -> None:
+    """Test penalties are included in identifying parameters for tracing."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    params = llm._identifying_params
+    assert params["frequency_penalty"] == 0.2
+    assert params["presence_penalty"] == 0.1
+
+
+def test_serialize_round_trips_generation_config_aliases() -> None:
+    """Test alias-set generation config fields survive serialization."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key="test-key",
+        candidate_count=2,
+        stop_sequences=["stop"],
+        frequency_penalty=0.2,
+        presence_penalty=0.1,
+    )
+    serialized = dumps(llm)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LangChainBetaWarning)
+        llm_loaded = loads(
+            serialized,
+            secrets_map={"GOOGLE_API_KEY": "test-key"},
+            valid_namespaces=["langchain_google_genai"],
+            allowed_objects="all",
+        )
+    llm.client = None
+    llm_loaded.client = None
+    assert llm == llm_loaded
+    assert llm_loaded.n == 2
+    assert llm_loaded.stop == ["stop"]
 
 
 def test_kwargs_override_thinking_budget() -> None:
@@ -4552,7 +7349,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
-        assert llm_vertex.model == "gemini-2.5-flash"
+        assert llm_vertex.model == MODEL_NAME
         assert llm_vertex._use_vertexai is True  # type: ignore[attr-defined]
 
         # Test with models/ prefix for Google AI - should remain unchanged
@@ -4561,7 +7358,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=False,
         )
-        assert llm_google_ai.model == "models/gemini-2.5-flash"
+        assert llm_google_ai.model == f"models/{MODEL_NAME}"
         assert llm_google_ai._use_vertexai is False  # type: ignore[attr-defined]
 
         # Test without models/ prefix for Vertex AI - should remain unchanged
@@ -4570,7 +7367,7 @@ def test_model_name_normalization_for_vertexai() -> None:
             api_key=FAKE_API_KEY,
             vertexai=True,
         )
-        assert llm_vertex_no_prefix.model == "gemini-2.5-flash"
+        assert llm_vertex_no_prefix.model == MODEL_NAME
         assert llm_vertex_no_prefix._use_vertexai is True  # type: ignore[attr-defined]
     finally:
         os.environ.clear()
@@ -5047,3 +7844,1090 @@ def test_labels_override_in_invoke() -> None:
     config = request["config"]
 
     assert config.labels == {"env": "staging", "request_id": "123"}
+
+
+@pytest.mark.parametrize(
+    ("status_code", "status", "model_error_type", "is_retryable"),
+    [
+        (400, "INVALID_ARGUMENT", ModelInvalidRequestError, False),
+        (401, "UNAUTHENTICATED", ModelAuthenticationError, False),
+        (403, "PERMISSION_DENIED", ModelPermissionDeniedError, False),
+        (404, "NOT_FOUND", ModelNotFoundError, False),
+        (429, "RESOURCE_EXHAUSTED", ModelRateLimitError, True),
+    ],
+)
+def test_client_error_classification(
+    status_code: int,
+    status: str,
+    model_error_type: type[ModelError],
+    *,
+    is_retryable: bool,
+) -> None:
+    """Client errors are classified and stay `ChatGoogleGenerativeAIError`."""
+    error = ClientError(
+        code=status_code,
+        response_json={"error": {"message": "boom", "status": status}},
+        response=None,
+    )
+
+    with pytest.raises(ChatGoogleGenerativeAIError) as exc_info:
+        _handle_client_error(error, {"model": MODEL_NAME})
+
+    assert isinstance(exc_info.value, model_error_type)
+    assert exc_info.value.is_retryable is is_retryable
+    # The model name the request used stays in the message.
+    assert MODEL_NAME in str(exc_info.value)
+
+
+def test_unclassified_client_error_stays_unclassified() -> None:
+    """Status codes outside the taxonomy keep the previous behavior."""
+    error = ClientError(
+        code=409,
+        response_json={"error": {"message": "boom", "status": "ABORTED"}},
+        response=None,
+    )
+
+    with pytest.raises(ChatGoogleGenerativeAIError) as exc_info:
+        _handle_client_error(error, {"model": MODEL_NAME})
+
+    assert not isinstance(exc_info.value, ModelError)
+
+
+def test_server_error_classification() -> None:
+    """Server errors are raised as both `ServerError` and the LangChain type."""
+    error = ServerError(
+        code=503,
+        response_json={"error": {"message": "overloaded", "status": "UNAVAILABLE"}},
+        response=None,
+    )
+
+    with pytest.raises(ServerError) as exc_info:
+        _handle_server_error(error)
+
+    assert isinstance(exc_info.value, ModelAPIError)
+    assert exc_info.value.is_retryable is True
+    assert str(exc_info.value) == str(error)
+
+
+def test_context_overflow_error_invoke_sync() -> None:
+    """Test `ClientError` with token overflow is converted to `ContextOverflowError`."""
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    # Simulate an INVALID_ARGUMENT error from the API (token limit exceeded)
+    mock_generate_content.side_effect = ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            chat.invoke("test")
+
+
+async def test_context_overflow_error_invoke_async() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (async)."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client_class:
+        mock_client_instance = Mock()
+        mock_client_class.return_value = mock_client_instance
+
+        context_overflow_error = ClientError(
+            code=400,
+            response_json={
+                "error": {
+                    "message": (
+                        "The input token count (1632254) exceeds the maximum "
+                        "number of tokens allowed (1048576)."
+                    ),
+                    "status": "INVALID_ARGUMENT",
+                }
+            },
+            response=None,
+        )
+
+        # Mock the aio.models.generate_content method for async calls
+        mock_aio = Mock()
+        mock_client_instance.aio = mock_aio
+        mock_aio_models = Mock()
+        mock_aio.models = mock_aio_models
+        mock_aio_models.generate_content = AsyncMock(side_effect=context_overflow_error)
+
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            await chat.ainvoke("test")
+
+
+def _raising_stream(error: Exception) -> Callable[..., Iterator[Any]]:
+    """Build a stand-in for the SDK's streaming call.
+
+    `generate_content_stream` is a generator function, so the request runs -- and
+    the error is raised -- when the returned iterator is advanced, not when it is
+    called. A `Mock(side_effect=...)` raises on the call instead, which would let
+    a regression through.
+    """
+
+    def _stream(**_kwargs: Any) -> Iterator[Any]:
+        yield from ()
+        raise error
+
+    return _stream
+
+
+def _araising_stream(error: Exception) -> Callable[..., Any]:
+    """Async counterpart to `_raising_stream`.
+
+    The async SDK method is a coroutine that returns an async generator, so the
+    request runs once that generator is iterated.
+    """
+
+    async def _stream(**_kwargs: Any) -> AsyncIterator[Any]:
+        async def _gen() -> AsyncIterator[Any]:
+            no_chunks: tuple[Any, ...] = ()
+            for chunk in no_chunks:
+                yield chunk
+            raise error
+
+        return _gen()
+
+    return _stream
+
+
+_CONTEXT_OVERFLOW_CLIENT_ERROR = ClientError(
+    code=400,
+    response_json={
+        "error": {
+            "message": (
+                "The input token count (1632254) exceeds the maximum "
+                "number of tokens allowed (1048576)."
+            ),
+            "status": "INVALID_ARGUMENT",
+        }
+    },
+    response=None,
+)
+
+
+def _streaming_model(stream: Callable[..., Any], *, is_async: bool = False) -> Any:
+    """Patch `Client` so the chat model streams through `stream`."""
+    mock_client = Mock()
+    if is_async:
+        mock_client.return_value.aio.models.generate_content_stream = stream
+    else:
+        mock_client.return_value.models.generate_content_stream = stream
+    return mock_client
+
+
+def test_context_overflow_error_stream_sync() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (stream)."""
+    mock_client = _streaming_model(_raising_stream(_CONTEXT_OVERFLOW_CLIENT_ERROR))
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            list(chat.stream("test"))
+
+
+async def test_context_overflow_error_stream_async() -> None:
+    """Test token overflow is converted to `ContextOverflowError` (astream)."""
+    mock_client = _streaming_model(
+        _araising_stream(_CONTEXT_OVERFLOW_CLIENT_ERROR), is_async=True
+    )
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(
+            ContextOverflowError,
+            match="exceeds the maximum number of tokens allowed",
+        ):
+            [chunk async for chunk in chat.astream("test")]
+
+
+@pytest.mark.parametrize(
+    ("error", "model_error_type"),
+    [
+        (
+            ClientError(
+                code=401,
+                response_json={"error": {"message": "bad key", "status": "UNAUTH"}},
+                response=None,
+            ),
+            ModelAuthenticationError,
+        ),
+        (
+            ServerError(
+                code=503,
+                response_json={"error": {"message": "busy", "status": "UNAVAILABLE"}},
+                response=None,
+            ),
+            ModelAPIError,
+        ),
+    ],
+)
+def test_stream_error_classification(
+    error: Exception, model_error_type: type[ModelError]
+) -> None:
+    """Streaming errors are classified the same as non-streaming ones.
+
+    The SDK raises these while the stream is consumed, so classifying only at the
+    call site would let them escape unclassified.
+    """
+    mock_client = _streaming_model(_raising_stream(error))
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(model_error_type):
+            list(chat.stream("test"))
+
+
+async def test_astream_error_classification() -> None:
+    """Streaming errors are classified on the async path too."""
+    error = ClientError(
+        code=429,
+        response_json={"error": {"message": "slow down", "status": "EXHAUSTED"}},
+        response=None,
+    )
+    mock_client = _streaming_model(_araising_stream(error), is_async=True)
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,
+        )
+
+        with pytest.raises(ModelRateLimitError) as exc_info:
+            [chunk async for chunk in chat.astream("test")]
+
+    assert exc_info.value.is_retryable is True
+
+
+def test_context_overflow_error_backwards_compatibility() -> None:
+    """Test that `GoogleContextOverflowError` can still be caught as `ClientError`.
+
+    This ensures backwards compatibility: code that catches `ClientError` will
+    continue to work, while new code can catch `ContextOverflowError`.
+    """
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+
+    mock_generate_content.side_effect = ClientError(
+        code=400,
+        response_json={
+            "error": {
+                "message": (
+                    "The input token count (1632254) exceeds the maximum "
+                    "number of tokens allowed (1048576)."
+                ),
+                "status": "INVALID_ARGUMENT",
+            }
+        },
+        response=None,
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        chat = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+            max_retries=0,  # Disable retries for faster test
+        )
+
+        with pytest.raises(ClientError) as exc_info:
+            chat.invoke("test")
+
+        # Verify it's both types (multiple inheritance)
+        assert isinstance(exc_info.value, ClientError)
+        assert isinstance(exc_info.value, ContextOverflowError)
+        assert isinstance(exc_info.value, GoogleContextOverflowError)
+
+
+def test_model_copy_does_not_close_shared_client() -> None:
+    """Collecting a copy must not close the transport the original still uses.
+
+    `model_copy` does not re-run the validator that builds the client, so a copy
+    shares the original's `Client`. This test guards against a change that would
+    make the copy close the transport when it is collected, which would break the
+    original.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    httpx_client = model.client._api_client._httpx_client
+    assert httpx_client is not None
+    assert not httpx_client.is_closed
+
+    copy = model.model_copy(update={"callbacks": []})
+    assert copy is not model
+    assert copy.client is model.client
+
+    copy_ref = weakref.ref(copy)
+    del copy
+    # Guard against a vacuous pass: the assertion below only means something if the
+    # copy was really collected and so had its chance to run a finalizer.
+    assert copy_ref() is None
+
+    assert not httpx_client.is_closed
+
+
+def test_client_closed_when_last_model_reference_dropped() -> None:
+    """Dropping the last reference to a model closes its sync transport.
+
+    The model owns no finalizer itself; closing rides on the `_ClientCleanup` token
+    held as a private attribute, whose finalizer runs once no model shares the
+    `Client` any more. That indirection is invisible from the model's public surface,
+    so pin it here.
+    """
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    # Hold the transport only: a surviving reference to the `Client` would keep its
+    # finalizer from running, so the assertion below would fail for the wrong reason.
+    httpx_client = model.client._api_client._httpx_client
+    assert httpx_client is not None
+    assert not httpx_client.is_closed
+
+    del model
+
+    assert httpx_client.is_closed
+
+
+async def test_dropping_model_closes_async_transports_inside_running_loop() -> None:
+    """Dropping a model inside a running loop closes its async transports.
+
+    `_ClientCleanup` schedules `aio.aclose()` on the running loop rather than awaiting
+    it, so the close lands one loop cycle after the model is collected. The loop
+    exception handler is captured because that scheduled close is fire-and-forget: a
+    failure inside it would otherwise surface nowhere.
+    """
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    handler_contexts: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _loop, context: handler_contexts.append(context))
+
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+
+            model = ChatGoogleGenerativeAI(
+                model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+            )
+            assert model.client is not None
+            _ = model.async_client
+            api_client = model.client._api_client
+            # Materialize the cached aiohttp session; no request is sent.
+            # Annotated `Any`: these are private SDK internals whose declared union
+            # types do not narrow to the concrete transports being asserted on.
+            aiohttp_session: Any = await api_client._get_aiohttp_session()
+            async_httpx_client: Any = api_client._async_httpx_client
+            assert not aiohttp_session.closed
+            assert not async_httpx_client.is_closed
+
+            # Hold the transports only: a surviving reference to the model, its
+            # `Client`, or the `_ClientCleanup` token would keep the finalizer from
+            # running, and the assertions below would fail for the wrong reason.
+            del model, api_client
+            await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous_handler)
+
+    assert aiohttp_session.closed
+    assert async_httpx_client.is_closed
+    # Assert the whole list rather than filtering for "Unclosed": the SDK strips its
+    # own unclosed-resource warnings, so a narrower filter would silently discard real
+    # errors, such as a failure raised inside the scheduled `aclose()` task.
+    assert handler_contexts == []
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+
+
+def test_cleanup_does_not_close_async_client_on_new_loop() -> None:
+    """Finalization after the owning loop exits must not create a cleanup loop."""
+    client = Mock()
+    client.aio.aclose = AsyncMock()
+    cleanup = _ClientCleanup(client)
+
+    async def register_owning_loop(cleanup_token: _ClientCleanup) -> None:
+        cleanup_token.register_async_loop()
+
+    asyncio.run(register_owning_loop(cleanup))
+
+    cleanup_ref = weakref.ref(cleanup)
+    del cleanup
+
+    assert cleanup_ref() is None
+    client.close.assert_called_once_with()
+    client.aio.aclose.assert_not_awaited()
+
+
+def test_aclose_rejects_different_event_loop() -> None:
+    """Explicit shutdown must not close async transports from another loop."""
+    client = Mock()
+    client.aio.aclose = AsyncMock()
+    cleanup = _ClientCleanup(client)
+
+    async def register_owning_loop(cleanup_token: _ClientCleanup) -> None:
+        cleanup_token.register_async_loop()
+
+    asyncio.run(register_owning_loop(cleanup))
+
+    with pytest.raises(RuntimeError, match="event loop where it was used"):
+        asyncio.run(cleanup.aclose())
+
+    client.aio.aclose.assert_not_awaited()
+
+
+async def test_aclose_closes_async_transports_on_owning_loop() -> None:
+    """Explicit shutdown closes both async transports before their loop exits."""
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert model.client is not None
+    _ = model.async_client
+    api_client = model.client._api_client
+    sync_httpx_client = api_client._httpx_client
+    assert sync_httpx_client is not None
+    aiohttp_session: Any = await api_client._get_aiohttp_session()
+    async_httpx_client: Any = api_client._async_httpx_client
+    assert async_httpx_client is not None
+
+    await model.aclose()
+
+    assert sync_httpx_client.is_closed
+    assert aiohttp_session.closed
+    assert async_httpx_client.is_closed
+
+
+def test_parse_chat_history_tool_calls_native_strips_tool_call_blocks() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Looking it up."},
+            {"type": "tool_call", "name": "search", "args": {}, "id": "call_1"},
+            {"type": "invalid_tool_call", "name": "search", "args": "{bad"},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Looking it up."
+    assert parts[1].function_call is not None
+    assert parts[1].function_call.name == "search"
+
+
+def test_parse_chat_history_tool_calls_foreign_server_tool_filtered_silently() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Searching."},
+            {
+                "type": "server_tool_call",
+                "name": "web_search",
+                "id": "srv_1",
+                "args": {"query": "x"},
+            },
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "openai"},
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 2
+    assert parts[0].text == "Searching."
+    assert parts[1].function_call is not None
+
+
+def test_parse_chat_history_tool_calls_keeps_bare_string_content_blocks() -> None:
+    message = AIMessage(
+        content=["Hello.", "", {"type": "text", "text": "World."}],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+        response_metadata={"model_provider": "google_genai"},
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert [part.text for part in parts[:2]] == ["Hello.", "World."]
+    assert parts[2].function_call is not None
+
+
+def test_dummy_thought_signature_survives_serialization_as_bypass_string() -> None:
+    """The injected fallback signature must reach the API as a literal string.
+
+    Reproduces https://github.com/langchain-ai/langchain-google/issues/1570:
+    for Gemini 3+ models, `_parse_chat_history` injects a placeholder thought
+    signature into function-call parts that lack one. The SDK's
+    `encode_unserializable_types` base64-encodes `bytes` values, so unless the
+    placeholder is restored after encoding, the API receives a base64 blob
+    instead of the documented `skip_thought_signature_validator` bypass string
+    and rejects the request.
+    """
+    from google.genai._common import convert_to_dict, encode_unserializable_types
+
+    messages: list[BaseMessage] = [
+        HumanMessage(content="What's the weather in SF?"),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "get_weather",
+                    "args": {"city": "SF"},
+                    "id": "call_1",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+        ToolMessage(content="sunny, 70F", tool_call_id="call_1"),
+    ]
+
+    mock_client = Mock()
+    mock_models = Mock()
+    mock_generate_content = Mock()
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[Candidate(content=Content(parts=[Part(text="Done.")]))]
+    )
+    mock_models.generate_content = mock_generate_content
+    mock_client.return_value.models = mock_models
+
+    with patch("langchain_google_genai.chat_models.Client", mock_client):
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.1-pro-preview", google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        llm.invoke(messages)
+
+    contents = mock_generate_content.call_args.kwargs["contents"]
+    function_call_parts = [
+        part
+        for content in contents
+        for part in (content.parts or [])
+        if part.function_call is not None
+    ]
+    assert len(function_call_parts) == 1
+    # The fallback was injected by `_parse_chat_history`.
+    assert function_call_parts[0].thought_signature
+
+    # Run the same serialization the SDK applies before sending the request.
+    encoded = encode_unserializable_types(convert_to_dict({"contents": contents}))
+    encoded_contents = cast("list[dict[str, Any]]", encoded["contents"])
+    encoded_parts = cast("list[dict[str, Any]]", encoded_contents[1]["parts"])
+    encoded_signatures = [
+        part.get("thought_signature") or part.get("thoughtSignature")
+        for part in encoded_parts
+    ]
+    assert "skip_thought_signature_validator" in encoded_signatures
+
+
+def test_lenient_conversion_logs_the_underlying_cause(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "Here it is."},
+            {"type": "image_url", "image_url": {"url": "./secrets/local.png"}},
+        ],
+        tool_calls=[{"name": "search", "args": {}, "id": "call_1"}],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert parts[0].text == "Here it is."
+    assert "Dropping content block that cannot" in caplog.text
+    assert "./secrets/local.png" in caplog.text
+    assert "Media string must be one of" in caplog.text
+
+
+def _stream_llm(parts_per_chunk: list[list[Part]]) -> AIMessageChunk:
+    """Stream mocked candidate parts and return the aggregated chunk.
+
+    Args:
+        parts_per_chunk: Parts to emit, one inner list per streamed chunk.
+
+    Returns:
+        The result of merging every yielded chunk, as a caller of `.stream()`
+        would accumulate it.
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert llm.client is not None
+
+    def mock_stream(**_kwargs: Any) -> Iterator[GenerateContentResponse]:
+        for parts in parts_per_chunk:
+            yield GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=parts))]
+            )
+
+    with patch.object(
+        llm.client.models, "generate_content_stream", side_effect=mock_stream
+    ):
+        chunks = list(llm.stream([HumanMessage(content="hi")]))
+
+    aggregated = chunks[0]
+    for chunk in chunks[1:]:
+        aggregated = aggregated + chunk
+    return aggregated
+
+
+def _image_part(data: bytes) -> Part:
+    return Part(inline_data=Blob(data=data, mime_type="image/png"))
+
+
+def _dict_blocks(message: AIMessageChunk) -> list[dict[str, Any]]:
+    """Return the dict content blocks of `message`, narrowed for type checking."""
+    assert isinstance(message.content, list)
+    return [block for block in message.content if isinstance(block, dict)]
+
+
+@pytest.mark.parametrize("same_chunk", [True, False])
+def test_stream_multiple_images_stay_separate(same_chunk: bool) -> None:
+    """Consecutive images must get distinct indices instead of merging.
+
+    Sharing an index makes `merge_lists` concatenate the two data URLs into one
+    unusable string, which breaks multi-image (Nanobanana) responses.
+    """
+    parts = [_image_part(b"AAAA"), _image_part(b"BBBB")]
+    parts_per_chunk = [parts] if same_chunk else [[parts[0]], [parts[1]]]
+
+    aggregated = _stream_llm(parts_per_chunk)
+
+    blocks = _dict_blocks(aggregated)
+    assert [block["index"] for block in blocks] == [0, 1]
+    assert [block["image_url"]["url"] for block in blocks] == [
+        "data:image/png;base64,QUFBQQ==",
+        "data:image/png;base64,QkJCQg==",
+    ]
+
+
+def test_stream_parallel_tool_calls_get_distinct_indices() -> None:
+    """Parallel function calls must get distinct indices.
+
+    Gemini does not send an index, so without one assigned here consumers that
+    key blocks by index (the `v3` event stream) collapse both calls into one and
+    strand the thought signature of the dropped call.
+    """
+    aggregated = _stream_llm(
+        [
+            [
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "SF"}, id="call_1"
+                    ),
+                    thought_signature=b"sig-1",
+                )
+            ],
+            [
+                Part(
+                    function_call=FunctionCall(
+                        name="get_weather", args={"location": "Boston"}, id="call_2"
+                    )
+                )
+            ],
+        ]
+    )
+
+    assert [chunk["index"] for chunk in aggregated.tool_call_chunks] == [0, 1]
+    assert [call["id"] for call in aggregated.tool_calls] == ["call_1", "call_2"]
+    assert [call["args"] for call in aggregated.tool_calls] == [
+        {"location": "SF"},
+        {"location": "Boston"},
+    ]
+    # The retained signature must still resolve to a surviving tool call.
+    signatures = aggregated.additional_kwargs[_FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY]
+    assert set(signatures) <= {call["id"] for call in aggregated.tool_calls}
+
+
+def test_stream_text_deltas_still_merge() -> None:
+    """Text arrives as deltas, so it must keep sharing one index."""
+    aggregated = _stream_llm([[Part(text="Hel")], [Part(text="lo")]])
+
+    assert aggregated.text == "Hello"
+    if isinstance(aggregated.content, list):
+        assert len(aggregated.content) == 1
+
+
+def test_stream_reasoning_and_tool_calls_share_one_index_space() -> None:
+    """Content blocks and tool call chunks must draw from the same counter.
+
+    `AIMessageChunk.content_blocks` flattens both into a single keyspace, so a
+    separately numbered tool call would collide with the reasoning block.
+    """
+    aggregated = _stream_llm(
+        [
+            [Part(text="thinking...", thought=True)],
+            [Part(function_call=FunctionCall(name="f1", args={"a": 1}, id="call_1"))],
+            [Part(function_call=FunctionCall(name="f2", args={"b": 2}, id="call_2"))],
+        ]
+    )
+
+    assert [block["index"] for block in _dict_blocks(aggregated)] == [0]
+    assert [chunk["index"] for chunk in aggregated.tool_call_chunks] == [1, 2]
+
+
+# --- Agentic video understanding (per-part `media_processing`) ---
+
+_AGENTIC_MODEL = "gemini-3.7-flash"
+
+_YOUTUBE_URL = "https://www.youtube.com/watch?v=9hE5-98ZeCg"
+
+
+def test_tool_use_prompt_tokens_counted_as_input() -> None:
+    """Server-side tool use tokens are input tokens, so the parts must sum."""
+    response = GenerateContentResponse(
+        candidates=[Candidate(content=Content(role="model", parts=[Part(text="ok")]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=58,
+            candidates_token_count=61,
+            thoughts_token_count=152,
+            tool_use_prompt_token_count=131,
+            total_token_count=402,
+        ),
+    )
+
+    message = _response_to_result(response).generations[0].message
+    assert isinstance(message, AIMessage)
+    usage = message.usage_metadata
+
+    assert usage is not None
+    assert usage["input_tokens"] == 58 + 131
+    assert usage["output_tokens"] == 61 + 152
+    assert usage["input_tokens"] + usage["output_tokens"] == usage["total_tokens"]
+
+
+def _video_media_block(**overrides: Any) -> dict[str, Any]:
+    """Build a `media` content block referencing an uploaded video."""
+    block: dict[str, Any] = {
+        "type": "media",
+        "file_uri": "https://example.invalid/files/lecture",
+        "mime_type": "video/mp4",
+    }
+    block.update(overrides)
+    return block
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        {
+            "type": "media",
+            "file_uri": "https://example.invalid/files/lecture",
+            "mime_type": "video/mp4",
+            "media_processing": "AGENTIC",
+        },
+        {
+            "type": "file",
+            "file_id": "https://example.invalid/files/lecture",
+            "mime_type": "video/mp4",
+            "media_processing": "AGENTIC",
+        },
+    ],
+)
+def test_media_processing_on_file_reference_blocks(block: dict[str, Any]) -> None:
+    """`media_processing` reaches the part for each file-reference block shape."""
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert len(parts) == 1
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "https://example.invalid/files/lecture"
+
+
+@pytest.mark.parametrize(
+    ("block", "expected_uri"),
+    [
+        ({"type": "video", "url": _YOUTUBE_URL}, _YOUTUBE_URL),
+        ({"type": "video", "url": "https://youtu.be/9hE5"}, "https://youtu.be/9hE5"),
+        ({"type": "video", "url": "gs://bucket/v.mp4"}, "gs://bucket/v.mp4"),
+        ({"type": "video", "file_id": "files/abc123"}, "files/abc123"),
+    ],
+)
+def test_provider_resolved_uris_are_not_downloaded(
+    block: dict[str, Any], expected_uri: str
+) -> None:
+    """URIs Gemini resolves itself become `file_data` instead of inline bytes."""
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].inline_data is None
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == expected_uri
+
+
+def test_provider_resolved_uri_carries_media_processing() -> None:
+    """The standard `video` block can request agentic processing."""
+    block = {
+        "type": "video",
+        "url": _YOUTUBE_URL,
+        "mime_type": "video/mp4",
+        "media_processing": "AGENTIC",
+    }
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].file_data is not None
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+
+
+def test_other_urls_are_still_downloaded_inline() -> None:
+    """Arbitrary URLs keep the existing download-and-inline behavior."""
+    block = {"type": "image", "url": "https://example.invalid/cat.jpg"}
+
+    with patch(
+        "langchain_google_genai._image_utils.ImageBytesLoader._bytes_from_url",
+        return_value=b"raw-bytes",
+    ):
+        parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert parts[0].file_data is None
+    assert parts[0].inline_data is not None
+    assert parts[0].inline_data.data == b"raw-bytes"
+
+
+def test_media_file_uri_without_mime_type() -> None:
+    """A `file_uri` needs no MIME type; the API infers it (e.g. YouTube URLs)."""
+    block = {"type": "media", "file_uri": "https://www.youtube.com/watch?v=abc123"}
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert len(parts) == 1
+    assert parts[0].file_data is not None
+    assert parts[0].file_data.file_uri == "https://www.youtube.com/watch?v=abc123"
+    assert parts[0].file_data.mime_type is None
+
+
+def test_media_inline_data_still_requires_mime_type() -> None:
+    """Inline bytes carry no type information, so a MIME type stays required."""
+    block = {"type": "media", "data": base64.b64encode(b"video").decode()}
+
+    with pytest.raises(ValueError, match="Missing mime_type in media part"):
+        _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+
+def test_media_processing_on_inline_data_block() -> None:
+    """`media_processing` reaches the part for inline (base64) video data."""
+    block = {
+        "type": "video",
+        "base64": base64.b64encode(b"fake_video_data").decode(),
+        "mime_type": "video/mp4",
+        "media_processing": "AGENTIC",
+    }
+
+    parts = _convert_to_parts([block], model=_AGENTIC_MODEL)
+
+    assert len(parts) == 1
+    assert parts[0].media_processing == MediaProcessing.AGENTIC
+    assert parts[0].inline_data is not None
+
+
+def test_media_processing_mixed_modes_across_videos() -> None:
+    """Different videos in one message can use different processing modes."""
+    content = [
+        _video_media_block(file_uri="lecture", media_processing="AGENTIC"),
+        _video_media_block(file_uri="experiment", media_processing="STATIC"),
+        {"type": "text", "text": "Compare them."},
+    ]
+
+    parts = _convert_to_parts(content, model=_AGENTIC_MODEL)
+
+    assert [part.media_processing for part in parts] == [
+        MediaProcessing.AGENTIC,
+        MediaProcessing.STATIC,
+        None,
+    ]
+
+
+def test_media_processing_omitted_leaves_field_unset() -> None:
+    """Blocks without `media_processing` are unchanged."""
+    parts = _convert_to_parts([_video_media_block()], model=_AGENTIC_MODEL)
+
+    assert parts[0].media_processing is None
+
+
+def _agentic_candidate() -> Candidate:
+    """Build a response candidate shaped like an agentic video response."""
+    return Candidate(
+        content=Content(
+            role="model",
+            parts=[
+                Part(tool_call=ToolCall(id="call_1"), thought_signature=b"\x01"),
+                Part(
+                    tool_response=ToolResponse(id="call_1"),
+                    thought_signature=b"\x02",
+                ),
+                Part(text="VX9", thought_signature=b"\x03"),
+            ],
+        )
+    )
+
+
+def test_parse_agentic_media_processing_steps() -> None:
+    """Media processing steps surface as standard server tool blocks."""
+    message = _parse_response_candidate(_agentic_candidate(), model_name=_AGENTIC_MODEL)
+
+    assert isinstance(message.content, list)
+    call, result, text = message.content
+
+    assert call == {
+        "type": "server_tool_call",
+        "name": "media_processing",
+        "id": "call_1",
+        "args": {},
+        "extras": {"signature": base64.b64encode(b"\x01").decode()},
+    }
+    assert result == {
+        "type": "server_tool_result",
+        "tool_call_id": "call_1",
+        "status": "success",
+        "output": {},
+        "extras": {
+            "block_type": "media_processing",
+            "signature": base64.b64encode(b"\x02").decode(),
+        },
+    }
+    assert text["type"] == "text"  # type: ignore[index]
+
+
+def test_agentic_media_processing_steps_excluded_from_history() -> None:
+    """Media processing steps must not be replayed.
+
+    The API rejects echoed steps with "Tool type of tool_call part does not match
+    with tool call context", so a follow-up turn would fail outright if these
+    blocks were converted back into parts. Video context is preserved by the
+    original media part instead.
+    """
+    ai_message = _parse_response_candidate(
+        _agentic_candidate(), model_name=_AGENTIC_MODEL
+    )
+    history = [
+        HumanMessage(content=[_video_media_block(media_processing="AGENTIC")]),
+        ai_message,
+        HumanMessage("And at the 20 second mark?"),
+    ]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _, contents = _parse_chat_history(history, model=_AGENTIC_MODEL)
+
+    # Dropping these is expected, so it must not look like an unsupported tool.
+    assert [str(warning.message) for warning in caught] == []
+
+    user_turn, model_turn, follow_up = contents
+    # The video part still carries the mode, so the model can re-navigate it.
+    assert user_turn.parts is not None
+    assert user_turn.parts[0].media_processing == MediaProcessing.AGENTIC
+    # Only the text survives from the model turn.
+    assert model_turn.parts is not None
+    assert [part.text for part in model_turn.parts] == ["VX9"]
+    assert all(part.tool_call is None for part in model_turn.parts)
+    assert all(part.tool_response is None for part in model_turn.parts)
+    assert follow_up.parts is not None
+
+
+_MEDIA_PROCESSING_CALL_BLOCK = {
+    "type": "server_tool_call",
+    "name": "media_processing",
+    "id": "call_1",
+    "args": {},
+}
+
+_MEDIA_PROCESSING_RESULT_BLOCK = {
+    "type": "server_tool_result",
+    "tool_call_id": "call_1",
+    "status": "success",
+    "output": {},
+    "extras": {"block_type": "media_processing"},
+}
+
+
+@pytest.mark.parametrize(
+    "block", [_MEDIA_PROCESSING_CALL_BLOCK, _MEDIA_PROCESSING_RESULT_BLOCK]
+)
+def test_media_processing_blocks_are_never_replayed(block: dict[str, Any]) -> None:
+    """Media processing steps produce no parts when replayed.
+
+    The result shape in particular must not be misread as a code execution result.
+    """
+    assert _convert_to_parts([block], model=_AGENTIC_MODEL) == []
+
+
+def test_media_processing_blocks_dropped_from_v1_content() -> None:
+    """The v1 replay path drops the steps too, not just the native one."""
+    v1_message = AIMessage(
+        content=[
+            _MEDIA_PROCESSING_CALL_BLOCK,
+            _MEDIA_PROCESSING_RESULT_BLOCK,
+            {"type": "text", "text": "VX9"},
+        ],
+        response_metadata={"model_provider": "google_genai", "output_version": "v1"},
+    )
+
+    _, contents = _parse_chat_history(
+        [
+            HumanMessage(content=[_video_media_block(media_processing="AGENTIC")]),
+            v1_message,
+        ],
+        model=_AGENTIC_MODEL,
+    )
+
+    model_turn = contents[1]
+    assert model_turn.parts is not None
+    assert [part.text for part in model_turn.parts] == ["VX9"]
