@@ -1,6 +1,6 @@
 """Regression tests for BigQuery vector store filters."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Union
 from unittest.mock import MagicMock
@@ -19,6 +19,7 @@ def _store() -> BigQueryVectorStore:
         "tenant_id": "STRING",
         "priority": "INTEGER",
         "created": "DATE",
+        "start_time": "TIME",
         "updated": "TIMESTAMP",
         "amount": "NUMERIC",
     }
@@ -69,6 +70,8 @@ def test_raw_sql_requires_opt_in() -> None:
         ("tenant_id", 2024, "2024"),
         ("created", "2024-01-01", "2024-01-01"),
         ("created", date(2024, 1, 1), "2024-01-01"),
+        ("start_time", "09:30:00", "09:30:00"),
+        ("start_time", time(9, 30), "09:30:00"),
         ("updated", datetime(2024, 1, 1), "2024-01-01 00:00:00+00:00"),
         ("amount", Decimal("1.25"), "1.25"),
     ],

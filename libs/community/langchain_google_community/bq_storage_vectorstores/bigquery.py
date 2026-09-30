@@ -1,7 +1,7 @@
 import json
 import re
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from numbers import Integral, Real
 from threading import Lock, Thread
@@ -302,9 +302,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
                 parameter_type = "BOOL"
                 if not isinstance(value, bool):
                     raise ValueError(f"Invalid value for filter column: {column}")
-            elif field_type in ("DATE", "TIMESTAMP", "DATETIME"):
+            elif field_type in ("DATE", "TIMESTAMP", "DATETIME", "TIME"):
                 parameter_type = field_type
-                if not isinstance(value, (str, date)):
+                temporal_types = (str, time) if field_type == "TIME" else (str, date)
+                if not isinstance(value, temporal_types):
                     raise ValueError(f"Invalid value for filter column: {column}")
             elif field_type in ("NUMERIC", "BIGNUMERIC"):
                 parameter_type = field_type
