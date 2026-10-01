@@ -21,22 +21,30 @@ For full documentation, see the [API reference](https://reference.langchain.com/
 
 ## File input profiles
 
-Known Gemini chat models advertise generic document MIME types through
-`profile["file_mime_types"]`. The Gemini Developer API profiles include the 16
-text and application MIME types documented by the
-[Developer API input reference](https://ai.google.dev/api/generate-content#Blob),
-including `text/plain`, `text/html`, `text/csv`, and `application/json`.
-Inferred Vertex AI profiles advertise only `text/plain`, matching the
-[Vertex AI document guide](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/document-understanding).
-The profile follows the resolved backend, including environment-based selection.
-Explicit custom `profile` values, including empty dictionaries, are preserved.
-An absent list means generic file support is unknown.
+Known Gemini chat models advertise accepted document, PDF, image, audio, and
+video MIME types together through `profile["file_mime_types"]`. The legacy modality
+flags remain available for compatibility. The list follows the resolved backend
+and each model's input capabilities. Explicit custom profiles, including empty
+dictionaries, are preserved; an absent list means file support is unknown.
 
-PDF, image, audio, and video support remains represented by dedicated profile
-flags. Non-PDF documents are processed as text, not rendered visually. File Search
-indexing formats are not native chat input capabilities. Upload files separately
-and provide their URI and MIME type, or send base64 file content through standard
-LangChain file blocks.
+For fully multimodal models, the Developer API list includes 47 types: 16 text
+and application types, PDF, eight image types, 13 audio types, and nine video
+types. Sources are the [input reference](https://ai.google.dev/api/generate-content#Blob),
+[image guide](https://ai.google.dev/gemini-api/docs/image-understanding),
+[audio guide](https://ai.google.dev/gemini-api/docs/audio), and
+[video guide](https://ai.google.dev/gemini-api/docs/video-understanding).
+Vertex AI advertises 29 types: plain text, PDF, three image types, 11 audio types,
+and 13 video types (including aliases documented in REST examples). Sources are
+its [document](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/document-understanding),
+[image](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/image-understanding),
+[audio](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/audio-understanding),
+and [video](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/video-understanding)
+guides. Developer-only types such as HEIC/HEIF and HTML are not advertised on Vertex.
+These are native chat input capabilities, not File Search indexing formats or
+Live API formats. Size, duration, transport, and model-specific limits still apply.
+Non-PDF documents are processed as text, not rendered visually. Upload files
+separately and provide their URI and MIME type, or send base64 file content
+through standard LangChain file blocks.
 
 ## 📕 Releases & Versioning
 

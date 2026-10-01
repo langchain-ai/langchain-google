@@ -171,6 +171,78 @@ _GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
+_DEVELOPER_MEDIA_MIME_TYPES = {
+    "image_inputs": {
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "image/gif",
+        "image/avif",
+    },
+    "audio_inputs": {
+        "audio/wav",
+        "audio/mp3",
+        "audio/aiff",
+        "audio/aac",
+        "audio/ogg",
+        "audio/flac",
+        "audio/mpeg",
+        "audio/m4a",
+        "audio/l16",
+        "audio/opus",
+        "audio/alaw",
+        "audio/mulaw",
+        "audio/webm",
+    },
+    "video_inputs": {
+        "video/mp4",
+        "video/mpeg",
+        "video/mov",
+        "video/avi",
+        "video/x-flv",
+        "video/mpg",
+        "video/webm",
+        "video/wmv",
+        "video/3gpp",
+    },
+    "pdf_inputs": {"application/pdf"},
+}
+_VERTEX_MEDIA_MIME_TYPES = {
+    "image_inputs": {"image/png", "image/jpeg", "image/webp"},
+    "audio_inputs": {
+        "audio/x-aac",
+        "audio/flac",
+        "audio/mp3",
+        "audio/m4a",
+        "audio/mpeg",
+        "audio/mpga",
+        "audio/mp4",
+        "audio/ogg",
+        "audio/pcm",
+        "audio/wav",
+        "audio/webm",
+    },
+    "video_inputs": {
+        "video/x-flv",
+        "video/quicktime",
+        "video/mpeg",
+        "video/mpegs",
+        "video/mpg",
+        "video/mp4",
+        "video/webm",
+        "video/wmv",
+        "video/3gpp",
+        "video/mov",
+        "video/avi",
+        "video/mpegps",
+        "video/flv",
+    },
+    "pdf_inputs": {"application/pdf"},
+}
+
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Wrapper exception class for errors associated with the `Google GenAI` API.
@@ -3499,11 +3571,33 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.profile is None:
             model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
             self.profile = _get_default_model_profile(model_id)
-            if (
-                getattr(self, "_use_vertexai", False)
-                and "file_mime_types" in self.profile
-            ):
-                self.profile["file_mime_types"] = ["text/plain"]
+            if "file_mime_types" in self.profile:
+                vertexai = getattr(self, "_use_vertexai", False)
+                media_types = (
+                    _VERTEX_MEDIA_MIME_TYPES
+                    if vertexai
+                    else _DEVELOPER_MEDIA_MIME_TYPES
+                )
+                supported = set().union(
+                    *(
+                        types
+                        for flag, types in media_types.items()
+                        if self.profile.get(flag)
+                    )
+                )
+                all_media_types = set().union(
+                    *_DEVELOPER_MEDIA_MIME_TYPES.values(),
+                    *_VERTEX_MEDIA_MIME_TYPES.values(),
+                )
+                self.profile["file_mime_types"] = [
+                    mime_type
+                    for mime_type in self.profile["file_mime_types"]
+                    if mime_type in supported
+                    or (
+                        mime_type not in all_media_types
+                        and (not vertexai or mime_type == "text/plain")
+                    )
+                ]
         return self
 
     @property

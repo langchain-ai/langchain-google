@@ -346,12 +346,18 @@ def test_file_mime_types_profile(
     assert model.profile is not None
     mime_types = model.profile.get("file_mime_types")
     if vertexai:
-        assert mime_types == ["text/plain"]
+        assert mime_types is not None
+        assert len(mime_types) == 29
+        assert "text/html" not in mime_types
+        assert "image/heic" not in mime_types
+        assert "audio/x-aac" in mime_types
     else:
         assert mime_types is not None
-        assert len(mime_types) == 16
+        assert len(mime_types) == 47
         assert {"text/plain", "text/html", "application/json"} <= set(mime_types)
-        assert "application/pdf" not in mime_types
+        assert {"application/pdf", "image/heic", "audio/aiff", "video/mp4"} <= set(
+            mime_types
+        )
     assert model.profile.get("pdf_inputs")
 
 
@@ -383,7 +389,7 @@ def test_file_mime_types_environment_backend(
     assert model.profile is not None
     mime_types = model.profile.get("file_mime_types")
     assert mime_types is not None
-    assert (mime_types == ["text/plain"]) is (env_backend == "true")
+    assert (len(mime_types) == 29) is (env_backend == "true")
     assert ("application/json" in mime_types) is (env_backend == "false")
 
 
@@ -393,7 +399,7 @@ def test_file_mime_types_project_backend(monkeypatch: pytest.MonkeyPatch) -> Non
         model=MODEL_NAME, api_key=FAKE_API_KEY, project="test-project"
     )
     assert model.profile is not None
-    assert model.profile.get("file_mime_types") == ["text/plain"]
+    assert len(model.profile.get("file_mime_types", [])) == 29
 
 
 @pytest.mark.parametrize(
@@ -424,15 +430,43 @@ def test_file_mime_types_profile_isolation() -> None:
         vertexai=True,
     )
     assert vertex.profile is not None
-    assert vertex.profile.get("file_mime_types") == ["text/plain"]
+    assert len(vertex.profile.get("file_mime_types", [])) == 29
     other = ChatGoogleGenerativeAI(
         model=MODEL_NAME, api_key=FAKE_API_KEY, vertexai=False
     )
     assert other.profile is not None
     other_mime_types = other.profile.get("file_mime_types")
     assert other_mime_types is not None
-    assert len(other_mime_types) == 16
+    assert len(other_mime_types) == 47
     assert "application/json" in other_mime_types
+
+
+@pytest.mark.parametrize("vertexai", [False, True])
+@pytest.mark.parametrize(
+    ("flag", "mime_type"),
+    [
+        ("image_inputs", "image/jpeg"),
+        ("audio_inputs", "audio/wav"),
+        ("video_inputs", "video/mp4"),
+        ("pdf_inputs", "application/pdf"),
+    ],
+)
+def test_file_mime_types_modality_flags(
+    monkeypatch: pytest.MonkeyPatch, vertexai: bool, flag: str, mime_type: str
+) -> None:
+    from langchain_google_genai.chat_models import _MODEL_PROFILES
+
+    monkeypatch.setitem(_MODEL_PROFILES[MODEL_NAME], flag, False)
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        vertexai=vertexai,
+        project="test-project" if vertexai else None,
+    )
+    assert model.profile is not None
+    mime_types = model.profile.get("file_mime_types", [])
+    assert mime_type not in mime_types
+    assert "text/plain" in mime_types
 
 
 @pytest.mark.parametrize("mime_type", ["text/plain", "text/html", "application/json"])
