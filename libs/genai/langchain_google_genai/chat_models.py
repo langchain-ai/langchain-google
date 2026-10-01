@@ -73,6 +73,7 @@ from langchain_core.exceptions import (
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    OutputParserException,
 )
 from langchain_core.language_models import (
     LangSmithParams,
@@ -102,7 +103,12 @@ from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
     parse_tool_calls,
 )
-from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.outputs import (
+    ChatGeneration,
+    ChatGenerationChunk,
+    ChatResult,
+    Generation,
+)
 from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
@@ -110,6 +116,7 @@ from langchain_core.utils.function_calling import (
     convert_to_json_schema,
     convert_to_openai_tool,
 )
+from langchain_core.utils.json import parse_json_markdown
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langchain_core.utils.utils import _build_model_kwargs
 from pydantic import (
@@ -2195,6 +2202,61 @@ def _response_to_result(
         else:
             generations = [ChatGeneration(message=AIMessage(""), generation_info={})]
     return ChatResult(generations=generations, llm_output=llm_output)
+
+
+def _parse_structured_json(text: str) -> Any:
+    """Parse the model's JSON payload strictly before lenient repair.
+
+    Gemini can emit its reasoning inline in the same text part that carries the
+    JSON answer when thinking is enabled on Vertex AI. The model text then opens
+    with prose and the valid JSON follows inside a markdown fence. The default
+    parser repairs that text leniently and can return an object built from the
+    reasoning prefix instead of the answer, which structured output then accepts
+    silently.
+
+    Prefer an exact parse of the whole text, then an exact parse of the fenced
+    payload, and only fall back to lenient repair when neither is valid JSON.
+    """
+    stripped = text.strip()
+    try:
+        return parse_json_markdown(stripped, parser=json.loads)
+    except json.JSONDecodeError:
+        try:
+            return parse_json_markdown(stripped)
+        except json.JSONDecodeError as e:
+            msg = f"Invalid json output: {stripped}"
+            raise OutputParserException(msg, llm_output=stripped) from e
+
+
+class _GooglePydanticOutputParser(PydanticOutputParser[Any]):
+    """`PydanticOutputParser` that does not parse reasoning as the answer."""
+
+    def parse_result(self, result: list[Generation], *, partial: bool = False) -> Any:
+        if partial:
+            return super().parse_result(result, partial=partial)
+        return self._parse_obj(_parse_structured_json(result[0].text))
+
+
+class _GoogleJsonOutputParser(PydanticOutputParser[Any]):
+    """`JsonOutputParser` equivalent that does not parse reasoning as the answer.
+
+    Instantiated with ``pydantic_object=None`` for dict and ``TypedDict``
+    schemas, where the parsed payload is returned as-is.
+    """
+
+    def parse_result(self, result: list[Generation], *, partial: bool = False) -> Any:
+        if partial:
+            return JsonOutputParser.parse_result(self, result, partial=partial)
+        return _parse_structured_json(result[0].text)
+
+    def get_format_instructions(self) -> str:
+        if self.pydantic_object is None:
+            return JsonOutputParser.get_format_instructions(self)
+        return super().get_format_instructions()
+
+    @property
+    def _type(self) -> str:
+        return "simple_json_output_parser"
 
 
 class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
@@ -4504,15 +4566,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     schema_json = schema.schema()
                 else:
                     schema_json = schema.model_json_schema()
-                parser = PydanticOutputParser(pydantic_object=schema)
+                parser = _GooglePydanticOutputParser(pydantic_object=schema)
                 ls_schema = convert_to_json_schema(schema)
             elif is_typeddict(schema):
                 schema_json = convert_to_json_schema(schema)
-                parser = JsonOutputParser()
+                parser = _GoogleJsonOutputParser(pydantic_object=None)
                 ls_schema = schema_json
             elif isinstance(schema, dict):
                 schema_json = schema
-                parser = JsonOutputParser()
+                parser = _GoogleJsonOutputParser(pydantic_object=None)
                 # Dicts with title can be converted; raw dicts pass through as-is
                 ls_schema = (
                     convert_to_json_schema(schema) if "title" in schema else schema
