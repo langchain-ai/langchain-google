@@ -3585,6 +3585,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                         if self.profile.get(flag)
                     )
                 )
+                if (
+                    vertexai
+                    and self.profile.get("image_inputs")
+                    and self.profile.get("image_outputs")
+                ):
+                    supported.update({"image/heic", "image/heif"})
                 all_media_types = set().union(
                     *_DEVELOPER_MEDIA_MIME_TYPES.values(),
                     *_VERTEX_MEDIA_MIME_TYPES.values(),

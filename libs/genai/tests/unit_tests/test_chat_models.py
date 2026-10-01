@@ -363,6 +363,56 @@ def test_file_mime_types_profile(
 
 @pytest.mark.parametrize("vertexai", [False, True])
 @pytest.mark.parametrize(
+    "model_name",
+    [
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-image-preview",
+        "gemini-3.1-flash-lite-image",
+    ],
+)
+def test_file_mime_types_image_models(model_name: str, vertexai: bool) -> None:
+    model = ChatGoogleGenerativeAI(
+        model=model_name,
+        api_key=FAKE_API_KEY,
+        vertexai=vertexai,
+        project="test-project" if vertexai else None,
+    )
+    assert model.profile is not None
+    mime_types = set(model.profile["file_mime_types"])
+    expected = {
+        "text/plain",
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+    }
+    if model_name in {"gemini-3.1-flash-image", "gemini-3.1-flash-lite-image"}:
+        expected.update(
+            {
+                "video/x-flv",
+                "video/mpeg",
+                "video/mpg",
+                "video/mp4",
+                "video/webm",
+                "video/wmv",
+                "video/3gpp",
+                "video/mov",
+                "video/avi",
+            }
+        )
+        if vertexai:
+            expected.update({"video/quicktime", "video/mpegs"})
+    assert mime_types == expected
+    assert not any(mime_type.startswith("audio/") for mime_type in mime_types)
+
+
+@pytest.mark.parametrize("vertexai", [False, True])
+@pytest.mark.parametrize(
     "profile", [{}, {"file_mime_types": []}, {"file_mime_types": ["text/csv"]}]
 )
 def test_file_mime_types_custom_profile(

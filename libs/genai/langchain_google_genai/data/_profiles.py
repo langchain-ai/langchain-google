@@ -73,6 +73,37 @@ _FILE_MIME_TYPES = [
     "video/flv",
 ]
 
+_FILE_MIME_TYPES_2 = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+]
+
+_FILE_MIME_TYPES_3 = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "video/x-flv",
+    "video/quicktime",
+    "video/mov",
+    "video/avi",
+    "video/mpeg",
+    "video/mpegs",
+    "video/mpg",
+    "video/mp4",
+    "video/webm",
+    "video/wmv",
+    "video/3gpp",
+]
+
 _PROFILES: dict[str, dict[str, Any]] = {
     "deep-research-max-preview-04-2026": {
         "name": "Deep Research Max Preview (Apr-21-2026)",
@@ -195,6 +226,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": _FILE_MIME_TYPES_2,
     },
     "gemini-2.5-flash-lite": {
         "name": "Gemini 2.5 Flash-Lite",
@@ -352,6 +384,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": _FILE_MIME_TYPES_2,
     },
     "gemini-3-pro-image-preview": {
         "name": "Nano Banana Pro",
@@ -376,6 +409,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": _FILE_MIME_TYPES_2,
     },
     "gemini-3-pro-preview": {
         "image_url_inputs": True,
@@ -411,6 +445,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": _FILE_MIME_TYPES_3,
     },
     "gemini-3.1-flash-image-preview": {
         "name": "Nano Banana 2",
@@ -435,6 +470,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": _FILE_MIME_TYPES_2,
         "reasoning_effort_levels": [
             "minimal",
             "high",
@@ -484,7 +520,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "text_inputs": True,
         "image_inputs": True,
         "audio_inputs": False,
-        "video_inputs": False,
+        "video_inputs": True,
         "text_outputs": True,
         "image_outputs": True,
         "audio_outputs": False,
@@ -498,6 +534,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "pdf_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": _FILE_MIME_TYPES_3,
     },
     "gemini-3.1-flash-lite-preview": {
         "name": "Gemini 3.1 Flash Lite Preview",

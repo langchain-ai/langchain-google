@@ -39,7 +39,10 @@ its [document](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/
 [image](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/image-understanding),
 [audio](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/audio-understanding),
 and [video](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/video-understanding)
-guides. Developer-only types such as HEIC/HEIF and HTML are not advertised on Vertex.
+guides. HTML is not advertised on Vertex. Native image-generation chat models
+also advertise HEIC/HEIF on Vertex, matching their model-specific input tables.
+Their lists include plain text, PDF, and five image types; verified video-capable
+models additionally include video types, but no audio or generic document union.
 These are native chat input capabilities, not File Search indexing formats or
 Live API formats. Size, duration, transport, and model-specific limits still apply.
 Non-PDF documents are processed as text, not rendered visually. Upload files

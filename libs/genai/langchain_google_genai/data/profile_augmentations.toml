@@ -426,6 +426,15 @@ reasoning_effort_levels = ["low", "high"]
 reasoning_effort_default = "high"
 
 [overrides."gemini-3.1-flash-image-preview"]
+file_mime_types = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+]
 reasoning_effort_levels = ["minimal", "high"]
 reasoning_effort_default = "minimal"
 
@@ -915,3 +924,81 @@ file_mime_types = [
     "video/mpegps",
     "video/flv",
 ]
+
+[overrides."gemini-2.5-flash-image"]
+file_mime_types = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+]
+
+[overrides."gemini-3-pro-image"]
+file_mime_types = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+]
+
+[overrides."gemini-3-pro-image-preview"]
+file_mime_types = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+]
+
+[overrides."gemini-3.1-flash-image"]
+file_mime_types = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "video/x-flv",
+    "video/quicktime",
+    "video/mov",
+    "video/avi",
+    "video/mpeg",
+    "video/mpegs",
+    "video/mpg",
+    "video/mp4",
+    "video/webm",
+    "video/wmv",
+    "video/3gpp",
+]
+
+[overrides."gemini-3.1-flash-lite-image"]
+file_mime_types = [
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "video/x-flv",
+    "video/quicktime",
+    "video/mov",
+    "video/avi",
+    "video/mpeg",
+    "video/mpegs",
+    "video/mpg",
+    "video/mp4",
+    "video/webm",
+    "video/wmv",
+    "video/3gpp",
+]
+video_inputs = true
