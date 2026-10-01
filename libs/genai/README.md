@@ -19,20 +19,6 @@ pip install langchain-google-genai
 
 For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google_genai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-generative-ai).
 
-## File input profiles
-
-Gemini 3+ chat profiles expose accepted document and media MIME types through
-`profile["file_mime_types"]`, filtered by the resolved backend and model modalities.
-Legacy flags remain available; explicit profiles are preserved. Retired pre-3,
-Live, embedding and specialized non-chat models do not advertise the list.
-
-Formats follow the [Developer input reference](https://ai.google.dev/api/generate-content#Blob)
-and Vertex [document](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/document-understanding),
-[image](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/image-understanding),
-[audio](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/audio-understanding)
-and [video](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/video-understanding)
-guides. MIME support does not imply arbitrary transport or File Search support.
-
 ## 📕 Releases & Versioning
 
 See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
