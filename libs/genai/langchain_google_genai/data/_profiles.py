@@ -34,19 +34,6 @@ _FILE_MIME_TYPES = [
     "application/rtf",
 ]
 
-_REASONING_EFFORT_LEVELS = [
-    "minimal",
-    "low",
-    "medium",
-    "high",
-]
-
-_REASONING_EFFORT_LEVELS_2 = [
-    "low",
-    "medium",
-    "high",
-]
-
 _PROFILES: dict[str, dict[str, Any]] = {
     "deep-research-max-preview-04-2026": {
         "name": "Deep Research Max Preview (Apr-21-2026)",
@@ -294,7 +281,12 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "high",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -434,7 +426,12 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "minimal",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -488,7 +485,12 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "minimal",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -565,7 +567,11 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS_2,
+        "reasoning_effort_levels": [
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "high",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -593,7 +599,11 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS_2,
+        "reasoning_effort_levels": [
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "high",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -621,7 +631,12 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "medium",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -649,7 +664,12 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "minimal",
         "file_mime_types": _FILE_MIME_TYPES,
     },
@@ -701,7 +721,12 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
+        "reasoning_effort_levels": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        ],
         "reasoning_effort_default": "medium",
         "file_mime_types": _FILE_MIME_TYPES,
     },
