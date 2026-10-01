@@ -3494,11 +3494,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return self
 
     @model_validator(mode="after")
-    def _set_model_profile(self) -> Self:
-        """Set model profile if not overridden."""
+    def _set_google_genai_model_profile(self) -> Self:
+        """Set inferred model profile after backend resolution."""
         if self.profile is None:
             model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
             self.profile = _get_default_model_profile(model_id)
+            if (
+                getattr(self, "_use_vertexai", False)
+                and "file_mime_types" in self.profile
+            ):
+                self.profile["file_mime_types"] = ["text/plain"]
         return self
 
     @property

@@ -15,6 +15,38 @@ https://docs.langchain.com/oss/python/langchain/models#updating-or-overwriting-p
 
 from typing import Any
 
+_FILE_MIME_TYPES = [
+    "text/plain",
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "text/x-typescript",
+    "text/csv",
+    "text/markdown",
+    "text/x-python",
+    "text/xml",
+    "text/rtf",
+    "application/x-javascript",
+    "application/x-typescript",
+    "application/x-python-code",
+    "application/json",
+    "application/x-ipynb+json",
+    "application/rtf",
+]
+
+_REASONING_EFFORT_LEVELS = [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+]
+
+_REASONING_EFFORT_LEVELS_2 = [
+    "low",
+    "medium",
+    "high",
+]
+
 _PROFILES: dict[str, dict[str, Any]] = {
     "deep-research-max-preview-04-2026": {
         "name": "Deep Research Max Preview (Apr-21-2026)",
@@ -112,9 +144,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-2.5-flash-image": {
         "name": "Nano Banana",
@@ -164,9 +194,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-2.5-flash-preview-tts": {
         "name": "Gemini 2.5 Flash Preview TTS",
@@ -216,9 +244,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-2.5-pro-preview-tts": {
         "name": "Gemini 2.5 Pro Preview TTS",
@@ -268,16 +294,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
         "reasoning_effort_default": "high",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3-pro-image": {
         "name": "Nano Banana Pro",
@@ -415,16 +434,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
         "reasoning_effort_default": "minimal",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.1-flash-lite-image": {
         "name": "Nano Banana 2 Lite",
@@ -476,16 +488,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
         "reasoning_effort_default": "minimal",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.1-flash-live-preview": {
         "name": "Gemini 3.1 Flash Live Preview",
@@ -560,15 +565,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS_2,
         "reasoning_effort_default": "high",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.1-pro-preview-customtools": {
         "name": "Gemini 3.1 Pro Preview Custom Tools",
@@ -594,15 +593,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS_2,
         "reasoning_effort_default": "high",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.5-flash": {
         "name": "Gemini 3.5 Flash",
@@ -628,16 +621,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
         "reasoning_effort_default": "medium",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.5-flash-lite": {
         "name": "Gemini 3.5 Flash Lite",
@@ -663,16 +649,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
         "reasoning_effort_default": "minimal",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.5-live-translate-preview": {
         "name": "Gemini 3.5 Live Translate Preview",
@@ -722,16 +701,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "reasoning_effort_levels": [
-            "minimal",
-            "low",
-            "medium",
-            "high",
-        ],
+        "reasoning_effort_levels": _REASONING_EFFORT_LEVELS,
         "reasoning_effort_default": "medium",
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-3.7-flash": {
         "name": "Gemini 3.7 Flash",
@@ -757,9 +729,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-embedding-001": {
         "name": "Gemini Embedding 001",
@@ -833,9 +803,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-flash-lite-latest": {
         "name": "Gemini Flash-Lite Latest",
@@ -861,9 +829,7 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
-        "file_mime_types": [
-            "text/plain",
-        ],
+        "file_mime_types": _FILE_MIME_TYPES,
     },
     "gemini-omni-flash-preview": {
         "name": "Gemini Omni Flash Preview",

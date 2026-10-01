@@ -333,7 +333,10 @@ def test_profile() -> None:
 
 @pytest.mark.parametrize("vertexai", [False, True])
 @pytest.mark.parametrize("model_name", [MODEL_NAME, "models/gemini-2.5-flash-001"])
-def test_file_mime_types_profile(vertexai: bool, model_name: str) -> None:
+def test_file_mime_types_profile(
+    monkeypatch: pytest.MonkeyPatch, vertexai: bool, model_name: str
+) -> None:
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "false" if vertexai else "true")
     model = ChatGoogleGenerativeAI(
         model=model_name,
         api_key=FAKE_API_KEY,
@@ -341,18 +344,56 @@ def test_file_mime_types_profile(vertexai: bool, model_name: str) -> None:
         vertexai=vertexai,
     )
     assert model.profile is not None
-    assert model.profile.get("file_mime_types") == ["text/plain"]
+    mime_types = model.profile.get("file_mime_types")
+    if vertexai:
+        assert mime_types == ["text/plain"]
+    else:
+        assert mime_types is not None
+        assert len(mime_types) == 16
+        assert {"text/plain", "text/html", "application/json"} <= set(mime_types)
+        assert "application/pdf" not in mime_types
     assert model.profile.get("pdf_inputs")
 
 
-@pytest.mark.parametrize("profile", [{}, {"file_mime_types": ["text/csv"]}])
-def test_file_mime_types_custom_profile(profile: dict[str, Any]) -> None:
+@pytest.mark.parametrize("vertexai", [False, True])
+@pytest.mark.parametrize(
+    "profile", [{}, {"file_mime_types": []}, {"file_mime_types": ["text/csv"]}]
+)
+def test_file_mime_types_custom_profile(
+    profile: dict[str, Any], vertexai: bool
+) -> None:
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         api_key=FAKE_API_KEY,
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
         profile=profile,
     )
     assert model.profile == profile
+
+
+@pytest.mark.parametrize("env_backend", ["true", "false"])
+def test_file_mime_types_environment_backend(
+    monkeypatch: pytest.MonkeyPatch, env_backend: str
+) -> None:
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", env_backend)
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, api_key=FAKE_API_KEY, project="test-project"
+    )
+    assert model.profile is not None
+    mime_types = model.profile.get("file_mime_types")
+    assert mime_types is not None
+    assert (mime_types == ["text/plain"]) is (env_backend == "true")
+    assert ("application/json" in mime_types) is (env_backend == "false")
+
+
+def test_file_mime_types_project_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GOOGLE_GENAI_USE_VERTEXAI", raising=False)
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, api_key=FAKE_API_KEY, project="test-project"
+    )
+    assert model.profile is not None
+    assert model.profile.get("file_mime_types") == ["text/plain"]
 
 
 @pytest.mark.parametrize(
@@ -375,15 +416,29 @@ def test_file_mime_types_profile_isolation() -> None:
     assert model.profile is not None
     mime_types = model.profile.get("file_mime_types")
     assert isinstance(mime_types, list)
-    mime_types.append("text/csv")
-    other = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=FAKE_API_KEY)
+    mime_types.clear()
+    vertex = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+    assert vertex.profile is not None
+    assert vertex.profile.get("file_mime_types") == ["text/plain"]
+    other = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, api_key=FAKE_API_KEY, vertexai=False
+    )
     assert other.profile is not None
-    assert other.profile.get("file_mime_types") == ["text/plain"]
+    other_mime_types = other.profile.get("file_mime_types")
+    assert other_mime_types is not None
+    assert len(other_mime_types) == 16
+    assert "application/json" in other_mime_types
 
 
+@pytest.mark.parametrize("mime_type", ["text/plain", "text/html", "application/json"])
 @pytest.mark.parametrize("source", ["base64", "file_id"])
-def test_plain_text_file_parts(source: str) -> None:
-    block = {"type": "file", "mime_type": "text/plain"}
+def test_generic_file_parts(source: str, mime_type: str) -> None:
+    block = {"type": "file", "mime_type": mime_type}
     if source == "base64":
         block["base64"] = base64.b64encode(b"hello").decode()
     else:
@@ -391,11 +446,11 @@ def test_plain_text_file_parts(source: str) -> None:
     parts = _convert_to_parts([block])
     assert len(parts) == 1
     if source == "base64":
-        assert parts[0].inline_data == Blob(data=b"hello", mime_type="text/plain")
+        assert parts[0].inline_data == Blob(data=b"hello", mime_type=mime_type)
     else:
         assert parts[0].file_data is not None
         assert parts[0].file_data.file_uri == block["file_id"]
-        assert parts[0].file_data.mime_type == "text/plain"
+        assert parts[0].file_data.mime_type == mime_type
 
 
 def test_parse_history() -> None:
