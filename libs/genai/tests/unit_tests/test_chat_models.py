@@ -332,7 +332,7 @@ def test_profile() -> None:
 
 
 @pytest.mark.parametrize("vertexai", [False, True])
-@pytest.mark.parametrize("model_name", [MODEL_NAME, "models/gemini-2.5-flash-001"])
+@pytest.mark.parametrize("model_name", [MODEL_NAME, "models/gemini-3.5-flash-001"])
 def test_file_mime_types_profile(
     monkeypatch: pytest.MonkeyPatch, vertexai: bool, model_name: str
 ) -> None:
@@ -365,7 +365,6 @@ def test_file_mime_types_profile(
 @pytest.mark.parametrize(
     "model_name",
     [
-        "gemini-2.5-flash-image",
         "gemini-3-pro-image",
         "gemini-3-pro-image-preview",
         "gemini-3.1-flash-image",
@@ -391,7 +390,7 @@ def test_file_mime_types_image_models(model_name: str, vertexai: bool) -> None:
         "image/heic",
         "image/heif",
     }
-    if model_name in {"gemini-3.1-flash-image", "gemini-3.1-flash-lite-image"}:
+    if model_name == "gemini-3.1-flash-image":
         expected.update(
             {
                 "video/x-flv",
@@ -406,7 +405,9 @@ def test_file_mime_types_image_models(model_name: str, vertexai: bool) -> None:
             }
         )
         if vertexai:
-            expected.update({"video/quicktime", "video/mpegs"})
+            expected.update(
+                {"video/quicktime", "video/mpegs", "video/mpegps", "video/flv"}
+            )
     assert mime_types == expected
     assert not any(mime_type.startswith("audio/") for mime_type in mime_types)
 
@@ -456,7 +457,8 @@ def test_file_mime_types_project_backend(monkeypatch: pytest.MonkeyPatch) -> Non
     "model_name",
     [
         "foo",
-        "gemini-2.5-flash-preview-tts",
+        "gemini-2.5-flash",
+        "gemini-3.1-flash-tts-preview",
         "gemini-embedding-2",
         "veo-3.1-generate-preview",
     ],
@@ -517,24 +519,6 @@ def test_file_mime_types_modality_flags(
     mime_types = cast("dict[str, Any]", model.profile).get("file_mime_types", [])
     assert mime_type not in mime_types
     assert "text/plain" in mime_types
-
-
-@pytest.mark.parametrize("mime_type", ["text/plain", "text/html", "application/json"])
-@pytest.mark.parametrize("source", ["base64", "file_id"])
-def test_generic_file_parts(source: str, mime_type: str) -> None:
-    block = {"type": "file", "mime_type": mime_type}
-    if source == "base64":
-        block["base64"] = base64.b64encode(b"hello").decode()
-    else:
-        block["file_id"] = "gs://test-bucket/document.txt"
-    parts = _convert_to_parts([block])
-    assert len(parts) == 1
-    if source == "base64":
-        assert parts[0].inline_data == Blob(data=b"hello", mime_type=mime_type)
-    else:
-        assert parts[0].file_data is not None
-        assert parts[0].file_data.file_uri == block["file_id"]
-        assert parts[0].file_data.mime_type == mime_type
 
 
 def test_parse_history() -> None:

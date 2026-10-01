@@ -19,7 +19,6 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from copy import deepcopy
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -171,76 +170,28 @@ _GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
-_DEVELOPER_MEDIA_MIME_TYPES = {
-    "image_inputs": {
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "image/webp",
-        "image/heic",
-        "image/heif",
-        "image/gif",
-        "image/avif",
-    },
-    "audio_inputs": {
-        "audio/wav",
-        "audio/mp3",
-        "audio/aiff",
-        "audio/aac",
-        "audio/ogg",
-        "audio/flac",
-        "audio/mpeg",
-        "audio/m4a",
-        "audio/l16",
-        "audio/opus",
-        "audio/alaw",
-        "audio/mulaw",
-        "audio/webm",
-    },
-    "video_inputs": {
-        "video/mp4",
-        "video/mpeg",
-        "video/mov",
-        "video/avi",
-        "video/x-flv",
-        "video/mpg",
-        "video/webm",
-        "video/wmv",
-        "video/3gpp",
-    },
-    "pdf_inputs": {"application/pdf"},
+_DEVELOPER_ONLY_MIME_TYPES = {
+    "audio/aac",
+    "audio/aiff",
+    "audio/alaw",
+    "audio/l16",
+    "audio/mulaw",
+    "audio/opus",
+    "image/avif",
+    "image/gif",
+    "image/heic",
+    "image/heif",
+    "image/jpg",
 }
-_VERTEX_MEDIA_MIME_TYPES = {
-    "image_inputs": {"image/png", "image/jpeg", "image/webp"},
-    "audio_inputs": {
-        "audio/x-aac",
-        "audio/flac",
-        "audio/mp3",
-        "audio/m4a",
-        "audio/mpeg",
-        "audio/mpga",
-        "audio/mp4",
-        "audio/ogg",
-        "audio/pcm",
-        "audio/wav",
-        "audio/webm",
-    },
-    "video_inputs": {
-        "video/x-flv",
-        "video/quicktime",
-        "video/mpeg",
-        "video/mpegs",
-        "video/mpg",
-        "video/mp4",
-        "video/webm",
-        "video/wmv",
-        "video/3gpp",
-        "video/mov",
-        "video/avi",
-        "video/mpegps",
-        "video/flv",
-    },
-    "pdf_inputs": {"application/pdf"},
+_VERTEX_ONLY_MIME_TYPES = {
+    "audio/mp4",
+    "audio/mpga",
+    "audio/pcm",
+    "audio/x-aac",
+    "video/flv",
+    "video/mpegps",
+    "video/mpegs",
+    "video/quicktime",
 }
 
 
@@ -467,7 +418,7 @@ async def _aclassified_stream(
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
     default = _MODEL_PROFILES.get(model_name) or {}
-    return deepcopy(default)
+    return default.copy()
 
 
 def _bytes_to_base64(data: bytes) -> str:
@@ -3574,37 +3525,37 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             profile = cast("dict[str, Any]", self.profile)
             if "file_mime_types" in profile:
                 vertexai = getattr(self, "_use_vertexai", False)
-                media_types = (
-                    _VERTEX_MEDIA_MIME_TYPES
+                excluded = (
+                    _DEVELOPER_ONLY_MIME_TYPES.copy()
                     if vertexai
-                    else _DEVELOPER_MEDIA_MIME_TYPES
+                    else _VERTEX_ONLY_MIME_TYPES
                 )
-                supported = set().union(
-                    *(
-                        types
-                        for flag, types in media_types.items()
-                        if self.profile.get(flag)
-                    )
-                )
-                if (
-                    vertexai
-                    and self.profile.get("image_inputs")
-                    and self.profile.get("image_outputs")
-                ):
-                    supported.update({"image/heic", "image/heif"})
-                all_media_types = set().union(
-                    *_DEVELOPER_MEDIA_MIME_TYPES.values(),
-                    *_VERTEX_MEDIA_MIME_TYPES.values(),
-                )
+                if profile.get("image_outputs"):
+                    excluded = excluded - {"image/heic", "image/heif"}
+                    excluded = excluded | {"image/jpg", "image/gif", "image/avif"}
+                flags = {
+                    "image": "image_inputs",
+                    "audio": "audio_inputs",
+                    "video": "video_inputs",
+                    "application/pdf": "pdf_inputs",
+                }
                 profile["file_mime_types"] = [
                     mime_type
                     for mime_type in profile["file_mime_types"]
-                    if mime_type in supported
-                    or (
-                        mime_type not in all_media_types
-                        and (not vertexai or mime_type == "text/plain")
+                    if mime_type not in excluded
+                    and profile.get(
+                        flags.get(mime_type, flags.get(mime_type.split("/")[0], "")),
+                        True,
+                    )
+                    and (
+                        mime_type in flags
+                        or mime_type.split("/")[0] in {"image", "audio", "video"}
+                        or not (vertexai or profile.get("image_outputs"))
+                        or mime_type == "text/plain"
                     )
                 ]
+                if not profile["file_mime_types"]:
+                    profile.pop("file_mime_types")
         return self
 
     @property
