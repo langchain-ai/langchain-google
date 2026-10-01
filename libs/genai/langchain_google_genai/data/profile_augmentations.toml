@@ -6,7 +6,26 @@ pdf_inputs = true
 image_tool_message = true
 tool_choice = true
 
+[overrides."gemini-2.5-flash"]
+file_mime_types = ["text/plain"]
+
+[overrides."gemini-2.5-flash-lite"]
+file_mime_types = ["text/plain"]
+
+[overrides."gemini-2.5-pro"]
+file_mime_types = ["text/plain"]
+
+[overrides."gemini-flash-latest"]
+file_mime_types = ["text/plain"]
+
+[overrides."gemini-flash-lite-latest"]
+file_mime_types = ["text/plain"]
+
+[overrides."gemini-3.7-flash"]
+file_mime_types = ["text/plain"]
+
 [overrides."gemini-3-flash-preview"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "high"
 
@@ -19,29 +38,36 @@ reasoning_effort_levels = ["minimal", "high"]
 reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.1-flash-lite"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.1-flash-lite-preview"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.1-pro-preview"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["low", "medium", "high"]
 reasoning_effort_default = "high"
 
 [overrides."gemini-3.1-pro-preview-customtools"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["low", "medium", "high"]
 reasoning_effort_default = "high"
 
 [overrides."gemini-3.5-flash"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "medium"
 
 [overrides."gemini-3.5-flash-lite"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "minimal"
 
 [overrides."gemini-3.6-flash"]
+file_mime_types = ["text/plain"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "medium"

@@ -112,6 +112,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-2.5-flash-image": {
         "name": "Nano Banana",
@@ -161,6 +164,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-2.5-flash-preview-tts": {
         "name": "Gemini 2.5 Flash Preview TTS",
@@ -210,6 +216,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-2.5-pro-preview-tts": {
         "name": "Gemini 2.5 Pro Preview TTS",
@@ -266,6 +275,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "high",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3-pro-image": {
         "name": "Nano Banana Pro",
@@ -410,6 +422,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "minimal",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.1-flash-lite-image": {
         "name": "Nano Banana 2 Lite",
@@ -468,6 +483,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "minimal",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.1-flash-live-preview": {
         "name": "Gemini 3.1 Flash Live Preview",
@@ -548,6 +566,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "high",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.1-pro-preview-customtools": {
         "name": "Gemini 3.1 Pro Preview Custom Tools",
@@ -579,6 +600,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "high",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.5-flash": {
         "name": "Gemini 3.5 Flash",
@@ -611,6 +635,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "medium",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.5-flash-lite": {
         "name": "Gemini 3.5 Flash Lite",
@@ -643,6 +670,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "minimal",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.5-live-translate-preview": {
         "name": "Gemini 3.5 Live Translate Preview",
@@ -699,6 +729,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
             "high",
         ],
         "reasoning_effort_default": "medium",
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-3.7-flash": {
         "name": "Gemini 3.7 Flash",
@@ -724,6 +757,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-embedding-001": {
         "name": "Gemini Embedding 001",
@@ -797,6 +833,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-flash-lite-latest": {
         "name": "Gemini Flash-Lite Latest",
@@ -822,6 +861,9 @@ _PROFILES: dict[str, dict[str, Any]] = {
         "image_url_inputs": True,
         "image_tool_message": True,
         "tool_choice": True,
+        "file_mime_types": [
+            "text/plain",
+        ],
     },
     "gemini-omni-flash-preview": {
         "name": "Gemini Omni Flash Preview",

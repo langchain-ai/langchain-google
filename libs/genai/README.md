@@ -19,6 +19,22 @@ pip install langchain-google-genai
 
 For full documentation, see the [API reference](https://reference.langchain.com/python/integrations/langchain_google_genai/). For conceptual guides, tutorials, and examples on using these classes, see the [LangChain Docs](https://docs.langchain.com/oss/python/integrations/providers/google#google-generative-ai).
 
+## File input profiles
+
+Known Gemini chat models advertise `profile["file_mime_types"] = ["text/plain"]`.
+This conservative list covers generic document inputs supported by both the
+Gemini Developer API and Vertex AI. PDF, image, audio, and video support remains
+represented by the dedicated profile flags. An absent list means support is
+unknown, not that all file types are rejected; custom `profile` values are preserved.
+
+The [Developer API input reference](https://ai.google.dev/api/generate-content#Blob)
+lists additional text and application MIME types, but the
+[Vertex AI document guide](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/document-understanding)
+documents `application/pdf` and `text/plain` for document input. Non-PDF documents
+are processed as text, not rendered visually. File Search indexing formats are
+not native chat input capabilities. Upload files separately and provide their URI
+and MIME type, or send base64 file content through standard LangChain file blocks.
+
 ## 📕 Releases & Versioning
 
 See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.

@@ -331,6 +331,73 @@ def test_profile() -> None:
     assert model.profile == {}
 
 
+@pytest.mark.parametrize("vertexai", [False, True])
+@pytest.mark.parametrize("model_name", [MODEL_NAME, "models/gemini-2.5-flash-001"])
+def test_file_mime_types_profile(vertexai: bool, model_name: str) -> None:
+    model = ChatGoogleGenerativeAI(
+        model=model_name,
+        api_key=FAKE_API_KEY,
+        project="test-project" if vertexai else None,
+        vertexai=vertexai,
+    )
+    assert model.profile is not None
+    assert model.profile.get("file_mime_types") == ["text/plain"]
+    assert model.profile.get("pdf_inputs")
+
+
+@pytest.mark.parametrize("profile", [{}, {"file_mime_types": ["text/csv"]}])
+def test_file_mime_types_custom_profile(profile: dict[str, Any]) -> None:
+    model = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        api_key=FAKE_API_KEY,
+        profile=profile,
+    )
+    assert model.profile == profile
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "foo",
+        "gemini-2.5-flash-preview-tts",
+        "gemini-embedding-2",
+        "veo-3.1-generate-preview",
+    ],
+)
+def test_file_mime_types_unadvertised(model_name: str) -> None:
+    model = ChatGoogleGenerativeAI(model=model_name, api_key=FAKE_API_KEY)
+    assert model.profile is not None
+    assert "file_mime_types" not in model.profile
+
+
+def test_file_mime_types_profile_isolation() -> None:
+    model = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=FAKE_API_KEY)
+    assert model.profile is not None
+    mime_types = model.profile.get("file_mime_types")
+    assert isinstance(mime_types, list)
+    mime_types.append("text/csv")
+    other = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=FAKE_API_KEY)
+    assert other.profile is not None
+    assert other.profile.get("file_mime_types") == ["text/plain"]
+
+
+@pytest.mark.parametrize("source", ["base64", "file_id"])
+def test_plain_text_file_parts(source: str) -> None:
+    block = {"type": "file", "mime_type": "text/plain"}
+    if source == "base64":
+        block["base64"] = base64.b64encode(b"hello").decode()
+    else:
+        block["file_id"] = "gs://test-bucket/document.txt"
+    parts = _convert_to_parts([block])
+    assert len(parts) == 1
+    if source == "base64":
+        assert parts[0].inline_data == Blob(data=b"hello", mime_type="text/plain")
+    else:
+        assert parts[0].file_data is not None
+        assert parts[0].file_data.file_uri == block["file_id"]
+        assert parts[0].file_data.mime_type == "text/plain"
+
+
 def test_parse_history() -> None:
     convert_system_message_to_human = False
     system_input = "You're supposed to answer math questions."

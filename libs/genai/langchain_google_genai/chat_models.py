@@ -19,6 +19,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
+from copy import deepcopy
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
@@ -394,7 +395,7 @@ async def _aclassified_stream(
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
     default = _MODEL_PROFILES.get(model_name) or {}
-    return default.copy()
+    return deepcopy(default)
 
 
 def _bytes_to_base64(data: bytes) -> str:
