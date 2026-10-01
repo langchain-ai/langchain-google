@@ -3571,7 +3571,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.profile is None:
             model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
             self.profile = _get_default_model_profile(model_id)
-            if "file_mime_types" in self.profile:
+            profile = cast("dict[str, Any]", self.profile)
+            if "file_mime_types" in profile:
                 vertexai = getattr(self, "_use_vertexai", False)
                 media_types = (
                     _VERTEX_MEDIA_MIME_TYPES
@@ -3595,9 +3596,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     *_DEVELOPER_MEDIA_MIME_TYPES.values(),
                     *_VERTEX_MEDIA_MIME_TYPES.values(),
                 )
-                self.profile["file_mime_types"] = [
+                profile["file_mime_types"] = [
                     mime_type
-                    for mime_type in self.profile["file_mime_types"]
+                    for mime_type in profile["file_mime_types"]
                     if mime_type in supported
                     or (
                         mime_type not in all_media_types

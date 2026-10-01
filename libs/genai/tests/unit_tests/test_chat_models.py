@@ -344,7 +344,7 @@ def test_file_mime_types_profile(
         vertexai=vertexai,
     )
     assert model.profile is not None
-    mime_types = model.profile.get("file_mime_types")
+    mime_types = cast("dict[str, Any]", model.profile).get("file_mime_types")
     if vertexai:
         assert mime_types is not None
         assert len(mime_types) == 29
@@ -381,7 +381,7 @@ def test_file_mime_types_image_models(model_name: str, vertexai: bool) -> None:
         project="test-project" if vertexai else None,
     )
     assert model.profile is not None
-    mime_types = set(model.profile["file_mime_types"])
+    mime_types = set(cast("dict[str, Any]", model.profile)["file_mime_types"])
     expected = {
         "text/plain",
         "application/pdf",
@@ -437,7 +437,7 @@ def test_file_mime_types_environment_backend(
         model=MODEL_NAME, api_key=FAKE_API_KEY, project="test-project"
     )
     assert model.profile is not None
-    mime_types = model.profile.get("file_mime_types")
+    mime_types = cast("dict[str, Any]", model.profile).get("file_mime_types")
     assert mime_types is not None
     assert (len(mime_types) == 29) is (env_backend == "true")
     assert ("application/json" in mime_types) is (env_backend == "false")
@@ -449,7 +449,7 @@ def test_file_mime_types_project_backend(monkeypatch: pytest.MonkeyPatch) -> Non
         model=MODEL_NAME, api_key=FAKE_API_KEY, project="test-project"
     )
     assert model.profile is not None
-    assert len(model.profile.get("file_mime_types", [])) == 29
+    assert len(cast("dict[str, Any]", model.profile).get("file_mime_types", [])) == 29
 
 
 @pytest.mark.parametrize(
@@ -470,7 +470,7 @@ def test_file_mime_types_unadvertised(model_name: str) -> None:
 def test_file_mime_types_profile_isolation() -> None:
     model = ChatGoogleGenerativeAI(model=MODEL_NAME, api_key=FAKE_API_KEY)
     assert model.profile is not None
-    mime_types = model.profile.get("file_mime_types")
+    mime_types = cast("dict[str, Any]", model.profile).get("file_mime_types")
     assert isinstance(mime_types, list)
     mime_types.clear()
     vertex = ChatGoogleGenerativeAI(
@@ -480,12 +480,12 @@ def test_file_mime_types_profile_isolation() -> None:
         vertexai=True,
     )
     assert vertex.profile is not None
-    assert len(vertex.profile.get("file_mime_types", [])) == 29
+    assert len(cast("dict[str, Any]", vertex.profile).get("file_mime_types", [])) == 29
     other = ChatGoogleGenerativeAI(
         model=MODEL_NAME, api_key=FAKE_API_KEY, vertexai=False
     )
     assert other.profile is not None
-    other_mime_types = other.profile.get("file_mime_types")
+    other_mime_types = cast("dict[str, Any]", other.profile).get("file_mime_types")
     assert other_mime_types is not None
     assert len(other_mime_types) == 47
     assert "application/json" in other_mime_types
@@ -514,7 +514,7 @@ def test_file_mime_types_modality_flags(
         project="test-project" if vertexai else None,
     )
     assert model.profile is not None
-    mime_types = model.profile.get("file_mime_types", [])
+    mime_types = cast("dict[str, Any]", model.profile).get("file_mime_types", [])
     assert mime_type not in mime_types
     assert "text/plain" in mime_types
 
