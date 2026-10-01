@@ -170,6 +170,64 @@ _GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
+_FILE_MIME_TYPES = (
+    "text/plain",
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "text/x-typescript",
+    "text/csv",
+    "text/markdown",
+    "text/x-python",
+    "text/xml",
+    "text/rtf",
+    "application/x-javascript",
+    "application/x-typescript",
+    "application/x-python-code",
+    "application/json",
+    "application/x-ipynb+json",
+    "application/rtf",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/gif",
+    "image/avif",
+    "audio/wav",
+    "audio/mp3",
+    "audio/aiff",
+    "audio/aac",
+    "audio/ogg",
+    "audio/flac",
+    "audio/mpeg",
+    "audio/m4a",
+    "audio/l16",
+    "audio/opus",
+    "audio/alaw",
+    "audio/mulaw",
+    "audio/webm",
+    "video/mp4",
+    "video/mpeg",
+    "video/mov",
+    "video/avi",
+    "video/x-flv",
+    "video/mpg",
+    "video/webm",
+    "video/wmv",
+    "video/3gpp",
+    "audio/x-aac",
+    "audio/mpga",
+    "audio/mp4",
+    "audio/pcm",
+    "video/quicktime",
+    "video/mpegs",
+    "video/mpegps",
+    "video/flv",
+)
+
 _DEVELOPER_ONLY_MIME_TYPES = {
     "audio/aac",
     "audio/aiff",
@@ -416,9 +474,44 @@ async def _aclassified_stream(
         _handle_server_error(e)
 
 
-def _get_default_model_profile(model_name: str) -> ModelProfile:
-    default = _MODEL_PROFILES.get(model_name) or {}
-    return default.copy()
+def _get_default_model_profile(
+    model_name: str, *, vertexai: bool = False
+) -> ModelProfile:
+    profile = (_MODEL_PROFILES.get(model_name) or {}).copy()
+    metadata = cast("dict[str, Any]", profile)
+    if not profile:
+        return profile
+    if "file_mime_types" in metadata:
+        metadata["file_mime_types"] = list(metadata["file_mime_types"])
+        return profile
+    excluded = _DEVELOPER_ONLY_MIME_TYPES if vertexai else _VERTEX_ONLY_MIME_TYPES
+    if profile.get("image_outputs"):
+        excluded = (excluded - {"image/heic", "image/heif"}) | {
+            "image/jpg",
+            "image/gif",
+            "image/avif",
+        }
+    flags = {
+        "image": "image_inputs",
+        "audio": "audio_inputs",
+        "video": "video_inputs",
+        "application/pdf": "pdf_inputs",
+    }
+    metadata["file_mime_types"] = [
+        mime_type
+        for mime_type in _FILE_MIME_TYPES
+        if mime_type not in excluded
+        and metadata.get(
+            flags.get(mime_type, flags.get(mime_type.split("/")[0], "")), True
+        )
+        and (
+            mime_type in flags
+            or mime_type.split("/")[0] in {"image", "audio", "video"}
+            or not (vertexai or profile.get("image_outputs"))
+            or mime_type == "text/plain"
+        )
+    ]
+    return profile
 
 
 def _bytes_to_base64(data: bytes) -> str:
@@ -3521,41 +3614,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Set inferred model profile after backend resolution."""
         if self.profile is None:
             model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
-            self.profile = _get_default_model_profile(model_id)
-            profile = cast("dict[str, Any]", self.profile)
-            if "file_mime_types" in profile:
-                vertexai = getattr(self, "_use_vertexai", False)
-                excluded = (
-                    _DEVELOPER_ONLY_MIME_TYPES.copy()
-                    if vertexai
-                    else _VERTEX_ONLY_MIME_TYPES
-                )
-                if profile.get("image_outputs"):
-                    excluded = excluded - {"image/heic", "image/heif"}
-                    excluded = excluded | {"image/jpg", "image/gif", "image/avif"}
-                flags = {
-                    "image": "image_inputs",
-                    "audio": "audio_inputs",
-                    "video": "video_inputs",
-                    "application/pdf": "pdf_inputs",
-                }
-                profile["file_mime_types"] = [
-                    mime_type
-                    for mime_type in profile["file_mime_types"]
-                    if mime_type not in excluded
-                    and profile.get(
-                        flags.get(mime_type, flags.get(mime_type.split("/")[0], "")),
-                        True,
-                    )
-                    and (
-                        mime_type in flags
-                        or mime_type.split("/")[0] in {"image", "audio", "video"}
-                        or not (vertexai or profile.get("image_outputs"))
-                        or mime_type == "text/plain"
-                    )
-                ]
-                if not profile["file_mime_types"]:
-                    profile.pop("file_mime_types")
+            self.profile = _get_default_model_profile(
+                model_id, vertexai=getattr(self, "_use_vertexai", False)
+            )
         return self
 
     @property

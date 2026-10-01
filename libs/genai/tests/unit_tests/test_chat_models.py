@@ -417,8 +417,9 @@ def test_file_mime_types_image_models(model_name: str, vertexai: bool) -> None:
     "profile", [{}, {"file_mime_types": []}, {"file_mime_types": ["text/csv"]}]
 )
 def test_file_mime_types_custom_profile(
-    profile: dict[str, Any], vertexai: bool
+    monkeypatch: pytest.MonkeyPatch, profile: dict[str, Any], vertexai: bool
 ) -> None:
+    mime_types = profile.get("file_mime_types")
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         api_key=FAKE_API_KEY,
@@ -427,6 +428,20 @@ def test_file_mime_types_custom_profile(
         profile=profile,
     )
     assert model.profile == profile
+    if mime_types is not None:
+        from langchain_google_genai.chat_models import _MODEL_PROFILES
+
+        monkeypatch.setitem(_MODEL_PROFILES[MODEL_NAME], "file_mime_types", mime_types)
+        inferred = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            api_key=FAKE_API_KEY,
+            vertexai=vertexai,
+            project="test-project" if vertexai else None,
+        )
+        assert inferred.profile is not None
+        inferred_types = cast("dict[str, Any]", inferred.profile)["file_mime_types"]
+        assert inferred_types == mime_types
+        assert inferred_types is not mime_types
 
 
 @pytest.mark.parametrize("env_backend", ["true", "false"])
@@ -466,7 +481,7 @@ def test_file_mime_types_project_backend(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_file_mime_types_unadvertised(model_name: str) -> None:
     model = ChatGoogleGenerativeAI(model=model_name, api_key=FAKE_API_KEY)
     assert model.profile is not None
-    assert "file_mime_types" not in model.profile
+    assert cast("dict[str, Any]", model.profile).get("file_mime_types", []) == []
 
 
 def test_file_mime_types_profile_isolation() -> None:
