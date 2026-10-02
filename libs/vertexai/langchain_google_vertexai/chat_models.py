@@ -160,6 +160,7 @@ _allowed_params = [
     "top_p",
     "response_mime_type",
     "response_schema",
+    "response_json_schema",
     "max_output_tokens",
     "presence_penalty",
     "frequency_penalty",
@@ -2660,7 +2661,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         schema: dict | type[BaseModel] | type,
         *,
         include_raw: bool = False,
-        method: Literal["json_mode"] | None = None,
+        method: Literal["json_mode", "json_schema"] | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         """Model wrapper that returns outputs formatted to match the given schema.
@@ -2696,11 +2697,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
                 The final output is always a `dict` with keys `'raw'`, `'parsed'`, and
                 `'parsing_error'`.
-            method: If set to `'json_schema'` it will use controlled generation to
-                generate the response rather than function calling.
+            method: How the model is steered towards the schema. Defaults to
+                function calling.
 
-                Does not work with schemas with references or Pydantic models with
-                self-references.
+                * `'json_schema'`: Controlled generation via the
+                  `response_json_schema` request field, which accepts JSON Schema.
+                * `'json_mode'`: Controlled generation via the `response_schema`
+                  request field, which accepts a subset of OpenAPI 3.0.
+
+                Neither method works with Pydantic models with self-references.
 
         Returns:
             A `Runnable` that takes any chat model input.
@@ -2835,7 +2840,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         parser: OutputParserLike
         llm: Runnable
 
-        if method == "json_mode":
+        if method in ("json_mode", "json_schema"):
             if isinstance(schema, type) and is_basemodel_subclass(schema):
                 if issubclass(schema, BaseModelV1):
                     schema_json = schema.schema()
@@ -2856,12 +2861,16 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # by the Gemini API.
             schema_json = replace_defs_in_schema(schema_json)
 
-            # API does not support anyOf.
-            schema_json = _strip_nullable_anyof(schema_json)
+            if method == "json_schema":
+                schema_field = "response_json_schema"
+            else:
+                # API does not support anyOf.
+                schema_json = _strip_nullable_anyof(schema_json)
+                schema_field = "response_schema"
 
             llm = self.bind(
                 response_mime_type="application/json",
-                response_schema=schema_json,
+                **{schema_field: schema_json},
                 ls_structured_output_format={
                     "kwargs": {"method": method},
                     "schema": schema_json,
