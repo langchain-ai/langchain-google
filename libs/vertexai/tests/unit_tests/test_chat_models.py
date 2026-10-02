@@ -53,7 +53,10 @@ from langchain_google_vertexai.chat_models import (
     _parse_response_candidate,
     _validate_video_metadata,
 )
-from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from langchain_google_vertexai.model_garden import (
+    ChatAnthropicVertex,
+    _move_unsupported_sampling_params_to_extra_body,
+)
 from tests.integration_tests.conftest import (
     _DEFAULT_MODEL_NAME,
 )
@@ -359,6 +362,158 @@ def test_init_client_with_custom_model_kwargs() -> None:
 
     default_params = llm._default_params
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
+
+
+def test_anthropic_v1_sampling_params_move_to_extra_body() -> None:
+    """Sampling params use extra_body when the SDK no longer accepts them."""
+
+    class Messages:
+        def create(
+            self,
+            *,
+            max_tokens: int,
+            messages: list[dict[str, Any]],
+            model: str,
+            extra_body: dict[str, Any] | None = None,
+        ) -> None:
+            pass
+
+    params = {
+        "max_tokens": 10,
+        "messages": [],
+        "model": "claude-test",
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "top_k": 10,
+    }
+
+    _move_unsupported_sampling_params_to_extra_body(Messages(), params)
+
+    assert params == {
+        "max_tokens": 10,
+        "messages": [],
+        "model": "claude-test",
+        "extra_body": {
+            "temperature": 0.1,
+            "top_p": 0.9,
+            "top_k": 10,
+        },
+    }
+
+
+def test_anthropic_legacy_sampling_params_stay_top_level() -> None:
+    """Legacy SDK calls keep their existing request shape."""
+
+    class Messages:
+        def create(
+            self,
+            *,
+            max_tokens: int,
+            messages: list[dict[str, Any]],
+            model: str,
+            temperature: float | None = None,
+            top_p: float | None = None,
+            top_k: int | None = None,
+        ) -> None:
+            pass
+
+    params = {
+        "max_tokens": 10,
+        "messages": [],
+        "model": "claude-test",
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "top_k": 10,
+    }
+
+    _move_unsupported_sampling_params_to_extra_body(Messages(), params)
+
+    assert params == {
+        "max_tokens": 10,
+        "messages": [],
+        "model": "claude-test",
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "top_k": 10,
+    }
+
+
+def test_anthropic_v1_generate_forwards_sampling_params() -> None:
+    """The generate path forwards v1-unsupported params through extra_body."""
+
+    @dataclass
+    class Usage:
+        input_tokens: int
+        output_tokens: int
+        cache_creation_input_tokens: int | None = None
+        cache_read_input_tokens: int | None = None
+
+    class Message:
+        def __init__(self) -> None:
+            self.usage = Usage(input_tokens=1, output_tokens=1)
+
+        def model_dump(self) -> dict[str, Any]:
+            return {
+                "content": [{"type": "text", "text": "ok"}],
+                "model": "claude-test",
+                "role": "assistant",
+                "type": "message",
+                "usage": self.usage,
+            }
+
+    calls: list[dict[str, Any]] = []
+
+    class Messages:
+        def create(
+            self,
+            *,
+            max_tokens: int,
+            messages: list[dict[str, Any]],
+            model: str,
+            extra_body: dict[str, Any] | None = None,
+            **kwargs: Any,
+        ) -> Message:
+            calls.append(
+                {
+                    "max_tokens": max_tokens,
+                    "messages": messages,
+                    "model": model,
+                    "extra_body": extra_body,
+                    **kwargs,
+                }
+            )
+            return Message()
+
+    llm = ChatAnthropicVertex(
+        model_name="claude-test",
+        project="test-project",
+        location="test-location",
+        temperature=0.1,
+        top_p=0.9,
+        top_k=10,
+    )
+    llm.client = MagicMock(messages=Messages())
+
+    result = llm._generate([HumanMessage("hello")])
+
+    assert result.generations[0].message.content == "ok"
+    assert calls == [
+        {
+            "max_tokens": llm.max_output_tokens,
+            "messages": [
+                {
+                    "content": [{"text": "hello", "type": "text"}],
+                    "role": "user",
+                }
+            ],
+            "model": llm.model_name,
+            "extra_body": {
+                "temperature": 0.1,
+                "top_p": 0.9,
+                "top_k": 10,
+            },
+        }
+    ]
 
 
 @pytest.mark.parametrize(
