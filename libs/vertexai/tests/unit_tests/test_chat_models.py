@@ -2668,3 +2668,61 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_cached_content_preserves_full_resource_path() -> None:
+    """Full cachedContent resource names must not be double-prefixed."""
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        location="us-central1",
+    )
+    full_name = "projects/other-proj/locations/global/cachedContents/cache-123"
+    req_full = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content=full_name
+    )
+    assert req_full.cached_content == full_name
+
+    req_short = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content="cache-123"
+    )
+    assert (
+        req_short.cached_content
+        == "projects/test-project/locations/us-central1/cachedContents/cache-123"
+    )
+
+
+def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> None:
+    """Verify thought/cache token details are preserved across streaming chunks."""
+    from langchain_core.messages.ai import subtract_usage
+
+    from langchain_google_vertexai.chat_models import _get_usage_metadata_gemini
+
+    chunk1 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 4,
+            "thoughts_token_count": 5,
+            "total_token_count": 29,
+            "cached_content_token_count": 5,
+        }
+    )
+    chunk2 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 10,
+            "thoughts_token_count": 15,
+            "total_token_count": 45,
+            "cached_content_token_count": 5,
+        }
+    )
+    assert chunk1 is not None
+    assert chunk2 is not None
+    assert chunk2["input_tokens"] == 20
+    assert chunk2["output_tokens"] == 10
+    assert chunk2["total_tokens"] == 45
+    assert chunk2["output_token_details"] == {"reasoning": 15}
+    assert chunk2["input_token_details"] == {"cache_read": 5}
+
+    delta = subtract_usage(chunk2, chunk1)
+    assert delta["output_token_details"] == {"reasoning": 10}
