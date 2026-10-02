@@ -1,7 +1,7 @@
 """Unit tests for _anthropic_utils.py."""
 
 import base64
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from anthropic.types import (
@@ -1696,3 +1696,66 @@ def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
     ]
     _, formatted = _format_messages_anthropic(messages, project="test-project")
     assert formatted[-1]["content"][0]["thinking"] == "considering...  "
+
+
+@patch("langchain_google_vertexai._image_utils.requests.get")
+def test_format_messages_anthropic_threads_media_fetch_timeout(
+    mock_get: Mock,
+) -> None:
+    """A ``timeout`` passed to ``_format_messages_anthropic`` must reach the
+    ``requests.get`` that fetches a remote image URL.
+
+    Without this end-to-end threading the model's configured timeout never
+    bounds media fetches on the Claude-on-Vertex path, so a stalled URL can
+    hang request preparation indefinitely (mirrors the genai fix in #1693).
+    """
+    from langchain_core.messages import BaseMessage
+
+    response = Mock()
+    response.ok = True
+    response.content = b"image-bytes"
+    mock_get.return_value = response
+
+    messages: list[BaseMessage] = [
+        HumanMessage(
+            content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.png"},
+                }
+            ]
+        )
+    ]
+
+    _format_messages_anthropic(messages, project=None, timeout=2.5)
+
+    mock_get.assert_called_once_with("https://example.com/image.png", timeout=2.5)
+
+
+@patch("langchain_google_vertexai._image_utils.requests.get")
+def test_format_messages_anthropic_no_media_timeout_by_default(
+    mock_get: Mock,
+) -> None:
+    """When no ``timeout`` is supplied the remote fetch stays backwards
+    compatible: ``requests.get`` is called without a ``timeout`` kwarg."""
+    from langchain_core.messages import BaseMessage
+
+    response = Mock()
+    response.ok = True
+    response.content = b"image-bytes"
+    mock_get.return_value = response
+
+    messages: list[BaseMessage] = [
+        HumanMessage(
+            content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.png"},
+                }
+            ]
+        )
+    ]
+
+    _format_messages_anthropic(messages, project=None)
+
+    mock_get.assert_called_once_with("https://example.com/image.png")

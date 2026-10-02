@@ -4,7 +4,6 @@ from typing import Any, cast
 from langchain_core.messages import BaseMessage
 from vertexai.preview import caching
 
-from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _parse_chat_history_gemini,
@@ -55,7 +54,7 @@ def create_context_cache(
         String with the identificator of the created cache.
     """
     system_instruction, contents = _parse_chat_history_gemini(
-        messages, ImageBytesLoader(project=model.project)
+        messages, model._image_bytes_loader_client
     )
 
     if tool_config:
