@@ -19,7 +19,10 @@ from langchain_google_genai._common import (
     _BaseGoogleGenerativeAI,
 )
 from langchain_google_genai._version import __version__
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
+from langchain_google_genai.chat_models import (
+    ChatGoogleGenerativeAI,
+    _is_gemini_3_or_later,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     """
 
     client: Any = None
+    temperature: float | None = None
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -73,6 +77,10 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
+        if "temperature" not in self.model_fields_set and not _is_gemini_3_or_later(
+            self.model
+        ):
+            self.temperature = 0.7
         if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 

@@ -54,7 +54,7 @@ from langchain_core.messages import (
     is_data_content_block,
 )
 from langchain_core.messages import content as lc_content
-from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.ai import UsageMetadata, subtract_usage
 from langchain_core.messages.tool import (
     tool_call_chunk,
     tool_call as create_tool_call,
@@ -2395,6 +2395,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 logger.warning(message)
 
+        if (
+            cached_content.startswith("projects/")
+            or "/cachedContents/" in cached_content
+        ):
+            return cached_content
         return (
             f"projects/{self.project}/locations/{self.location}/"
             f"cachedContents/{cached_content}"
@@ -2996,13 +3001,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         # cumulative sums of token counts.
         total_lc_usage = _get_usage_metadata_gemini(usage_metadata)
         if total_lc_usage and prev_total_usage:
-            lc_usage: UsageMetadata | None = UsageMetadata(
-                input_tokens=total_lc_usage["input_tokens"]
-                - prev_total_usage["input_tokens"],
-                output_tokens=total_lc_usage["output_tokens"]
-                - prev_total_usage["output_tokens"],
-                total_tokens=total_lc_usage["total_tokens"]
-                - prev_total_usage["total_tokens"],
+            lc_usage: UsageMetadata | None = subtract_usage(
+                total_lc_usage, prev_total_usage
             )
         else:
             lc_usage = total_lc_usage
@@ -3039,13 +3039,19 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
     """Get `UsageMetadata` from raw response metadata."""
     input_tokens = raw_metadata.get("prompt_token_count", 0)
-    output_tokens = raw_metadata.get("candidates_token_count", 0)
-    total_tokens = raw_metadata.get("total_token_count", 0)
     thought_tokens = raw_metadata.get("thoughts_token_count", 0)
+    output_tokens = raw_metadata.get("candidates_token_count", 0) + thought_tokens
+    total_tokens = raw_metadata.get("total_token_count", 0)
     cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
     if all(
         count == 0
-        for count in [input_tokens, output_tokens, total_tokens, cache_read_tokens]
+        for count in [
+            input_tokens,
+            output_tokens,
+            total_tokens,
+            cache_read_tokens,
+            thought_tokens,
+        ]
     ):
         return None
     if thought_tokens > 0:

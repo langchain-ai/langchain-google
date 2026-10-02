@@ -2668,3 +2668,46 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_cached_content_preserves_full_resource_path() -> None:
+    """Full cachedContent resource names must not be double-prefixed."""
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        location="us-central1",
+    )
+    full_name = "projects/other-proj/locations/global/cachedContents/cache-123"
+    req_full = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content=full_name
+    )
+    assert req_full.cached_content == full_name
+
+    req_short = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content="cache-123"
+    )
+    assert (
+        req_short.cached_content
+        == "projects/test-project/locations/us-central1/cachedContents/cache-123"
+    )
+
+
+def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> None:
+    """Verify thought tokens in output_tokens and streaming usage details."""
+    from langchain_google_vertexai.chat_models import _get_usage_metadata_gemini
+
+    usage = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 10,
+            "thoughts_token_count": 15,
+            "total_token_count": 45,
+            "cached_content_token_count": 5,
+        }
+    )
+    assert usage is not None
+    assert usage["input_tokens"] == 20
+    assert usage["output_tokens"] == 25
+    assert usage["total_tokens"] == 45
+    assert usage["output_token_details"] == {"reasoning": 15}
+    assert usage["input_token_details"] == {"cache_read": 5}
