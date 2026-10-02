@@ -2532,8 +2532,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
     ) -> list[GapicTool] | None:
         if tools and functions:
             logger.warning(
-                "Binding tools and functions together is not supported.",
-                "Only tools will be used",
+                "Binding tools and functions together is not supported. "
+                "Only tools will be used."
             )
         if tools:
             return [_format_to_gapic_tool(tools)]
