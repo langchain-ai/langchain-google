@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -117,3 +118,81 @@ def test_load_documents_from_ids_dispatches_pdfs() -> None:
     mock_sheet.assert_not_called()
     mock_doc.assert_not_called()
     assert result == [pdf_doc]
+
+
+def _make_loader_with_writable_paths(tmp_path: Path) -> GoogleDriveLoader:
+    """Build a loader whose service_account_key / token_path do NOT exist
+    and whose credentials_path exists (so the field validator passes)."""
+    creds_file = tmp_path / "credentials.json"
+    creds_file.write_text("{}")
+    return GoogleDriveLoader(
+        folder_id="dummy_folder",
+        credentials_path=creds_file,
+        token_path=tmp_path / "token.json",
+        service_account_key=tmp_path / "service-account.json",
+    )
+
+
+def test_load_credentials_uses_installed_app_flow_when_adc_not_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Desktop OAuth path: with `GOOGLE_APPLICATION_CREDENTIALS` unset and a
+    `credentials_path` supplied, `_load_credentials` must drive `InstalledAppFlow`
+    and must NOT fall back to `google.auth.default()` (which requires ADC and
+    would crash for desktop OAuth users -- regression test for the inverted
+    `not in os.environ` check)."""
+    pytest.importorskip("google_auth_oauthlib")
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    loader = _make_loader_with_writable_paths(tmp_path)
+
+    fake_creds = MagicMock()
+    fake_creds.to_json.return_value = "{}"
+    fake_flow = MagicMock()
+    fake_flow.run_local_server.return_value = fake_creds
+
+    with (
+        patch(
+            "google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file",
+            return_value=fake_flow,
+        ) as mock_from_file,
+        patch("google.auth.default") as mock_default,
+    ):
+        result = loader._load_credentials()
+
+    mock_from_file.assert_called_once()
+    mock_default.assert_not_called()
+    assert result is fake_creds
+    assert loader.token_path.exists()
+
+
+def test_load_credentials_uses_default_when_adc_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADC path: with `GOOGLE_APPLICATION_CREDENTIALS` set, `_load_credentials`
+    must use `google.auth.default()` and must NOT trigger the InstalledAppFlow
+    browser-OAuth dance."""
+    pytest.importorskip("google_auth_oauthlib")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "adc.json"))
+    loader = _make_loader_with_writable_paths(tmp_path)
+
+    fake_default_creds = MagicMock()
+    fake_scoped_creds = MagicMock()
+
+    with (
+        patch(
+            "google.auth.default",
+            return_value=(fake_default_creds, "test-project"),
+        ) as mock_default,
+        patch(
+            "google.auth.credentials.with_scopes_if_required",
+            return_value=fake_scoped_creds,
+        ),
+        patch(
+            "google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file",
+        ) as mock_flow,
+    ):
+        result = loader._load_credentials()
+
+    mock_default.assert_called_once()
+    mock_flow.assert_not_called()
+    assert result is fake_scoped_creds
