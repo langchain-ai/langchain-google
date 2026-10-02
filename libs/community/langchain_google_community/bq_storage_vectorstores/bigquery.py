@@ -321,6 +321,31 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             )
         return " AND ".join(expressions), parameters
 
+    def _vector_search_options(self, options: Optional[dict[str, Any]]) -> str:
+        """Serialize only supported VECTOR_SEARCH options into a SQL literal."""
+        if options is None:
+            return "{}"
+        if not isinstance(options, dict):
+            raise ValueError("VECTOR_SEARCH options must be a dictionary")
+        if set(options) - {"fraction_lists_to_search", "use_brute_force"}:
+            raise ValueError("Unsupported VECTOR_SEARCH option")
+        validated_options = {}
+        if "fraction_lists_to_search" in options:
+            fraction = options["fraction_lists_to_search"]
+            if (
+                isinstance(fraction, bool)
+                or not isinstance(fraction, Real)
+                or not 0 < float(fraction) < 1
+            ):
+                raise ValueError("fraction_lists_to_search must be between 0 and 1")
+            validated_options["fraction_lists_to_search"] = float(fraction)
+        if "use_brute_force" in options:
+            brute_force = options["use_brute_force"]
+            if not isinstance(brute_force, bool):
+                raise ValueError("use_brute_force must be a boolean")
+            validated_options["use_brute_force"] = brute_force
+        return json.dumps(validated_options)
+
     def _create_search_query(
         self,
         num_embeddings: int,
@@ -330,7 +355,10 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
         fields_to_exclude: Optional[List[str]] = None,
         options: Optional[dict[str, Any]] = None,
     ) -> str:
-        # Get where filter
+        if isinstance(k, bool) or not isinstance(k, Integral) or k <= 0:
+            raise ValueError("k must be a positive integer")
+        k = int(k)
+        options_json = self._vector_search_options(options)
         where_filter_expr, _ = self._create_filters(filter)
 
         if table_to_query is not None:
@@ -373,7 +401,7 @@ class BigQueryVectorStore(BaseBigQueryVectorStore):
             (SELECT row_num, {self.embedding_field} FROM embeddings),
             distance_type => "{self.distance_type}",
             top_k => {k},
-            options => '{json.dumps(options if options else {})}'
+            options => '{options_json}'
         )
         """
         # Wrap the Inner Query with an Outer SELECT to eliminate "base." column prefix
