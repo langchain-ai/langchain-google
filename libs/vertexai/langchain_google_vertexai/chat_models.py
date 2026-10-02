@@ -144,6 +144,8 @@ from langchain_google_vertexai.functions_utils import (
     _ToolsType,
     _format_to_gapic_tool,
     _ToolType,
+    coerce_json_encoded_args,
+    get_container_arg_types,
 )
 from pydantic import ConfigDict
 from pydantic.v1 import BaseModel as BaseModelV1
@@ -764,18 +766,38 @@ def _collapse_text_content(content: list[Any]) -> str | list[Any]:
 def _parse_response_candidate(
     response_candidate: Candidate | VertexCandidate,
     streaming: Literal[False] = False,
+    *,
+    container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
 ) -> AIMessage: ...
 
 
 @overload
 def _parse_response_candidate(
-    response_candidate: Candidate | VertexCandidate, streaming: Literal[True]
+    response_candidate: Candidate | VertexCandidate,
+    streaming: Literal[True],
+    *,
+    container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
 ) -> AIMessageChunk: ...
 
 
 def _parse_response_candidate(
-    response_candidate: Candidate | VertexCandidate, streaming: bool = False
+    response_candidate: Candidate | VertexCandidate,
+    streaming: bool = False,
+    *,
+    container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
 ) -> AIMessage:
+    """Parse a response candidate from Vertex into an `AIMessage`.
+
+    Args:
+        response_candidate: The candidate from the API response.
+        streaming: Whether this is a streaming response.
+        container_arg_types: Array- and object-typed args declared by the tools sent
+            with the request, as returned by `get_container_arg_types`. Used to
+            decode container args the model returned as JSON strings.
+
+    Returns:
+        The parsed `AIMessage` or `AIMessageChunk`.
+    """
     content: None | str | list[str | dict[str, Any]] = None
     additional_kwargs = {}
     tool_calls = []
@@ -813,6 +835,11 @@ def _parse_response_candidate(
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
             function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            # Decode container args the model returned as JSON strings
+            function_call_args_dict = coerce_json_encoded_args(
+                function_call_args_dict,
+                (container_arg_types or {}).get(part.function_call.name or ""),
+            )
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
@@ -2419,7 +2446,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             timeout=timeout,
             **kwargs,
         )
-        return self._gemini_response_to_chat_result(response)
+        return self._gemini_response_to_chat_result(
+            response, container_arg_types=get_container_arg_types(request.tools)
+        )
 
     async def _agenerate_gemini(
         self,
@@ -2428,20 +2457,21 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        request = self._prepare_request_gemini(messages=messages, stop=stop, **kwargs)
         timeout = kwargs.pop("timeout", self.timeout)
         response = await _acompletion_with_retry(
             self.async_prediction_client.generate_content,
             max_retries=self.max_retries,
             run_manager=run_manager,
             wait_exponential_kwargs=self.wait_exponential_kwargs,
-            request=self._prepare_request_gemini(
-                messages=messages, stop=stop, **kwargs
-            ),
+            request=request,
             metadata=self.default_metadata,
             timeout=timeout,
             **kwargs,
         )
-        return self._gemini_response_to_chat_result(response)
+        return self._gemini_response_to_chat_result(
+            response, container_arg_types=get_container_arg_types(request.tools)
+        )
 
     def get_num_tokens(self, text: str) -> int:
         """Get the number of tokens present in the text.
@@ -2616,10 +2646,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             timeout=timeout,
             **kwargs,
         )
+        container_arg_types = get_container_arg_types(request.tools)
         total_lc_usage = None
         for response_chunk in response_iter:
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
-                response_chunk, prev_total_usage=total_lc_usage
+                response_chunk,
+                prev_total_usage=total_lc_usage,
+                container_arg_types=container_arg_types,
             )
             if run_manager and isinstance(chunk.message.content, str):
                 run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
@@ -2646,10 +2679,13 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             timeout=timeout,
             **kwargs,
         )
+        container_arg_types = get_container_arg_types(request.tools)
         total_lc_usage = None
         async for response_chunk in await response_iter:
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
-                response_chunk, prev_total_usage=total_lc_usage
+                response_chunk,
+                prev_total_usage=total_lc_usage,
+                container_arg_types=container_arg_types,
             )
             if run_manager and isinstance(chunk.message.content, str):
                 await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
@@ -2945,7 +2981,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         return self.bind(tools=formatted_tools, **kwargs)
 
     def _gemini_response_to_chat_result(
-        self, response: GenerationResponse
+        self,
+        response: GenerationResponse,
+        *,
+        container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
     ) -> ChatResult:
         generations = []
         usage = proto.Message.to_dict(
@@ -2957,7 +2996,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             info = get_generation_info(
                 candidate, usage_metadata=usage, logprobs=logprobs
             )
-            message = _parse_response_candidate(candidate)
+            message = _parse_response_candidate(
+                candidate, container_arg_types=container_arg_types
+            )
             message.response_metadata["model_provider"] = "google_vertexai"
             message.response_metadata["model_name"] = self.model_name
             if "grounding_metadata" in info:
@@ -2985,6 +3026,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         self,
         response_chunk: GenerationResponse,
         prev_total_usage: UsageMetadata | None = None,
+        *,
+        container_arg_types: Mapping[str, Mapping[str, str]] | None = None,
     ) -> tuple[ChatGenerationChunk, UsageMetadata | None]:
         # return an empty completion message if there's no candidates
         usage_metadata = proto.Message.to_dict(
@@ -3013,7 +3056,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             generation_info = {}
         else:
             top_candidate = response_chunk.candidates[0]
-            message = _parse_response_candidate(top_candidate, streaming=True)
+            message = _parse_response_candidate(
+                top_candidate, True, container_arg_types=container_arg_types
+            )
             if lc_usage:
                 message.usage_metadata = lc_usage
             generation_info = get_generation_info(
