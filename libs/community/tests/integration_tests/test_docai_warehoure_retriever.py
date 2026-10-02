@@ -10,7 +10,7 @@ from langchain_google_community import DocumentAIWarehouseRetriever
 
 @pytest.mark.extended
 @pytest.mark.skip(reason="CI/CD not ready.")
-def test_google_documentai_warehoure_retriever() -> None:
+async def test_google_documentai_warehoure_retriever() -> None:
     """In order to run this test, you should provide a project_id and user_ldap.
 
     Example:
@@ -20,7 +20,7 @@ def test_google_documentai_warehoure_retriever() -> None:
     project_number = os.environ["PROJECT_NUMBER"]
     user_ldap = os.environ["USER_LDAP"]
     docai_wh_retriever = DocumentAIWarehouseRetriever(project_number=project_number)
-    documents = docai_wh_retriever.invoke(
+    documents = await docai_wh_retriever.ainvoke(
         "What are Alphabet's Other Bets?", user_ldap=user_ldap
     )
     assert len(documents) > 0

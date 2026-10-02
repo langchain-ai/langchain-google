@@ -25,7 +25,7 @@ def check_tennis_score(player: str) -> str:
 
 
 @pytest.mark.flaky(retries=3, delay=1)
-def test_multiple_tools(backend_config: dict) -> None:
+async def test_multiple_tools(backend_config: dict) -> None:
     tools = [check_weather, check_live_traffic, check_tennis_score]
 
     model = ChatGoogleGenerativeAI(
@@ -37,12 +37,12 @@ def test_multiple_tools(backend_config: dict) -> None:
 
     input_ = "What is the latest tennis score for Leonid?"
 
-    result = model_with_tools.invoke(input_)
+    result = await model_with_tools.ainvoke(input_)
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0]["name"] == "check_tennis_score"
 
 
-def test_parallel_tool_calls(backend_config: dict) -> None:
+async def test_parallel_tool_calls(backend_config: dict) -> None:
     """Test that the model can make multiple tool calls in a single response."""
     tools = [check_weather, check_live_traffic]
 
@@ -59,7 +59,7 @@ def test_parallel_tool_calls(backend_config: dict) -> None:
         "Please call both tools to get this information."
     )
 
-    result = model_with_tools.invoke(input_)
+    result = await model_with_tools.ainvoke(input_)
 
     # Model should make at least 2 tool calls
     assert len(result.tool_calls) >= 2, (
