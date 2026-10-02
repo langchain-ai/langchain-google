@@ -1501,6 +1501,41 @@ def test_optional_dict_schema_validation() -> None:
     )
 
 
+def test_format_to_genai_function_declaration_none_parameters() -> None:
+    """A `None` `parameters` value must not raise `AttributeError`.
+
+    Regression test for a dict tool whose `parameters` key is present but set
+    to `None` (e.g. produced by `bind_tools`'s fallback path for a titleless
+    dict schema), which previously crashed on `tool["parameters"].get(...)`.
+    """
+    tool = {"name": "MISSING_NAME", "parameters": None}
+    genai_func = _format_to_genai_function_declaration(tool)
+    assert genai_func.name == "MISSING_NAME"
+
+
+def test_convert_to_genai_function_declarations_none_parameters() -> None:
+    """End-to-end regression test for issue #1807.
+
+    `convert_to_genai_function_declarations` is called a second time on the
+    stored `{"function_declarations": [...]}` tools during request
+    preparation. If a declaration in that list has `parameters: None` (as
+    produced by `bind_tools`'s fallback path for a titleless dict schema),
+    this previously raised `AttributeError` instead of a `ValueError` or a
+    usable (if incomplete) declaration.
+    """
+    tools = [
+        {
+            "function_declarations": [
+                {"name": "MISSING_NAME", "parameters": None},
+            ]
+        }
+    ]
+    result = convert_to_genai_function_declarations(tools)
+    assert len(result) == 1
+    assert result[0].function_declarations is not None
+    assert result[0].function_declarations[0].name == "MISSING_NAME"
+
+
 def test_tool_field_enum_array() -> None:
     class ToolInfo(BaseModel):
         kind: list[Literal["foo", "bar"]]
