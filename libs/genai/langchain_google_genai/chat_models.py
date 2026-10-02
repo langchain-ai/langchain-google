@@ -2156,6 +2156,11 @@ def _response_to_result(
         except AttributeError:
             pass
 
+        if candidate.url_context_metadata:
+            url_context_metadata = candidate.url_context_metadata.model_dump()
+            generation_info["url_context_metadata"] = url_context_metadata
+            message.response_metadata["url_context_metadata"] = url_context_metadata
+
         message.usage_metadata = lc_usage
 
         if stream:
