@@ -12,6 +12,7 @@ from langchain_google_genai._enums import (
     HarmCategory,
     MediaResolution,
     Modality,
+    ServiceTier,
 )
 
 _TELEMETRY_TAG = "remote_reasoning_engine"
@@ -570,6 +571,32 @@ class _BaseGoogleGenerativeAI(BaseModel):
     Can be overridden per-request via invoke kwargs.
 
     See: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/add-labels-to-api-calls
+    """
+
+    service_tier: ServiceTier | None = Field(default=None)
+    """Pricing and performance tier to bill the request against.
+
+    `'flex'` trades latency and best-effort availability for a lower price, and
+    `'priority'` pays a premium for lower latency. Leaving this unset bills at the
+    standard tier.
+
+    The two backends take the tier over different channels (a body field on the Gemini
+    Developer API, a request header on Vertex AI); the value here is the same
+    either way.
+
+    Can be overridden per-request via invoke kwargs.
+
+    !!! note
+
+        A tier has to be enabled for the project and model being called. Vertex AI
+        rejects a request for a tier it cannot serve, so an unsupported combination
+        surfaces as a `400`.
+
+    Gemini Developer API: https://ai.google.dev/gemini-api/docs/flex-inference and
+    https://ai.google.dev/gemini-api/docs/priority-inference
+
+    Vertex AI: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/flex-paygo and
+    https://docs.cloud.google.com/vertex-ai/generative-ai/docs/priority-paygo
     """
 
     @model_validator(mode="before")
