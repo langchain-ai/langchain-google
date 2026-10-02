@@ -819,7 +819,7 @@ wheels = [
 
 [[package]]
 name = "google-cloud-aiplatform"
-version = "1.159.0"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -836,9 +836,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/fd/233c98fd7cbabb657d6fd96ed8cb8006614c89f122f10ce9da5b73d88e54/google_cloud_aiplatform-1.159.0.tar.gz", hash = "sha256:cfd0df4511d07385801e024d084ea47c0c5b0cf4af0d90dc48797b67ce49847a", size = 11169829, upload-time = "2026-06-30T22:55:48.06Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/da/492c73aa5d2584c132aea33dacfd132866952e47c3dbb9e4297f3774d5c6/google_cloud_aiplatform-2.2.0.tar.gz", hash = "sha256:adafcc07cd36289664ae36891137ad28f81a6372a3d698648646f2a9ca6e1c7d", size = 11339673, upload-time = "2026-09-23T17:29:23.283Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/71/169d3ee76d2c3aa89f2ca6cb613d42516ee8976dcb52c6199a1e9785f99a/google_cloud_aiplatform-1.159.0-py2.py3-none-any.whl", hash = "sha256:a2ee8eab3c50a66f4a3330948c4475531863a9085f0cdb907387f8084bf2d8fd", size = 9366792, upload-time = "2026-06-30T22:55:44.887Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/9c/ebfa67010c20efa0b8a16bd689fe9bc336d7d228012abb5440d63b35a29f/google_cloud_aiplatform-2.2.0-py2.py3-none-any.whl", hash = "sha256:8de28d03dcb0887fce4a77557085f4d308758526b76cfd53820420ae82a68c80", size = 9459182, upload-time = "2026-09-23T17:29:19.859Z" },
 ]
 
 [[package]]
@@ -1512,7 +1512,7 @@ requires-dist = [
     { name = "google-auth-oauthlib", marker = "extra == 'calendar'", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-auth-oauthlib", marker = "extra == 'drive'", specifier = ">=1.2.0,<2.0.0" },
     { name = "google-auth-oauthlib", marker = "extra == 'gmail'", specifier = ">=1.2.0,<2.0.0" },
-    { name = "google-cloud-aiplatform", marker = "extra == 'featurestore'", specifier = ">=1.56.0,<2.0.0" },
+    { name = "google-cloud-aiplatform", marker = "extra == 'featurestore'", specifier = ">=1.56.0,<3.0.0" },
     { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.21.0,<4.0.0" },
     { name = "google-cloud-bigquery-storage", marker = "extra == 'bigquery'", specifier = ">=2.6.0,<3.0.0" },
     { name = "google-cloud-bigquery-storage", marker = "extra == 'featurestore'", specifier = ">=2.6.0,<3.0.0" },
@@ -1565,7 +1565,7 @@ test = [
     { name = "pytest-socket", specifier = ">=0.7.0,<1.0.0" },
     { name = "pytest-timeout", specifier = ">=2.3.1,<3.0.0" },
     { name = "pytest-watcher", specifier = ">=0.3.4,<1.0.0" },
-    { name = "syrupy", specifier = ">=4.0.2,<6.0.0" },
+    { name = "syrupy", specifier = ">=4.0.2,<7.0.0" },
 ]
 test-integration = [{ name = "pillow", specifier = ">=12.0.0,<13.0.0" }]
 typing = [
@@ -3137,14 +3137,14 @@ wheels = [
 
 [[package]]
 name = "syrupy"
-version = "5.3.4"
+version = "6.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/81/17/95753634cd02a892cbc74d8df9c15f5ad053885a913eb11aa6061f278344/syrupy-5.3.4.tar.gz", hash = "sha256:10f192655a2d42473ad5772653e64b281f6823fe5e30458d92f8ca8e882884c1", size = 87078, upload-time = "2026-06-26T10:55:42.522Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/2c/8ffc1414d1951895d0d5b7dc83c0b079ebc48c3bf27ffbb0064646367500/syrupy-6.1.1.tar.gz", hash = "sha256:7e584a8df4ede6dd3c1c44a77f9edc46186b6767a73dea6f0083044946839a59", size = 109705, upload-time = "2026-09-13T20:25:21.599Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/7a/254f95860cebb6d51ddb3e815ee30085e8c8a3ba6df1f44ef4605b385621/syrupy-5.3.4-py3-none-any.whl", hash = "sha256:409348aa20afc4b7dab7c965331de0cd79ab46977877fb189014ce9294e947e5", size = 53103, upload-time = "2026-06-26T10:55:41.007Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/b5/bf2a8a335a6a813869dd482cedbcde252f582b5afbfe50eb78ec09962800/syrupy-6.1.1-py3-none-any.whl", hash = "sha256:6ac9ac6a42d70ae44156f5f157a9563b9bb8cc96dcf9364327f330463bff889a", size = 63436, upload-time = "2026-09-13T20:25:20.294Z" },
 ]
 
 [[package]]
