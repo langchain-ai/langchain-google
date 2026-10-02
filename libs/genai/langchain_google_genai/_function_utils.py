@@ -58,6 +58,8 @@ _ALLOWED_SCHEMA_FIELDS = [
     "minItems",
     "maxItems",
     "title",
+    "example",
+    "examples",
 ]
 _ALLOWED_SCHEMA_FIELDS_SET = set(_ALLOWED_SCHEMA_FIELDS)
 
@@ -118,6 +120,11 @@ def _format_json_schema_to_gapic(schema: dict[str, Any]) -> dict[str, Any]:
             else:
                 msg = f"Invalid type: {value}"
                 raise ValueError(msg)
+        elif key == "examples":
+            # google.genai.types.Schema.example is singular; JSON Schema's plural
+            # "examples" list is collapsed to its first element.
+            if value:
+                converted_schema["example"] = value[0]
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
             logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
@@ -176,6 +183,10 @@ def _dict_to_genai_schema(
             )  # type: ignore[assignment]
         if "enum" in formatted_schema:
             schema_dict["enum"] = formatted_schema["enum"]
+        if "format" in formatted_schema:
+            schema_dict["format"] = formatted_schema["format"]
+        if "example" in formatted_schema:
+            schema_dict["example"] = formatted_schema["example"]
         if "nullable" in formatted_schema:
             schema_dict["nullable"] = formatted_schema["nullable"]
         if "anyOf" in formatted_schema:
@@ -514,6 +525,9 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         original_description = v.get("description")
         original_enum = v.get("enum")
         original_items = v.get("items")
+        original_example = v.get("example")
+        if original_example is None and v.get("examples"):
+            original_example = v["examples"][0]
 
         if v.get("anyOf") and all(
             anyOf_type.get("type") != "null" for anyOf_type in v.get("anyOf", [])
@@ -560,10 +574,31 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
         if v.get("enum"):
             properties_item["enum"] = v["enum"]
 
+        if (
+            properties_item.get("type")
+            in (types.Type.INTEGER, types.Type.NUMBER, types.Type.BOOLEAN)
+            and properties_item.get("enum") is not None
+        ):
+            # Gemini's Schema.enum only accepts string values, even when the
+            # underlying type is INTEGER/NUMBER/BOOLEAN. `format: "enum"` is
+            # required for the API to treat these as enum constraints.
+            properties_item["enum"] = [str(enum_value) for enum_value in v["enum"]]
+            properties_item["format"] = "enum"
+        elif v.get("format"):
+            properties_item["format"] = v["format"]
+
         # Prefer description from the filtered schema, fall back to original
         description = v.get("description") or original_description
         if description and isinstance(description, str):
             properties_item["description"] = description
+
+        example = v.get("example")
+        if example is None and v.get("examples"):
+            example = v["examples"][0]
+        if example is None:
+            example = original_example
+        if example is not None:
+            properties_item["example"] = example
 
         if (
             properties_item.get("type") == types.Type.ARRAY
@@ -621,12 +656,17 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
             items["description"] = schema.get("description") or schema.get("title")
         if "enum" in schema:
             items["enum"] = schema["enum"]
+            if items["type"] in (
+                types.Type.INTEGER,
+                types.Type.NUMBER,
+                types.Type.BOOLEAN,
+            ):
+                items["enum"] = [str(enum_value) for enum_value in items["enum"]]
+                items["format"] = "enum"
         if _is_nullable_schema(schema):
             items["nullable"] = True
         if "required" in schema:
             items["required"] = schema["required"]
-        if "enum" in schema:
-            items["enum"] = schema["enum"]
     elif schema:
         # str
         items["type"] = _get_type_from_schema({"type": schema})
