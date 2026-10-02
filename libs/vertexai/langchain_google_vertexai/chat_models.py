@@ -3040,7 +3040,7 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
     """Get `UsageMetadata` from raw response metadata."""
     input_tokens = raw_metadata.get("prompt_token_count", 0)
     thought_tokens = raw_metadata.get("thoughts_token_count", 0)
-    output_tokens = raw_metadata.get("candidates_token_count", 0) + thought_tokens
+    output_tokens = raw_metadata.get("candidates_token_count", 0)
     total_tokens = raw_metadata.get("total_token_count", 0)
     cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
     if all(

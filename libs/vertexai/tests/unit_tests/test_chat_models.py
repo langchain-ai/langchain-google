@@ -2693,10 +2693,21 @@ def test_cached_content_preserves_full_resource_path() -> None:
 
 
 def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> None:
-    """Verify thought tokens in output_tokens and streaming usage details."""
+    """Verify thought/cache token details are preserved across streaming chunks."""
+    from langchain_core.messages.ai import subtract_usage
+
     from langchain_google_vertexai.chat_models import _get_usage_metadata_gemini
 
-    usage = _get_usage_metadata_gemini(
+    chunk1 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 4,
+            "thoughts_token_count": 5,
+            "total_token_count": 29,
+            "cached_content_token_count": 5,
+        }
+    )
+    chunk2 = _get_usage_metadata_gemini(
         {
             "prompt_token_count": 20,
             "candidates_token_count": 10,
@@ -2705,9 +2716,13 @@ def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> Non
             "cached_content_token_count": 5,
         }
     )
-    assert usage is not None
-    assert usage["input_tokens"] == 20
-    assert usage["output_tokens"] == 25
-    assert usage["total_tokens"] == 45
-    assert usage["output_token_details"] == {"reasoning": 15}
-    assert usage["input_token_details"] == {"cache_read": 5}
+    assert chunk1 is not None
+    assert chunk2 is not None
+    assert chunk2["input_tokens"] == 20
+    assert chunk2["output_tokens"] == 10
+    assert chunk2["total_tokens"] == 45
+    assert chunk2["output_token_details"] == {"reasoning": 15}
+    assert chunk2["input_token_details"] == {"cache_read": 5}
+
+    delta = subtract_usage(chunk2, chunk1)
+    assert delta["output_token_details"] == {"reasoning": 10}
