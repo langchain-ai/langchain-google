@@ -157,8 +157,12 @@ class ModelArmorSanitizeResponseRunnable(ModelArmorSanitizeBaseRunnable):
         )
 
         sanitization_findings = result.sanitization_result
+
+        # Determine effective flags.
+        effective_fail_open = fail_open if fail_open is not None else self.fail_open
+
         if not self.evaluate(content, sanitization_findings, config=config):
-            if self.fail_open:
+            if effective_fail_open:
                 logger.info(
                     "Found following unsafe response findings from Model Armor: %s",
                     sanitization_findings,
