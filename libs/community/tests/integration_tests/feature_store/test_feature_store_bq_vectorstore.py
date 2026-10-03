@@ -39,6 +39,7 @@ def store_bq_vectorstore(request: pytest.FixtureRequest) -> BigQueryVectorStore:
         dataset_name=TEST_DATASET,
         temp_dataset_name=TEST_TEMP_DATASET,
         table_name=TEST_TABLE_NAME,
+        allow_raw_sql_filters=True,
     )
     TestBigQueryVectorStore_bq_vectorstore.store_bq_vectorstore.add_texts(
         TestBigQueryVectorStore_bq_vectorstore.texts,
@@ -79,6 +80,7 @@ def existing_store_bq_vectorstore(
             dataset_name=TEST_DATASET,
             temp_dataset_name=TEST_TEMP_DATASET,
             table_name=TEST_TABLE_NAME,
+            allow_raw_sql_filters=True,
         )
     )
 
