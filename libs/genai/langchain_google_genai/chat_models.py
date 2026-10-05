@@ -507,12 +507,16 @@ def _uses_fixed_sampling_and_disallows_prefill(model_name: str) -> bool:
     return normalized_model in _FIXED_SAMPLING_AND_NO_PREFILL_MODELS
 
 
+_GEMINI_MAJOR_VERSION = re.compile(r"gemini-(\d+)")
+
+
 def _is_gemini_3_or_later(model_name: str) -> bool:
     """Checks if the model is Gemini 3 or later."""
     if not model_name:
         return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-3" in model_name
+    return any(
+        int(major) >= 3 for major in _GEMINI_MAJOR_VERSION.findall(model_name.lower())
+    )
 
 
 def _is_gemini_25_model(model_name: str) -> bool:

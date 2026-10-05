@@ -1534,13 +1534,19 @@ def test_temperature_range_model_validation() -> None:
 def test_temperature_default_by_model_version() -> None:
     """Test that legacy models get 0.7 temperature by default.
 
-    Also ensures Gemini 3 models get None.
+    Also ensures Gemini 3 and later models get None.
     """
     llm_gemini_3 = ChatGoogleGenerativeAI(
         model="gemini-3.5-flash",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_gemini_3.temperature is None
+
+    llm_gemini_4 = ChatGoogleGenerativeAI(
+        model="gemini-4-pro",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_4.temperature is None
 
     llm_gemini_2_5 = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
@@ -6055,6 +6061,9 @@ def test_uses_fixed_sampling_and_disallows_prefill(
 
 def test_is_new_gemini_model() -> None:
     assert _is_gemini_3_or_later("gemini-3.0-pro") is True
+    assert _is_gemini_3_or_later("gemini-4-pro") is True
+    assert _is_gemini_3_or_later("models/gemini-4.1-flash-preview") is True
+    assert _is_gemini_3_or_later("GEMINI-10-PRO") is True
     assert _is_gemini_3_or_later("gemini-2.5-pro") is False
     assert _is_gemini_3_or_later("gemini-2.5-flash") is False
     assert _is_gemini_3_or_later("gemini-1.5-pro") is False
