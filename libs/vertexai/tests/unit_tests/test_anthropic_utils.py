@@ -6,7 +6,13 @@ from unittest.mock import patch
 import pytest
 from anthropic.types import (
     RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    RedactedThinkingBlock,
     SignatureDelta,
+    TextBlock,
+    TextDelta,
+    ThinkingBlock,
     ThinkingDelta,
 )
 from langchain_core.messages import (
@@ -936,12 +942,130 @@ def test_make_thinking_message_chunk_from_anthropic_event() -> None:
             {
                 "index": 1,
                 "type": "thinking",
+                "thinking": "",
                 "signature": "thoughts-signature",
             }
         ]
     )
     assert isinstance(thinking_chunk, AIMessageChunk)
     assert isinstance(signature_chunk, AIMessageChunk)
+
+
+def _aggregate_stream(events: list) -> AIMessageChunk:
+    aggregate = None
+    for event in events:
+        chunk = _make_message_chunk_from_anthropic_event(
+            event, stream_usage=True, coerce_content_to_string=False
+        )
+        if chunk is None:
+            continue
+        aggregate = chunk if aggregate is None else aggregate + chunk
+    assert aggregate is not None
+    return aggregate
+
+
+def test_thinking_block_with_only_signature_keeps_thinking_field() -> None:
+    """A thinking block that emits no thinking_delta must still carry `thinking`.
+
+    Summarized adaptive thinking produces a signature for every block but only
+    emits thinking_delta events when there is summary text. Without the field
+    the block is rejected on replay ("thinking.thinking: Field required").
+    """
+    events = [
+        RawContentBlockStartEvent(
+            content_block=ThinkingBlock(thinking="", signature="", type="thinking"),
+            index=0,
+            type="content_block_start",
+        ),
+        RawContentBlockDeltaEvent(
+            delta=SignatureDelta(signature="sig-123", type="signature_delta"),
+            index=0,
+            type="content_block_delta",
+        ),
+        RawContentBlockStopEvent(index=0, type="content_block_stop"),
+        RawContentBlockStartEvent(
+            content_block=TextBlock(text="", type="text", citations=None),
+            index=1,
+            type="content_block_start",
+        ),
+        RawContentBlockDeltaEvent(
+            delta=TextDelta(text="Here is the answer.", type="text_delta"),
+            index=1,
+            type="content_block_delta",
+        ),
+        RawContentBlockStopEvent(index=1, type="content_block_stop"),
+    ]
+
+    aggregate = _aggregate_stream(events)
+
+    assert aggregate.content[0] == {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "sig-123",
+        "index": 0,
+    }
+    formatted = _format_message_anthropic(
+        AIMessage(content=aggregate.content), project=None
+    )
+    assert formatted is not None
+    assert formatted["content"][0] == {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "sig-123",
+    }
+
+
+def test_thinking_block_start_content_is_not_dropped() -> None:
+    """Thinking placed on the start event is kept and merged with later deltas."""
+    events = [
+        RawContentBlockStartEvent(
+            content_block=ThinkingBlock(
+                thinking="first half, ", signature="", type="thinking"
+            ),
+            index=0,
+            type="content_block_start",
+        ),
+        RawContentBlockDeltaEvent(
+            delta=ThinkingDelta(thinking="second half", type="thinking_delta"),
+            index=0,
+            type="content_block_delta",
+        ),
+        RawContentBlockDeltaEvent(
+            delta=SignatureDelta(signature="sig-456", type="signature_delta"),
+            index=0,
+            type="content_block_delta",
+        ),
+    ]
+
+    aggregate = _aggregate_stream(events)
+
+    assert aggregate.content == [
+        {
+            "type": "thinking",
+            "thinking": "first half, second half",
+            "signature": "sig-456",
+            "index": 0,
+        }
+    ]
+
+
+def test_redacted_thinking_block_start_is_emitted() -> None:
+    """redacted_thinking has no deltas; its start event is the whole block."""
+    chunk = _make_message_chunk_from_anthropic_event(
+        RawContentBlockStartEvent(
+            content_block=RedactedThinkingBlock(
+                data="opaque-bytes", type="redacted_thinking"
+            ),
+            index=0,
+            type="content_block_start",
+        ),
+        stream_usage=True,
+        coerce_content_to_string=False,
+    )
+
+    assert chunk == AIMessageChunk(
+        content=[{"type": "redacted_thinking", "data": "opaque-bytes", "index": 0}]
+    )
 
 
 def test_thinking_in_params_true() -> None:
