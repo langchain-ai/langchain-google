@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 import sys
 import warnings
 from dataclasses import dataclass
@@ -2668,3 +2669,27 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_tools_and_functions_together_logs_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The warning must be emitted as one message, not a message plus a stray arg."""
+    llm = ChatVertexAI(model_name="gemini-2-5-flash", project="test-project")
+
+    def get_weather(location: str) -> str:
+        """Get the weather."""
+        return "sunny"
+
+    with caplog.at_level(
+        logging.WARNING, logger="langchain_google_vertexai.chat_models"
+    ):
+        result = llm._tools_gemini(tools=[get_weather], functions=[get_weather])
+
+    assert result is not None and len(result) == 1
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "Binding tools and functions together is not supported" in message
+        and "Only tools will be used" in message
+        for message in messages
+    ), messages
