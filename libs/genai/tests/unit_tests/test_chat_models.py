@@ -9,10 +9,12 @@ import warnings
 import weakref
 from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event, get_ident
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+import requests
 from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
     Blob,
@@ -738,6 +740,139 @@ async def test_per_request_http_options_async_injects_headers() -> None:
     config = mock_method.call_args.kwargs["config"]
     assert config.http_options is not None
     assert config.http_options.headers == {"Authorization": "Bearer token"}
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["ainvoke", "astream"])
+async def test_async_image_download_does_not_block_event_loop(stream: bool) -> None:
+    """Image downloads run off-loop without changing prepared request options."""
+    loop = asyncio.get_running_loop()
+    event_loop_thread = get_ident()
+    loop_responded = Event()
+    image_url = "https://example.com/image"
+    image_bytes = base64.b64decode(SMALL_VIEWABLE_BASE64_IMAGE.split(",", 1)[1])
+    response = Mock(ok=True, content=image_bytes)
+
+    def download_image(url: str) -> Mock:
+        assert url == image_url
+        assert get_ident() != event_loop_thread
+        # The download cannot finish until the event loop processes this callback.
+        # The timeout only guards against a deadlock; no timing threshold or sleep
+        # is used to determine whether the loop remains responsive.
+        loop.call_soon_threadsafe(loop_responded.set)
+        assert loop_responded.wait(timeout=5)
+        return response
+
+    async def response_chunks() -> AsyncIterator[GenerateContentResponse]:
+        yield GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+        )
+
+    messages: list[BaseMessage] = [
+        SystemMessage(content="Describe images concisely."),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "What is in this image?"},
+                {"type": "image_url", "image_url": {"url": image_url}},
+            ]
+        ),
+    ]
+    request_options: dict[str, Any] = {
+        "stop": ["STOP"],
+        "tools": [
+            {
+                "name": "describe_image",
+                "description": "Describe the image.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"description": {"type": "string"}},
+                },
+            }
+        ],
+        "tool_choice": "any",
+        "safety_settings": {
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH
+        },
+        "generation_config": {"max_output_tokens": 32},
+        "cached_content": "cachedContents/image-test",
+        "timeout": 7,
+        "http_options": {"headers": {"X-Request-ID": "image-test"}},
+    }
+
+    with (
+        patch("langchain_google_genai.chat_models.Client") as mock_client,
+        patch("langchain_google_genai._image_utils.requests.get") as mock_get,
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        mock_get.return_value = response
+        expected_request = llm._prepare_request(messages, **request_options)
+        mock_get.reset_mock()
+        mock_get.side_effect = download_image
+        mock_models = mock_client.return_value.aio.models
+        mock_models.generate_content = AsyncMock(
+            return_value=GenerateContentResponse(
+                candidates=[Candidate(content=Content(parts=[Part(text="ok")]))]
+            )
+        )
+        mock_models.generate_content_stream = AsyncMock(return_value=response_chunks())
+
+        if stream:
+            chunks = [chunk async for chunk in llm.astream(messages, **request_options)]
+            assert "".join(chunk.text for chunk in chunks) == "ok"
+            mock_models.generate_content_stream.assert_awaited_once_with(
+                **expected_request
+            )
+            mock_models.generate_content.assert_not_awaited()
+        else:
+            result = await llm.ainvoke(messages, **request_options)
+            assert result.content == "ok"
+            mock_models.generate_content.assert_awaited_once_with(**expected_request)
+            mock_models.generate_content_stream.assert_not_awaited()
+
+    mock_get.assert_called_once_with(image_url)
+    assert loop_responded.is_set()
+    assert expected_request["contents"][0].parts == [
+        Part(text="What is in this image?"),
+        Part(inline_data=Blob(data=image_bytes, mime_type="image/png")),
+    ]
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["ainvoke", "astream"])
+async def test_async_image_download_error_propagates(stream: bool) -> None:
+    """Failed downloads surface unchanged before making a generation request."""
+    error = requests.HTTPError("Image download failed")
+    response = Mock(ok=False)
+    response.raise_for_status.side_effect = error
+    message = HumanMessage(
+        content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://example.com/missing.png"},
+            }
+        ]
+    )
+
+    with (
+        patch("langchain_google_genai.chat_models.Client") as mock_client,
+        patch(
+            "langchain_google_genai._image_utils.requests.get", return_value=response
+        ),
+    ):
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+        )
+        with pytest.raises(requests.HTTPError) as exc_info:
+            if stream:
+                async for _ in llm.astream([message]):
+                    pytest.fail("A failed image download must not yield a chunk")
+            else:
+                await llm.ainvoke([message])
+
+        assert exc_info.value is error
+        mock_client.return_value.aio.models.generate_content.assert_not_called()
+        mock_client.return_value.aio.models.generate_content_stream.assert_not_called()
+    response.raise_for_status.assert_called_once_with()
 
 
 def test_per_request_http_options_preserves_model_retries() -> None:
