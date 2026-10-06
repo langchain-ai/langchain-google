@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
 from langchain_google_genai._function_utils import (
+    _tool_choice_to_tool_config,
     _ToolChoiceType,
     convert_to_genai_function_declarations,
 )
@@ -60,15 +61,18 @@ def create_context_cache(
             - Pydantic models (converted to JSON schema)
             - Dict representations of tools
             - Callable functions
-        tool_choice: Optional tool choice configuration.
+        tool_choice: Optional tool choice configuration, stored on the cache as its
+            `tool_config`. Accepts the same values as `bind_tools`: `'auto'`,
+            `'any'` / `'required'` / `True`, `'none'`, a function name, a list of
+            function names, or a `ToolConfig`-shaped dict. Requires `tools`.
 
     Returns:
         Cache name (string identifier) that can be passed to `cached_content`
             parameter in subsequent API calls.
 
     Raises:
-        ValueError: If the model client is not initialized or if the model is not
-            specified.
+        ValueError: If the model client is not initialized, if the model is not
+            specified, or if `tool_choice` is given without `tools`.
 
     Example:
         ```python
@@ -166,6 +170,24 @@ def create_context_cache(
     if tools:
         tool_list = convert_to_genai_function_declarations(tools)
 
+    # A cache carries its own tool_config (it can't be set per request later), so
+    # tool_choice has to be resolved here the same way bind_tools does.
+    tool_config = None
+    if tool_choice:
+        if not tool_list:
+            msg = (
+                f"Received {tool_choice=} but no tools. "
+                "'tool_choice' can only be specified if 'tools' is specified."
+            )
+            raise ValueError(msg)
+        all_names = [
+            declaration.name
+            for tool in tool_list
+            for declaration in (tool.function_declarations or [])
+            if declaration.name
+        ]
+        tool_config = _tool_choice_to_tool_config(tool_choice, all_names)
+
     # Build the cache config
     cache_config_kwargs: dict[str, Any] = {}
 
@@ -183,6 +205,9 @@ def create_context_cache(
 
     if tool_list:
         cache_config_kwargs["tools"] = tool_list
+
+    if tool_config:
+        cache_config_kwargs["tool_config"] = tool_config
 
     # Create the cache
     cache = model.client.caches.create(
