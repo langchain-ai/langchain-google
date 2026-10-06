@@ -60,14 +60,21 @@ from langchain_core.messages.tool import (
     tool_call as create_tool_call,
     invalid_tool_call,
 )
+from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
+    JsonOutputToolsParser,
     PydanticToolsParser,
 )
 from langchain_core.output_parsers.openai_tools import parse_tool_calls
-from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.outputs import (
+    ChatGeneration,
+    ChatGenerationChunk,
+    ChatResult,
+    Generation,
+)
 from pydantic import BaseModel, Field, model_validator
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils import get_pydantic_field_names
@@ -2870,9 +2877,9 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         else:
             tool_name = _get_tool_name(schema)
             if isinstance(schema, type) and is_basemodel_subclass(schema):
-                parser = PydanticToolsParser(tools=[schema], first_tool_only=True)
+                parser = _PydanticToolsParser(tools=[schema], first_tool_only=True)
             elif is_typeddict(schema) or isinstance(schema, dict):
-                parser = JsonOutputKeyToolsParser(
+                parser = _JsonOutputKeyToolsParser(
                     key_name=tool_name, first_tool_only=True
                 )
             else:
@@ -3067,3 +3074,23 @@ def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
 def _get_tool_name(tool: _ToolType) -> str:
     vertexai_tool = _format_to_gapic_tool([tool])
     return next(f.name for f in vertexai_tool.function_declarations)
+
+
+class _MalformedFunctionCallGuard(JsonOutputToolsParser):
+    """Raise on a `MALFORMED_FUNCTION_CALL` candidate instead of parsing `None`."""
+
+    def parse_result(self, result: list[Generation], *, partial: bool = False) -> Any:
+        if not partial and isinstance(result[0], ChatGeneration):
+            metadata = result[0].message.response_metadata
+            if metadata.get("finish_reason") == "MALFORMED_FUNCTION_CALL":
+                msg = metadata.get("finish_message") or "MALFORMED_FUNCTION_CALL"
+                raise OutputParserException(msg)
+        return super().parse_result(result, partial=partial)
+
+
+class _PydanticToolsParser(_MalformedFunctionCallGuard, PydanticToolsParser):
+    pass
+
+
+class _JsonOutputKeyToolsParser(_MalformedFunctionCallGuard, JsonOutputKeyToolsParser):
+    pass
