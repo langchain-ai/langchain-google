@@ -21,7 +21,11 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.messages.ai import InputTokenDetails, UsageMetadata
+from langchain_core.messages.ai import (
+    InputTokenDetails,
+    OutputTokenDetails,
+    UsageMetadata,
+)
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
@@ -44,6 +48,20 @@ _message_type_lookups = {
 }
 
 
+def _thinking_tokens(anthropic_usage: Any) -> int | None:
+    """Reasoning tokens Anthropic reports as `output_tokens_details.thinking_tokens`.
+
+    Older models omit `output_tokens_details`; older SDKs keep it as a plain dict
+    (an extra field) while newer ones model it as an object, so accept both.
+    """
+    details = getattr(anthropic_usage, "output_tokens_details", None)
+    if details is None:
+        return None
+    if isinstance(details, dict):
+        return details.get("thinking_tokens")
+    return getattr(details, "thinking_tokens", None)
+
+
 def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
     """Create `UsageMetadata` from Anthropic usage with proper cache token handling.
 
@@ -62,20 +80,24 @@ def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
     )
     output_tokens = getattr(anthropic_usage, "output_tokens", 0) or 0
 
-    # Only add input_token_details if we have non-None cache values
-    filtered_details = {k: v for k, v in input_token_details.items() if v is not None}
-    if filtered_details:
-        return UsageMetadata(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-            input_token_details=InputTokenDetails(**filtered_details),
-        )
-    return UsageMetadata(
+    usage_metadata = UsageMetadata(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=input_tokens + output_tokens,
     )
+
+    # Only add input_token_details if we have non-None cache values
+    filtered_details = {k: v for k, v in input_token_details.items() if v is not None}
+    if filtered_details:
+        usage_metadata["input_token_details"] = InputTokenDetails(**filtered_details)
+
+    # Reasoning (thinking) tokens are a decomposition of `output_tokens`, not
+    # additive to it.
+    reasoning = _thinking_tokens(anthropic_usage)
+    if reasoning is not None:
+        usage_metadata["output_token_details"] = OutputTokenDetails(reasoning=reasoning)
+
+    return usage_metadata
 
 
 def _format_image(image_url: str, project: str | None) -> dict:
@@ -614,11 +636,16 @@ def _make_message_chunk_from_anthropic_event(
     elif event.type == "message_delta" and stream_usage:
         # Follow official langchain_anthropic pattern - NO cache tokens for delta
         # Only output tokens are provided in message_delta events
-        usage_metadata = {
-            "input_tokens": 0,
-            "output_tokens": event.usage.output_tokens,
-            "total_tokens": event.usage.output_tokens,
-        }
+        usage_metadata = UsageMetadata(
+            input_tokens=0,
+            output_tokens=event.usage.output_tokens,
+            total_tokens=event.usage.output_tokens,
+        )
+        reasoning = _thinking_tokens(event.usage)
+        if reasoning is not None:
+            usage_metadata["output_token_details"] = OutputTokenDetails(
+                reasoning=reasoning
+            )
 
         message_chunk = AIMessageChunk(
             content="",
