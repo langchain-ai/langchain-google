@@ -498,11 +498,19 @@ _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
 _CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
 
 
+def _normalize_gemini_model_name(model_name: str | None) -> str:
+    """Normalize model names by stripping resource paths and regional prefixes."""
+    if not model_name:
+        return ""
+    normalized = model_name.lower().rsplit("/", 1)[-1]
+    return re.sub(r"^[a-z]{2,}\.(?=(?:gemini|gemma)-)", "", normalized)
+
+
 def _uses_fixed_sampling_and_disallows_prefill(model_name: str) -> bool:
     """Check whether a model uses fixed sampling and rejects model prefills."""
-    if not model_name:
+    normalized_model = _normalize_gemini_model_name(model_name)
+    if not normalized_model:
         return False
-    normalized_model = model_name.lower().rsplit("/", 1)[-1]
     normalized_model = re.sub(r"-\d{3}$", "", normalized_model)
     return normalized_model in _FIXED_SAMPLING_AND_NO_PREFILL_MODELS
 
@@ -512,19 +520,15 @@ _GEMINI_MAJOR_VERSION = re.compile(r"gemini-(\d+)")
 
 def _is_gemini_3_or_later(model_name: str) -> bool:
     """Checks if the model is Gemini 3 or later."""
-    if not model_name:
+    normalized = _normalize_gemini_model_name(model_name)
+    if not normalized:
         return False
-    return any(
-        int(major) >= 3 for major in _GEMINI_MAJOR_VERSION.findall(model_name.lower())
-    )
+    return any(int(major) >= 3 for major in _GEMINI_MAJOR_VERSION.findall(normalized))
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
     """Checks if the model is a Gemini 2.5 model."""
-    if not model_name:
-        return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-2.5" in model_name
+    return "gemini-2.5" in _normalize_gemini_model_name(model_name)
 
 
 _PROVIDER_RESOLVED_HOSTS = (
@@ -2192,6 +2196,7 @@ def _response_to_result(
                     message=AIMessageChunk(
                         content="",
                         response_metadata=response_metadata,
+                        usage_metadata=lc_usage,
                     ),
                     generation_info={},
                 )
@@ -3231,7 +3236,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = Field(
+    reasoning_effort: (
+        Literal["none", "disable", "minimal", "low", "medium", "high"] | None
+    ) = Field(
         default=None,
         alias="thinking_level",
     )
@@ -3320,7 +3327,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return "chat-google-generative-ai"
 
     @property
-    def thinking_level(self) -> Literal["minimal", "low", "medium", "high"] | None:
+    def thinking_level(
+        self,
+    ) -> Literal["none", "disable", "minimal", "low", "medium", "high"] | None:
         """Alias for `reasoning_effort` (Gemini's native name for this setting)."""
         return self.reasoning_effort
 
@@ -3500,7 +3509,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _set_model_profile(self) -> Self:
         """Set model profile if not overridden."""
         if self.profile is None:
-            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            model_id = re.sub(r"-\d{3}$", "", _normalize_gemini_model_name(self.model))
             self.profile = _get_default_model_profile(model_id)
         return self
 
@@ -3714,6 +3723,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
+        normalized_model = _normalize_gemini_model_name(self.model)
+        is_gemini_3_plus = _is_gemini_3_or_later(normalized_model)
+        is_pro = "pro" in normalized_model and "flash" not in normalized_model
+
         # thinking_level takes precedence over thinking_budget for Gemini 3+ models
         if "thinking_level" in config and "thinking_budget" in config:
             warnings.warn(
@@ -3724,6 +3737,53 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 stacklevel=2,
             )
             config.pop("thinking_budget")
+
+        if is_gemini_3_plus:
+            if (
+                "thinking_budget" in config
+                and "thinking_level" not in config
+                and is_pro
+            ):
+                budget = config.pop("thinking_budget")
+                if isinstance(budget, int):
+                    if budget <= 0:
+                        config["thinking_level"] = "low"
+                        config.setdefault("include_thoughts", False)
+                    elif budget <= 1024:
+                        config["thinking_level"] = "low"
+                    elif budget <= 8192:
+                        config["thinking_level"] = (
+                            "high"
+                            if normalized_model.startswith("gemini-3-pro")
+                            else "medium"
+                        )
+                    else:
+                        config["thinking_level"] = "high"
+
+            if "thinking_level" in config:
+                raw_lvl = config["thinking_level"]
+                lvl = str(getattr(raw_lvl, "value", raw_lvl)).lower()
+                if lvl in ("none", "disable"):
+                    config["thinking_level"] = "low" if is_pro else "minimal"
+                    config.setdefault("include_thoughts", False)
+                elif lvl == "minimal" and is_pro:
+                    config["thinking_level"] = "low"
+                elif lvl == "medium" and normalized_model.startswith("gemini-3-pro"):
+                    config["thinking_level"] = "high"
+                else:
+                    config["thinking_level"] = lvl
+        elif "thinking_level" in config:
+            raw_lvl = config.pop("thinking_level")
+            lvl = str(getattr(raw_lvl, "value", raw_lvl)).lower()
+            if lvl in ("none", "disable"):
+                config.setdefault("thinking_budget", 128 if is_pro else 0)
+                config.setdefault("include_thoughts", False)
+            elif lvl in ("minimal", "low"):
+                config.setdefault("thinking_budget", 1024)
+            elif lvl == "medium":
+                config.setdefault("thinking_budget", 8192)
+            elif lvl == "high":
+                config.setdefault("thinking_budget", 24576)
 
         return ThinkingConfig(**config)
 
