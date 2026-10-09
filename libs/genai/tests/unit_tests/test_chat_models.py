@@ -5260,6 +5260,25 @@ def test_convert_to_parts_non_dict_mapping() -> None:
         _convert_to_parts(content)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_convert_to_parts_drops_bedrock_cache_point(wrapped: bool) -> None:
+    block: dict[str, Any] = {"cachePoint": {"type": "default"}}
+    if wrapped:
+        block = {"type": "non_standard", "value": block}
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        parts = _convert_to_parts([{"type": "text", "text": "Hello"}, block])
+    assert [part.text for part in parts] == ["Hello"]
+    mock_warning.assert_called_once()
+    assert "cannot be represented as a Gemini part" in mock_warning.call_args[0][0]
+
+
+def test_convert_to_parts_preserves_cache_point_with_other_keys() -> None:
+    block = {"cachePoint": {"type": "default"}, "other": "value"}
+    with patch("langchain_google_genai.chat_models.logger.warning"):
+        parts = _convert_to_parts([block])
+    assert [part.text for part in parts] == [str(block)]
+
+
 def test_convert_to_parts_unrecognized_format_warning() -> None:
     """Test `_convert_to_parts` with unrecognized format triggers warning."""
     content = [{"some_key": "some_value"}]  # Not a recognized format
