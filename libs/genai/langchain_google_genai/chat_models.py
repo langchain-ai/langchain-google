@@ -1039,10 +1039,7 @@ def _convert_to_parts(
             ):
                 parts.append(v1beta_part)
             elif part.keys() == {"cachePoint"}:
-                logger.warning(
-                    "Dropping Bedrock cachePoint content block that cannot be "
-                    "represented as a Gemini part."
-                )
+                pass
             else:
                 # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
