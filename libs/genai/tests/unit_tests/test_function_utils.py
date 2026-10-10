@@ -311,6 +311,31 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     ], "Expected 'status' to have enum values."
 
 
+def test_tool_with_integer_enum_converts_values_to_strings() -> None:
+    """Gemini requires enum values to be strings."""
+
+    class Args(BaseModel):
+        base_font_pt: Literal[10, 11, 12] = 11
+
+    @tool("exporter", args_schema=Args)
+    def exporter(base_font_pt: int = 11) -> str:
+        """Export a document."""
+        return str(base_font_pt)
+
+    oai_tool = convert_to_openai_tool(exporter)
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    function_declarations = genai_tools[0].function_declarations
+    assert function_declarations is not None
+
+    parameters = function_declarations[0].parameters
+    assert parameters is not None
+    assert parameters.properties is not None
+
+    base_font_pt = parameters.properties["base_font_pt"]
+    assert base_font_pt.type == Type.INTEGER
+    assert base_font_pt.enum == ["10", "11", "12"]
+
+
 # reusable test inputs
 def search(question: str) -> str:
     """Search tool."""
