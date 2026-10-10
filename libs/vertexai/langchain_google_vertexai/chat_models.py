@@ -1979,7 +1979,10 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
     @cached_property
     def _image_bytes_loader_client(self):
-        return ImageBytesLoader(project=self.project)
+        # `httpx.Timeout` configures the API client; media fetches go through
+        # `requests`, which only understands numeric timeouts.
+        timeout = self.timeout if isinstance(self.timeout, (int, float)) else None
+        return ImageBytesLoader(project=self.project, timeout=timeout)
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
