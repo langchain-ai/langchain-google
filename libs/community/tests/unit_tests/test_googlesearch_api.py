@@ -59,3 +59,48 @@ def test_results_includes_image_and_thumbnail() -> None:
         assert output[0]["thumbnail"] == "https://example.com/thumb.jpg"
         assert "image" not in output[1]
         assert "thumbnail" not in output[1]
+
+
+def test_default_endpoint_builds_without_client_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that the default client is built exactly as before."""
+    monkeypatch.delenv("GOOGLE_CSE_API_ENDPOINT", raising=False)
+    with patch("googleapiclient.discovery.build") as build:
+        search = GoogleSearchAPIWrapper(  # type: ignore[call-arg]
+            google_api_key="key", google_cse_id="cse"
+        )
+        build.assert_called_once_with("customsearch", "v1", developerKey="key")
+        assert search.google_api_endpoint is None
+
+
+def test_custom_endpoint_is_passed_as_client_options() -> None:
+    """Test that google_api_endpoint overrides the client's base URL."""
+    with patch("googleapiclient.discovery.build") as build:
+        search = GoogleSearchAPIWrapper(  # type: ignore[call-arg]
+            google_api_key="key",
+            google_cse_id="cse",
+            google_api_endpoint="https://search.example.com",
+        )
+        build.assert_called_once_with(
+            "customsearch",
+            "v1",
+            developerKey="key",
+            client_options={"api_endpoint": "https://search.example.com"},
+        )
+        assert search.google_api_endpoint == "https://search.example.com"
+
+
+def test_custom_endpoint_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that GOOGLE_CSE_API_ENDPOINT is used when the field is unset."""
+    monkeypatch.setenv("GOOGLE_CSE_API_ENDPOINT", "https://env.example.com")
+    with patch("googleapiclient.discovery.build") as build:
+        GoogleSearchAPIWrapper(  # type: ignore[call-arg]
+            google_api_key="key", google_cse_id="cse"
+        )
+        build.assert_called_once_with(
+            "customsearch",
+            "v1",
+            developerKey="key",
+            client_options={"api_endpoint": "https://env.example.com"},
+        )
