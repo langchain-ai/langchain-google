@@ -18,7 +18,7 @@ MODEL_NAMES = ["gemini-3.5-flash"]
     "model_name",
     MODEL_NAMES,
 )
-def test_function_call(model_name: str, backend_config: dict) -> None:
+async def test_function_call(model_name: str, backend_config: dict) -> None:
     functions = [
         {
             "name": "get_weather",
@@ -39,7 +39,7 @@ def test_function_call(model_name: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name, **backend_config).bind(
         functions=functions, tool_choice="any"
     )
-    res = llm.invoke("what weather is today in san francisco?")
+    res = await llm.ainvoke("what weather is today in san francisco?")
     assert res
     assert res.additional_kwargs
     assert "function_call" in res.additional_kwargs
@@ -54,7 +54,7 @@ def test_function_call(model_name: str, backend_config: dict) -> None:
     "model_name",
     MODEL_NAMES,
 )
-def test_tool_call(model_name: str, backend_config: dict) -> None:
+async def test_tool_call(model_name: str, backend_config: dict) -> None:
     @tool
     def search_tool(query: str) -> str:
         """Searches the web for `query` and returns the result."""
@@ -63,7 +63,7 @@ def test_tool_call(model_name: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name, **backend_config).bind(
         functions=[search_tool], tool_choice="any"
     )
-    response = llm.invoke("weather in san francisco")
+    response = await llm.ainvoke("weather in san francisco")
     assert isinstance(response, AIMessage)
     function_call = response.additional_kwargs.get("function_call")
     assert function_call
@@ -83,11 +83,11 @@ class MyModel(BaseModel):
     "model_name",
     MODEL_NAMES,
 )
-def test_pydantic_call(model_name: str, backend_config: dict) -> None:
+async def test_pydantic_call(model_name: str, backend_config: dict) -> None:
     llm = ChatGoogleGenerativeAI(model=model_name, **backend_config).bind(
         functions=[MyModel], tool_choice="any"
     )
-    response = llm.invoke("my name is Erick and I am 27 years old")
+    response = await llm.ainvoke("my name is Erick and I am 27 years old")
     assert isinstance(response, AIMessage)
     function_call = response.additional_kwargs.get("function_call")
     assert function_call

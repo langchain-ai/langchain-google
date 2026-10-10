@@ -11,7 +11,7 @@ from tests.integration_tests.conftest import _get_text_content
 
 
 @pytest.mark.extended
-def test_pdf_gcs_uri() -> None:
+async def test_pdf_gcs_uri() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
         model="claude-sonnet-4-6",
@@ -20,7 +20,7 @@ def test_pdf_gcs_uri() -> None:
         project=os.environ["PROJECT_ID"],
     )
 
-    res = llm.invoke(
+    res = await llm.ainvoke(
         [
             {
                 "role": "user",
@@ -35,7 +35,7 @@ def test_pdf_gcs_uri() -> None:
 
 
 @pytest.mark.extended
-def test_pdf_byts() -> None:
+async def test_pdf_byts() -> None:
     gcs_uri = "gs://cloud-samples-data/generative-ai/pdf/2403.05530.pdf"
     llm = ChatAnthropicVertex(
         model="claude-sonnet-4-6",
@@ -46,7 +46,7 @@ def test_pdf_byts() -> None:
     image = load_image_from_gcs(gcs_uri, "kuligin-sandbox1")
     image_data = image_bytes_to_b64_string(image.data, "ascii", "pdf")
 
-    res = llm.invoke(
+    res = await llm.ainvoke(
         [
             {
                 "role": "user",
@@ -61,7 +61,7 @@ def test_pdf_byts() -> None:
 
 
 @pytest.mark.extended
-def test_https_image() -> None:
+async def test_https_image() -> None:
     uri = "https://picsum.photos/seed/picsum/200/300.jpg"
 
     llm = ChatAnthropicVertex(
@@ -71,7 +71,7 @@ def test_https_image() -> None:
         project=os.environ["PROJECT_ID"],
     )
 
-    res = llm.invoke(
+    res = await llm.ainvoke(
         [
             {
                 "role": "user",
