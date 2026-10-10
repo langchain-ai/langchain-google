@@ -24,6 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from collections.abc import AsyncIterator, Iterator
 
 import proto  # type: ignore[import-untyped]
+from proto.marshal.collections import MapComposite, RepeatedComposite  # type: ignore[import-untyped]
 
 from langchain_core._api import deprecated
 from langchain_core.callbacks import (
@@ -760,6 +761,30 @@ def _collapse_text_content(content: list[Any]) -> str | list[Any]:
     return content
 
 
+def _unwrap_proto_composite(value: Any) -> Any:
+    """Recursively convert proto-plus composite values to plain Python types.
+
+    `proto.Message.to_dict` round-trips values through
+    `google.protobuf.json_format`, which raises `SerializeToJsonError` for
+    non-finite floats (`inf`, `-inf`, `nan`) since they aren't valid strict
+    JSON. Walking the composite objects directly avoids that round-trip
+    entirely, so non-finite values pass through unchanged.
+
+    Args:
+        value: A proto-plus value, e.g. a `MapComposite`, `RepeatedComposite`,
+            or primitive, such as the ones found in `FunctionCall.args`.
+
+    Returns:
+        The value with any `MapComposite`/`RepeatedComposite` converted to a
+        plain `dict`/`list`, recursively.
+    """
+    if isinstance(value, MapComposite):
+        return {k: _unwrap_proto_composite(v) for k, v in value.items()}
+    if isinstance(value, RepeatedComposite):
+        return [_unwrap_proto_composite(v) for v in value]
+    return value
+
+
 @overload
 def _parse_response_candidate(
     response_candidate: Candidate | VertexCandidate,
@@ -812,7 +837,7 @@ def _parse_response_candidate(
             # but in general the full set of function calls is stored in tool_calls.
             function_call = {"name": part.function_call.name}
             # dump to match other function calling llm for now
-            function_call_args_dict = proto.Message.to_dict(part.function_call)["args"]
+            function_call_args_dict = _unwrap_proto_composite(part.function_call.args)
             function_call["arguments"] = json.dumps(
                 {k: function_call_args_dict[k] for k in function_call_args_dict}
             )
