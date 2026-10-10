@@ -8,6 +8,7 @@ from anthropic.types import (
     RawContentBlockDeltaEvent,
     SignatureDelta,
     ThinkingDelta,
+    Usage,
 )
 from langchain_core.messages import (
     AIMessage,
@@ -20,6 +21,7 @@ from langchain_core.messages.content import create_image_block, create_text_bloc
 from langchain_core.messages.tool import tool_call as create_tool_call
 
 from langchain_google_vertexai._anthropic_utils import (
+    _create_usage_metadata,
     _documents_in_params,
     _format_image,
     _format_message_anthropic,
@@ -1696,3 +1698,45 @@ def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
     ]
     _, formatted = _format_messages_anthropic(messages, project="test-project")
     assert formatted[-1]["content"][0]["thinking"] == "considering...  "
+
+
+def test_create_usage_metadata_reports_cache_tokens_in_input_token_details() -> None:
+    """Cache counts belong in ``input_token_details``, not at the top level."""
+    usage = Usage(
+        input_tokens=14,
+        output_tokens=10,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+    assert _create_usage_metadata(usage) == {
+        "input_tokens": 14,
+        "output_tokens": 10,
+        "total_tokens": 24,
+        "input_token_details": {"cache_read": 0, "cache_creation": 0},
+    }
+
+
+def test_create_usage_metadata_counts_cache_tokens_in_input_tokens() -> None:
+    """Anthropic reports ``input_tokens`` exclusive of cached tokens."""
+    usage = Usage(
+        input_tokens=5,
+        output_tokens=7,
+        cache_read_input_tokens=100,
+        cache_creation_input_tokens=50,
+    )
+    assert _create_usage_metadata(usage) == {
+        "input_tokens": 155,
+        "output_tokens": 7,
+        "total_tokens": 162,
+        "input_token_details": {"cache_read": 100, "cache_creation": 50},
+    }
+
+
+def test_create_usage_metadata_omits_details_without_cache_fields() -> None:
+    """No ``input_token_details`` key when the payload carries no cache counts."""
+    usage = Usage(input_tokens=3, output_tokens=4)
+    assert _create_usage_metadata(usage) == {
+        "input_tokens": 3,
+        "output_tokens": 4,
+        "total_tokens": 7,
+    }
