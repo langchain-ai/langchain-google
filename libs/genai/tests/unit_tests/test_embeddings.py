@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 
-MODEL_NAME = "gemini-embedding-2-preview"
+MODEL_NAME = "text-embedding-004"
 
 
 def _mock_embedding_response(values_list: list[list[float]]) -> MagicMock:
@@ -330,4 +330,71 @@ async def test_aembed_documents() -> None:
         assert call_kwargs["config"].task_type == "RETRIEVAL_DOCUMENT"
 
         # Verify the result
+        assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+def test_embed_documents_gemini_embedding_2() -> None:
+    """Test sync embed_documents with gemini-embedding-2 (ThreadPoolExecutor)."""
+    gemini_model = "gemini-embedding-2-preview"
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = MagicMock()
+        mock_embed.side_effect = [
+            _mock_embedding_response([[1.0, 2.0]]),
+            _mock_embedding_response([[3.0, 4.0]]),
+        ]
+        mock_client.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=gemini_model,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        result = llm.embed_documents(["test text", "test text2"])
+
+        # Should make 2 individual calls
+        assert mock_embed.call_count == 2
+        calls = mock_embed.call_args_list
+        assert calls[0].kwargs["model"] == gemini_model
+        assert calls[0].kwargs["contents"] == "test text"
+        assert calls[1].kwargs["model"] == gemini_model
+        assert calls[1].kwargs["contents"] == "test text2"
+
+        # Verify the merged result
+        assert result == [[1.0, 2.0], [3.0, 4.0]]
+
+
+@pytest.mark.asyncio
+async def test_aembed_documents_gemini_embedding_2() -> None:
+    """Test async embed_documents with gemini-embedding-2 (asyncio.gather)."""
+    gemini_model = "gemini-embedding-2-preview"
+    with patch("langchain_google_genai.embeddings.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_embed = AsyncMock()
+        mock_embed.side_effect = [
+            _mock_embedding_response([[1.0, 2.0]]),
+            _mock_embedding_response([[3.0, 4.0]]),
+        ]
+        mock_client.aio.models.embed_content = mock_embed
+
+        llm = GoogleGenerativeAIEmbeddings(
+            model=gemini_model,
+            google_api_key=SecretStr("test-key"),
+        )
+
+        result = await llm.aembed_documents(["test text", "test text2"])
+
+        # Should make 2 individual calls
+        assert mock_embed.call_count == 2
+        calls = mock_embed.call_args_list
+        assert calls[0].kwargs["model"] == gemini_model
+        assert calls[0].kwargs["contents"] == "test text"
+        assert calls[1].kwargs["model"] == gemini_model
+        assert calls[1].kwargs["contents"] == "test text2"
+
+        # Verify the merged result
         assert result == [[1.0, 2.0], [3.0, 4.0]]
