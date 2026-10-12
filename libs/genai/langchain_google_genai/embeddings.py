@@ -413,6 +413,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
+        texts = [str(t) for t in texts]
         embeddings: list[list[float]] = []
         batch_start_index = 0
 
@@ -482,6 +483,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             Embedding for the text.
         """
+        text = str(text)
         # Use RETRIEVAL_QUERY as default for queries
         effective_task_type = task_type or self.task_type or "RETRIEVAL_QUERY"
 
@@ -534,6 +536,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             List of embeddings, one for each text.
         """
+        texts = [str(t) for t in texts]
         embeddings: list[list[float]] = []
         batch_start_index = 0
 
@@ -600,6 +603,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
         Returns:
             Embedding for the text.
         """
+        text = str(text)
         # Use RETRIEVAL_QUERY as default for queries
         effective_task_type = task_type or self.task_type or "RETRIEVAL_QUERY"
 
