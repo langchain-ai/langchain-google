@@ -190,6 +190,14 @@ def _format_message_anthropic(
                     content.append(_format_image_content_block(block, project))
                     continue
 
+                if block["type"] == "file":
+                    content.append(_format_file_content_block(block))
+                    continue
+
+                if block["type"] == "tool_result":
+                    content.append(_clean_content_block(block))
+                    continue
+
                 if block["type"] == "text":
                     text: str = block.get("text", "")
                     # Only add non-empty strings for now as empty ones are not
@@ -394,6 +402,28 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
     raise ValueError(msg)
 
 
+def _format_file_content_block(block: dict) -> dict:
+    """Convert base64 PDF file blocks to Anthropic documents."""
+    if "base64" not in block and block.get("source_type") != "base64":
+        return block
+    formatted_block: dict[str, Any] = {
+        "type": "document",
+        "source": {
+            "type": "base64",
+            "media_type": block.get("mime_type") or "application/pdf",
+            "data": block.get("base64") or block.get("data", ""),
+        },
+    }
+    for key in ("cache_control", "citations", "title", "context"):
+        if key in block:
+            formatted_block[key] = block[key]
+        elif key in (block.get("extras") or {}):
+            formatted_block[key] = block["extras"][key]
+        elif key in (block.get("metadata") or {}):
+            formatted_block[key] = block["metadata"][key]
+    return formatted_block
+
+
 def _clean_content_block(block: Any) -> Any:
     """Remove streaming metadata fields from content blocks.
 
@@ -412,6 +442,10 @@ def _clean_content_block(block: Any) -> Any:
     # Convert LangChain image blocks to Anthropic wire format
     if block.get("type") == "image":
         return _format_image_content_block(block)
+    if block.get("type") == "file":
+        return _format_file_content_block(block)
+    if block.get("type") == "tool_result" and "content" in block:
+        block = {**block, "content": _clean_content(block["content"])}
 
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
