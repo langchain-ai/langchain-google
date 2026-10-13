@@ -8858,6 +8858,15 @@ def test_thinking_config_routing_gemini_3_and_25() -> None:
     assert cfg.thinking_budget is None
     assert cfg.include_thoughts is False
 
+    # Gemini 3+ Pro: thinking_budget=-1 (dynamic) passes through unchanged
+    pro_35_dynamic = ChatGoogleGenerativeAI(
+        model="gemini-3.5-pro", thinking_budget=-1, api_key=SecretStr(FAKE_API_KEY)
+    )
+    cfg = pro_35_dynamic._prepare_request([msg])["config"].thinking_config
+    assert cfg.thinking_budget == -1
+    assert cfg.thinking_level is None
+    assert cfg.include_thoughts is None
+
     # Gemini 2.5 Flash: reasoning_effort='none' -> thinking_budget=0
     flash_25 = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",

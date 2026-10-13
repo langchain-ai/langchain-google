@@ -3739,26 +3739,28 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             config.pop("thinking_budget")
 
         if is_gemini_3_plus:
+            # Negative budgets (e.g. `-1` for dynamic thinking) pass through as-is
             if (
                 "thinking_budget" in config
                 and "thinking_level" not in config
                 and is_pro
+                and isinstance(config["thinking_budget"], int)
+                and config["thinking_budget"] >= 0
             ):
                 budget = config.pop("thinking_budget")
-                if isinstance(budget, int):
-                    if budget <= 0:
-                        config["thinking_level"] = "low"
-                        config.setdefault("include_thoughts", False)
-                    elif budget <= 1024:
-                        config["thinking_level"] = "low"
-                    elif budget <= 8192:
-                        config["thinking_level"] = (
-                            "high"
-                            if normalized_model.startswith("gemini-3-pro")
-                            else "medium"
-                        )
-                    else:
-                        config["thinking_level"] = "high"
+                if budget == 0:
+                    config["thinking_level"] = "low"
+                    config.setdefault("include_thoughts", False)
+                elif budget <= 1024:
+                    config["thinking_level"] = "low"
+                elif budget <= 8192:
+                    config["thinking_level"] = (
+                        "high"
+                        if normalized_model.startswith("gemini-3-pro")
+                        else "medium"
+                    )
+                else:
+                    config["thinking_level"] = "high"
 
             if "thinking_level" in config:
                 raw_lvl = config["thinking_level"]
