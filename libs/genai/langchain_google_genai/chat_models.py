@@ -3774,7 +3774,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     config["thinking_level"] = "high"
                 else:
                     config["thinking_level"] = lvl
-        elif "thinking_level" in config:
+        elif "thinking_level" in config and _is_gemini_25_model(normalized_model):
             raw_lvl = config.pop("thinking_level")
             lvl = str(getattr(raw_lvl, "value", raw_lvl)).lower()
             if lvl in ("none", "disable"):

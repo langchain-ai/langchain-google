@@ -8900,6 +8900,21 @@ def test_thinking_config_routing_gemini_3_and_25() -> None:
     assert cfg.thinking_level is None
 
 
+@pytest.mark.parametrize(
+    "model", ["gemini-flash-latest", "gemini-pro-latest", "gemini-2.0-flash"]
+)
+def test_thinking_level_passes_through_for_non_gemini_25_models(model: str) -> None:
+    """Level-to-budget translation only applies to Gemini 2.5 models."""
+    llm = ChatGoogleGenerativeAI(
+        model=model, reasoning_effort="low", api_key=SecretStr(FAKE_API_KEY)
+    )
+    cfg = llm._prepare_request([HumanMessage(content="Hello")])[
+        "config"
+    ].thinking_config
+    assert cfg.thinking_level == ThinkingLevel.LOW
+    assert cfg.thinking_budget is None
+
+
 def test_normalize_regional_and_resource_model_names() -> None:
     """Verify regional and resource-path prefixes normalize properly."""
     msg = HumanMessage(content="Hello")
