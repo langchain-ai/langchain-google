@@ -86,6 +86,7 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _get_default_model_profile,
     _handle_client_error,
     _handle_server_error,
     _is_gemini_3_or_later,
@@ -8827,3 +8828,44 @@ def test_media_processing_blocks_dropped_from_v1_content() -> None:
     model_turn = contents[1]
     assert model_turn.parts is not None
     assert [part.text for part in model_turn.parts] == ["VX9"]
+
+
+def test_normalize_regional_and_resource_model_names() -> None:
+    """Verify regional and resource-path prefixes normalize properly."""
+    msg = HumanMessage(content="Hello")
+
+    regional_pro = ChatGoogleGenerativeAI(
+        model="publishers/google/models/au.gemini-3.1-pro-preview",
+        api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert regional_pro.temperature is None
+    assert regional_pro.profile
+    assert regional_pro.profile == _get_default_model_profile("gemini-3.1-pro-preview")
+
+    regional_fixed = ChatGoogleGenerativeAI(
+        model="au.gemini-3.5-flash-lite",
+        temperature=0.3,
+        api_key=SecretStr(FAKE_API_KEY),
+    )
+    with pytest.warns(UserWarning, match="will be ignored"):
+        req = regional_fixed._prepare_request([msg])
+    assert "temperature" not in req["config"].model_dump(exclude_unset=True)
+
+
+def test_stream_empty_candidates_preserves_usage_metadata() -> None:
+    """Streaming chunk with empty candidates still attaches usage_metadata."""
+    response = GenerateContentResponse(
+        candidates=[],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
+    )
+    result = _response_to_result(response, stream=True)
+    chunk_msg = result.generations[0].message
+    assert isinstance(chunk_msg, AIMessageChunk)
+    assert chunk_msg.usage_metadata is not None
+    assert chunk_msg.usage_metadata["input_tokens"] == 10
+    assert chunk_msg.usage_metadata["output_tokens"] == 5
+    assert chunk_msg.usage_metadata["total_tokens"] == 15
