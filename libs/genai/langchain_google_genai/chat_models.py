@@ -3236,9 +3236,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    reasoning_effort: (
-        Literal["none", "disable", "minimal", "low", "medium", "high"] | None
-    ) = Field(
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = Field(
         default=None,
         alias="thinking_level",
     )
@@ -3327,9 +3325,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return "chat-google-generative-ai"
 
     @property
-    def thinking_level(
-        self,
-    ) -> Literal["none", "disable", "minimal", "low", "medium", "high"] | None:
+    def thinking_level(self) -> Literal["minimal", "low", "medium", "high"] | None:
         """Alias for `reasoning_effort` (Gemini's native name for this setting)."""
         return self.reasoning_effort
 
@@ -3723,10 +3719,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if include_thoughts is not None:
             config["include_thoughts"] = include_thoughts
 
-        normalized_model = _normalize_gemini_model_name(self.model)
-        is_gemini_3_plus = _is_gemini_3_or_later(normalized_model)
-        is_pro = "pro" in normalized_model and "flash" not in normalized_model
-
         # thinking_level takes precedence over thinking_budget for Gemini 3+ models
         if "thinking_level" in config and "thinking_budget" in config:
             warnings.warn(
@@ -3737,55 +3729,6 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 stacklevel=2,
             )
             config.pop("thinking_budget")
-
-        if is_gemini_3_plus:
-            # Negative budgets (e.g. `-1` for dynamic thinking) pass through as-is
-            if (
-                "thinking_budget" in config
-                and "thinking_level" not in config
-                and is_pro
-                and isinstance(config["thinking_budget"], int)
-                and config["thinking_budget"] >= 0
-            ):
-                budget = config.pop("thinking_budget")
-                if budget == 0:
-                    config["thinking_level"] = "low"
-                    config.setdefault("include_thoughts", False)
-                elif budget <= 1024:
-                    config["thinking_level"] = "low"
-                elif budget <= 8192:
-                    config["thinking_level"] = (
-                        "high"
-                        if normalized_model.startswith("gemini-3-pro")
-                        else "medium"
-                    )
-                else:
-                    config["thinking_level"] = "high"
-
-            if "thinking_level" in config:
-                raw_lvl = config["thinking_level"]
-                lvl = str(getattr(raw_lvl, "value", raw_lvl)).lower()
-                if lvl in ("none", "disable"):
-                    config["thinking_level"] = "low" if is_pro else "minimal"
-                    config.setdefault("include_thoughts", False)
-                elif lvl == "minimal" and is_pro:
-                    config["thinking_level"] = "low"
-                elif lvl == "medium" and normalized_model.startswith("gemini-3-pro"):
-                    config["thinking_level"] = "high"
-                else:
-                    config["thinking_level"] = lvl
-        elif "thinking_level" in config and _is_gemini_25_model(normalized_model):
-            raw_lvl = config.pop("thinking_level")
-            lvl = str(getattr(raw_lvl, "value", raw_lvl)).lower()
-            if lvl in ("none", "disable"):
-                config.setdefault("thinking_budget", 128 if is_pro else 0)
-                config.setdefault("include_thoughts", False)
-            elif lvl in ("minimal", "low"):
-                config.setdefault("thinking_budget", 1024)
-            elif lvl == "medium":
-                config.setdefault("thinking_budget", 8192)
-            elif lvl == "high":
-                config.setdefault("thinking_budget", 24576)
 
         return ThinkingConfig(**config)
 

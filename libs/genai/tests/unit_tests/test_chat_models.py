@@ -86,6 +86,7 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _get_default_model_profile,
     _handle_client_error,
     _handle_server_error,
     _is_gemini_3_or_later,
@@ -8807,126 +8808,17 @@ def test_media_processing_blocks_dropped_from_v1_content() -> None:
     assert [part.text for part in model_turn.parts] == ["VX9"]
 
 
-def test_thinking_config_routing_gemini_3_and_25() -> None:
-    """Verify thinking_level and thinking_budget routing across Gemini 3+ and 2.5."""
-    msg = HumanMessage(content="Hello")
-
-    # Gemini 3+ Flash: 'none'/'disable' -> MINIMAL + include_thoughts=False
-    flash_35 = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash",
-        reasoning_effort="none",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = flash_35._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.MINIMAL
-    assert cfg.include_thoughts is False
-
-    # Gemini 3+ Pro: 'none'/'disable' -> LOW + include_thoughts=False
-    pro_35 = ChatGoogleGenerativeAI(
-        model="gemini-3.5-pro",
-        reasoning_effort="disable",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = pro_35._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.LOW
-    assert cfg.include_thoughts is False
-
-    # Gemini 3+ Pro: 'minimal' -> clamped to LOW
-    pro_35_min = ChatGoogleGenerativeAI(
-        model="gemini-3.5-pro",
-        reasoning_effort="minimal",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = pro_35_min._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.LOW
-
-    # Gemini 3.0 Pro Preview: 'medium' -> clamped to HIGH (only LOW/HIGH supported)
-    pro_30 = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview",
-        reasoning_effort="medium",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = pro_30._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.HIGH
-
-    # Gemini 3+ Pro: thinking_budget=0 -> thinking_level=LOW + include_thoughts=False
-    pro_35_budget = ChatGoogleGenerativeAI(
-        model="gemini-3.5-pro", thinking_budget=0, api_key=SecretStr(FAKE_API_KEY)
-    )
-    cfg = pro_35_budget._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.LOW
-    assert cfg.thinking_budget is None
-    assert cfg.include_thoughts is False
-
-    # Gemini 3+ Pro: thinking_budget=-1 (dynamic) passes through unchanged
-    pro_35_dynamic = ChatGoogleGenerativeAI(
-        model="gemini-3.5-pro", thinking_budget=-1, api_key=SecretStr(FAKE_API_KEY)
-    )
-    cfg = pro_35_dynamic._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_budget == -1
-    assert cfg.thinking_level is None
-    assert cfg.include_thoughts is None
-
-    # Gemini 2.5 Flash: reasoning_effort='none' -> thinking_budget=0
-    flash_25 = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        reasoning_effort="none",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = flash_25._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_budget == 0
-    assert cfg.thinking_level is None
-    assert cfg.include_thoughts is False
-
-    # Gemini 2.5 Pro: reasoning_effort='none' -> thinking_budget=128
-    pro_25 = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
-        reasoning_effort="none",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = pro_25._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_budget == 128
-    assert cfg.thinking_level is None
-    assert cfg.include_thoughts is False
-
-    # Gemini 2.5 Pro: reasoning_effort='medium' -> thinking_budget=8192
-    pro_25_med = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
-        reasoning_effort="medium",
-        api_key=SecretStr(FAKE_API_KEY),
-    )
-    cfg = pro_25_med._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_budget == 8192
-    assert cfg.thinking_level is None
-
-
-@pytest.mark.parametrize(
-    "model", ["gemini-flash-latest", "gemini-pro-latest", "gemini-2.0-flash"]
-)
-def test_thinking_level_passes_through_for_non_gemini_25_models(model: str) -> None:
-    """Level-to-budget translation only applies to Gemini 2.5 models."""
-    llm = ChatGoogleGenerativeAI(
-        model=model, reasoning_effort="low", api_key=SecretStr(FAKE_API_KEY)
-    )
-    cfg = llm._prepare_request([HumanMessage(content="Hello")])[
-        "config"
-    ].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.LOW
-    assert cfg.thinking_budget is None
-
-
 def test_normalize_regional_and_resource_model_names() -> None:
     """Verify regional and resource-path prefixes normalize properly."""
     msg = HumanMessage(content="Hello")
 
     regional_pro = ChatGoogleGenerativeAI(
         model="publishers/google/models/au.gemini-3.1-pro-preview",
-        reasoning_effort="minimal",
         api_key=SecretStr(FAKE_API_KEY),
     )
     assert regional_pro.temperature is None
-    cfg = regional_pro._prepare_request([msg])["config"].thinking_config
-    assert cfg.thinking_level == ThinkingLevel.LOW
+    assert regional_pro.profile
+    assert regional_pro.profile == _get_default_model_profile("gemini-3.1-pro-preview")
 
     regional_fixed = ChatGoogleGenerativeAI(
         model="au.gemini-3.5-flash-lite",
