@@ -425,12 +425,15 @@ def _text_document_source(block: dict) -> dict[str, Any]:
 def _format_document_source(block: dict) -> dict[str, Any]:
     """Build the Anthropic document source for a LangChain file block.
 
-    Mirrors `langchain_anthropic`, accepting both standard and legacy
-    (`source_type`) block shapes.
+    Follows `langchain_anthropic`, accepting both standard and legacy
+    (`source_type`) block shapes, but validates sources more strictly: non-PDF
+    base64 or URL files and empty base64 payloads are rejected locally rather
+    than failing at the API.
 
     Raises:
-        ValueError: If a `file` block has no supported data field, or a base64
-            `file` block is not a PDF or has an empty payload.
+        ValueError: If a `file` block has no supported data field, a base64 or
+            URL `file` block is not a PDF, a base64 payload is empty, or a
+            plain-text block has no inline `text`.
     """
     if block["type"] == "text-plain":
         return _text_document_source(block)
@@ -482,7 +485,8 @@ def _format_document_content_block(block: dict) -> dict:
     before reaching the API.
 
     Raises:
-        ValueError: If a `file` block has no supported data field.
+        ValueError: If the block cannot be converted to an Anthropic document
+            source.
     """
     formatted_block: dict[str, Any] = {
         "type": "document",
@@ -499,21 +503,27 @@ def _format_document_content_block(block: dict) -> dict:
 
 
 def _clean_content_block(block: Any) -> Any:
-    """Remove streaming metadata fields from content blocks.
+    """Prepare a content block to be sent back to the Anthropic API.
 
     Anthropic's streaming API adds `index` and `partial_json` fields to content blocks
     during streaming. These fields must be removed before sending back to the API.
+    LangChain `image`, `file`, and `text-plain` blocks are also converted to Anthropic
+    wire format, including when nested inside `tool_result` content.
 
     Args:
         block: Content block (`dict`, `str`, or other type)
 
     Returns:
         Cleaned content block with streaming metadata removed
+
+    Raises:
+        ValueError: If a LangChain `image`, `file`, or `text-plain` block cannot be
+            converted to Anthropic wire format.
     """
     if not isinstance(block, dict):
         return block
 
-    # Convert LangChain image blocks to Anthropic wire format
+    # Convert LangChain image, file, and text-plain blocks to Anthropic wire format
     if block.get("type") == "image":
         return _format_image_content_block(block)
     if block.get("type") in ("file", "text-plain"):
