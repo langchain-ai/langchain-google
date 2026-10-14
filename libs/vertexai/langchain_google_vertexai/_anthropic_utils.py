@@ -435,6 +435,16 @@ def _format_document_source(block: dict) -> dict[str, Any]:
     if block["type"] == "text-plain":
         return _text_document_source(block)
     if "url" in block:
+        # Anthropic URL document sources only accept PDFs; `mime_type` is
+        # optional on URL blocks, so only reject an explicit mismatch
+        mime_type = block.get("mime_type")
+        if mime_type and mime_type != "application/pdf":
+            msg = (
+                "Anthropic only supports URL file content blocks with mime_type "
+                f"'application/pdf', got {mime_type!r}. Use an 'image' block for "
+                "image URLs."
+            )
+            raise ValueError(msg)
         return {"type": "url", "url": block["url"]}
     if "base64" in block or block.get("source_type") == "base64":
         media_type = block.get("mime_type") or "application/pdf"
