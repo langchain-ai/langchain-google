@@ -190,6 +190,16 @@ def _format_message_anthropic(
                     content.append(_format_image_content_block(block, project))
                     continue
 
+                if block["type"] in ("file", "text-plain"):
+                    content.append(_format_document_content_block(block))
+                    continue
+
+                # Tool results may nest LangChain file/image blocks (e.g. a PDF
+                # returned by a tool), which Anthropic rejects unconverted
+                if block["type"] == "tool_result":
+                    content.append(_clean_content_block(block))
+                    continue
+
                 if block["type"] == "text":
                     text: str = block.get("text", "")
                     # Only add non-empty strings for now as empty ones are not
@@ -394,24 +404,139 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
     raise ValueError(msg)
 
 
+def _text_document_source(block: dict) -> dict[str, Any]:
+    """Build an Anthropic plain-text document source.
+
+    Raises:
+        ValueError: If the block has no inline `text`, since Anthropic text
+            document sources cannot reference a URL, file ID, or base64 payload.
+    """
+    if "text" not in block:
+        msg = (
+            "Anthropic plain-text document sources require an inline 'text' field; "
+            f"got keys {sorted(block)}."
+        )
+        raise ValueError(msg)
+    return {
+        "type": "text",
+        "media_type": block.get("mime_type") or "text/plain",
+        "data": block["text"],
+    }
+
+
+def _format_document_source(block: dict) -> dict[str, Any]:
+    """Build the Anthropic document source for a LangChain file block.
+
+    Follows `langchain_anthropic`, accepting both standard and legacy
+    (`source_type`) block shapes, but validates sources more strictly: non-PDF
+    base64 or URL files and empty base64 payloads are rejected locally rather
+    than failing at the API.
+
+    `url` and `file_id` sources are still converted for parity, although Claude
+    on Vertex AI does not currently support URL or Files API input sources, so
+    the API is expected to reject them.
+
+    Raises:
+        ValueError: If a `file` block has no supported data field, a base64 or
+            URL `file` block is not a PDF, a base64 payload is empty, or a
+            plain-text block has no inline `text`.
+    """
+    if block["type"] == "text-plain":
+        return _text_document_source(block)
+    if "url" in block:
+        # Anthropic URL document sources only accept PDFs; `mime_type` is
+        # optional on URL blocks, so only reject an explicit mismatch
+        mime_type = block.get("mime_type")
+        if mime_type and mime_type != "application/pdf":
+            msg = (
+                "Anthropic only supports URL file content blocks with mime_type "
+                f"'application/pdf', got {mime_type!r}. Use an 'image' block for "
+                "image URLs."
+            )
+            raise ValueError(msg)
+        return {"type": "url", "url": block["url"]}
+    if "base64" in block or block.get("source_type") == "base64":
+        media_type = block.get("mime_type") or "application/pdf"
+        # Anthropic base64 document sources only accept PDFs
+        if media_type != "application/pdf":
+            msg = (
+                "Anthropic only supports base64 file content blocks with mime_type "
+                f"'application/pdf', got {media_type!r}. Use a 'text-plain' block "
+                "for plain text or an 'image' block for images."
+            )
+            raise ValueError(msg)
+        data = block["base64"] if "base64" in block else block.get("data")
+        if not data:
+            msg = "Base64 file content block is missing its 'base64' or 'data' payload."
+            raise ValueError(msg)
+        return {"type": "base64", "media_type": media_type, "data": data}
+    if block.get("source_type") == "text":
+        return _text_document_source(block)
+    if "file_id" in block:
+        return {"type": "file", "file_id": block["file_id"]}
+    if block.get("source_type") == "id" and "id" in block:
+        return {"type": "file", "file_id": block["id"]}
+    msg = (
+        "Anthropic file content blocks require a 'url', 'base64', or 'file_id' "
+        "key (or legacy source_type 'base64', 'text', or 'id'). Use a "
+        "'text-plain' block for plain text."
+    )
+    raise ValueError(msg)
+
+
+def _format_document_content_block(block: dict) -> dict:
+    """Convert LangChain `file` and `text-plain` blocks to Anthropic documents.
+
+    Anthropic has no `file` content type, so these blocks must be converted
+    before reaching the API.
+
+    Raises:
+        ValueError: If the block cannot be converted to an Anthropic document
+            source.
+    """
+    formatted_block: dict[str, Any] = {
+        "type": "document",
+        "source": _format_document_source(block),
+    }
+    for key in ("cache_control", "citations", "title", "context"):
+        if key in block:
+            formatted_block[key] = block[key]
+        elif key in (block.get("extras") or {}):
+            formatted_block[key] = block["extras"][key]
+        elif key in (block.get("metadata") or {}):
+            formatted_block[key] = block["metadata"][key]
+    return formatted_block
+
+
 def _clean_content_block(block: Any) -> Any:
-    """Remove streaming metadata fields from content blocks.
+    """Prepare a content block to be sent back to the Anthropic API.
 
     Anthropic's streaming API adds `index` and `partial_json` fields to content blocks
     during streaming. These fields must be removed before sending back to the API.
+    LangChain `image`, `file`, and `text-plain` blocks are also converted to Anthropic
+    wire format, including when nested inside `tool_result` content.
 
     Args:
         block: Content block (`dict`, `str`, or other type)
 
     Returns:
         Cleaned content block with streaming metadata removed
+
+    Raises:
+        ValueError: If a LangChain `image`, `file`, or `text-plain` block cannot be
+            converted to Anthropic wire format.
     """
     if not isinstance(block, dict):
         return block
 
-    # Convert LangChain image blocks to Anthropic wire format
+    # Convert LangChain image, file, and text-plain blocks to Anthropic wire format
     if block.get("type") == "image":
         return _format_image_content_block(block)
+    if block.get("type") in ("file", "text-plain"):
+        return _format_document_content_block(block)
+    # Tool results may nest LangChain blocks that also need converting
+    if block.get("type") == "tool_result" and "content" in block:
+        block = {**block, "content": _clean_content(block["content"])}
 
     # Remove known streaming metadata fields
     # 'index' - added during streaming to track block position
