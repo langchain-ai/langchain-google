@@ -612,6 +612,18 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
     elif isinstance(schema, dict):
+        if schema.get("anyOf") and all(
+            any_of_type.get("type") != "null" for any_of_type in schema.get("anyOf", [])
+        ):
+            # Mirror the anyOf handling in _get_properties_from_schema: convert
+            # each variant and don't set type, as they're mutually exclusive.
+            items["anyOf"] = [
+                _format_json_schema_to_gapic(any_of_type)
+                for any_of_type in schema["anyOf"]
+            ]
+            if "title" in schema or "description" in schema:
+                items["description"] = schema.get("description") or schema.get("title")
+            return items
         items["type"] = _get_type_from_schema(schema)
         if items["type"] == types.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
