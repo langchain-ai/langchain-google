@@ -468,8 +468,9 @@ def _format_document_source(block: dict) -> dict[str, Any]:
     if block.get("source_type") == "id" and "id" in block:
         return {"type": "file", "file_id": block["id"]}
     msg = (
-        "Anthropic only supports 'url', 'base64', 'text', or 'file_id' keys for "
-        "file content blocks."
+        "Anthropic file content blocks require a 'url', 'base64', or 'file_id' "
+        "key (or legacy source_type 'base64', 'text', or 'id'). Use a "
+        "'text-plain' block for plain text."
     )
     raise ValueError(msg)
 
