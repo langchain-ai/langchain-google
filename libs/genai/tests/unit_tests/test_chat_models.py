@@ -3716,6 +3716,32 @@ def test_parse_chat_history_rejects_malformed_native_media(
         _parse_chat_history([message])
 
 
+def test_convert_to_parts_text_plain_inline_text() -> None:
+    parts = _convert_to_parts(
+        [
+            {"type": "text", "text": "Summarise this."},
+            {
+                "type": "text-plain",
+                "text": "hello world",
+                "mime_type": "text/plain",
+            },
+        ]
+    )
+    assert [p.text for p in parts] == ["Summarise this.", "hello world"]
+
+
+def test_convert_to_parts_text_plain_missing_text_rejected() -> None:
+    with pytest.raises(ValueError, match="must contain 'text' field"):
+        _convert_to_parts(
+            [
+                {
+                    "type": "text-plain",
+                    "mime_type": "text/plain",
+                }
+            ]
+        )
+
+
 def test_convert_to_parts_still_raises_on_unknown_type() -> None:
     with pytest.raises(ValueError, match="Unrecognized message part type: bogus"):
         _convert_to_parts([{"type": "bogus"}])

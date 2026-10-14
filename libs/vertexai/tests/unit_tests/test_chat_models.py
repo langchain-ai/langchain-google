@@ -711,6 +711,42 @@ def test_parse_history_gemini() -> None:
     assert system_instructions.parts[0].text == system_input
 
 
+def test_parse_history_gemini_text_plain_inline_text() -> None:
+    """Plain-text document blocks with inline text send as text parts."""
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": "Summarise this."},
+            {
+                "type": "text-plain",
+                "text": "hello world",
+                "mime_type": "text/plain",
+            },
+        ]
+    )
+    image_bytes_loader = ImageBytesLoader()
+    system_instructions, history = _parse_chat_history_gemini(
+        [message], image_bytes_loader
+    )
+    assert not system_instructions
+    assert [p.text for p in history[0].parts] == ["Summarise this.", "hello world"]
+
+
+def test_parse_history_gemini_text_plain_missing_text_rejected() -> None:
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text-plain",
+                "mime_type": "text/plain",
+            }
+        ]
+    )
+    image_bytes_loader = ImageBytesLoader()
+    # A text-plain block without inline text never reaches data-block
+    # formatting; the upstream type allowlist rejects it with its own message.
+    with pytest.raises(ValueError, match="Only text, image_url, and media"):
+        _parse_chat_history_gemini([message], image_bytes_loader)
+
+
 def test_parse_history_gemini_number() -> None:
     """Ensure that numeric strings are parsed correctly as text.
 
