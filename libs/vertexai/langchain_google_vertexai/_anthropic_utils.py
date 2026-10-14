@@ -432,6 +432,10 @@ def _format_document_source(block: dict) -> dict[str, Any]:
     base64 or URL files and empty base64 payloads are rejected locally rather
     than failing at the API.
 
+    `url` and `file_id` sources are still converted for parity, although Claude
+    on Vertex AI does not currently support URL or Files API input sources, so
+    the API is expected to reject them.
+
     Raises:
         ValueError: If a `file` block has no supported data field, a base64 or
             URL `file` block is not a PDF, a base64 payload is empty, or a
