@@ -418,16 +418,26 @@ def _format_document_source(block: dict) -> dict[str, Any]:
     (`source_type`) block shapes.
 
     Raises:
-        ValueError: If a `file` block has no supported data field.
+        ValueError: If a `file` block has no supported data field, or a base64
+            `file` block is not a PDF.
     """
     if block["type"] == "text-plain":
         return _text_document_source(block)
     if "url" in block:
         return {"type": "url", "url": block["url"]}
     if "base64" in block or block.get("source_type") == "base64":
+        media_type = block.get("mime_type") or "application/pdf"
+        # Anthropic base64 document sources only accept PDFs
+        if media_type != "application/pdf":
+            msg = (
+                "Anthropic only supports base64 file content blocks with mime_type "
+                f"'application/pdf', got {media_type!r}. Use a 'text-plain' block "
+                "for plain text or an 'image' block for images."
+            )
+            raise ValueError(msg)
         return {
             "type": "base64",
-            "media_type": block.get("mime_type") or "application/pdf",
+            "media_type": media_type,
             "data": block.get("base64") or block.get("data", ""),
         }
     if block.get("source_type") == "text":
