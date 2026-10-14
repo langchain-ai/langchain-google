@@ -194,6 +194,8 @@ def _format_message_anthropic(
                     content.append(_format_document_content_block(block))
                     continue
 
+                # Tool results may nest LangChain file/image blocks (e.g. a PDF
+                # returned by a tool), which Anthropic rejects unconverted
                 if block["type"] == "tool_result":
                     content.append(_clean_content_block(block))
                     continue
@@ -528,6 +530,7 @@ def _clean_content_block(block: Any) -> Any:
         return _format_image_content_block(block)
     if block.get("type") in ("file", "text-plain"):
         return _format_document_content_block(block)
+    # Tool results may nest LangChain blocks that also need converting
     if block.get("type") == "tool_result" and "content" in block:
         block = {**block, "content": _clean_content(block["content"])}
 
