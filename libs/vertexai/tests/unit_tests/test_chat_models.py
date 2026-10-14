@@ -578,6 +578,72 @@ def test_default_params_gemini() -> None:
         assert not mock_generate_content.call_args.kwargs["request"].safety_settings
 
 
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+@pytest.mark.parametrize("metadata_only", [False, True])
+@pytest.mark.parametrize("with_supports", [False, True])
+def test_search_streaming_citations(
+    output_version: str,
+    metadata_only: bool,
+    with_supports: bool,
+    clear_prediction_client_cache: Any,
+) -> None:
+    grounding_metadata = {
+        "web_search_queries": ["news"],
+        "grounding_chunks": [
+            {"web": {"uri": "https://example.com/news", "title": "News"}}
+        ],
+        "grounding_supports": [
+            {
+                "segment": {"start_index": 0, "end_index": 4, "text": "News"},
+                "grounding_chunk_indices": [0],
+            }
+        ],
+    }
+    if not with_supports:
+        grounding_metadata["grounding_supports"] = []
+    responses = [
+        GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="News")]))]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[] if metadata_only else [Part(text="!")]),
+                    grounding_metadata=grounding_metadata,
+                    finish_reason="STOP",
+                )
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(
+            model=_DEFAULT_GEMINI_MODEL,
+            project="test-project",
+            output_version=output_version,
+        )
+        chunks = list(model.stream("News?"))
+    _get_prediction_client.cache_clear()
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    text_blocks = [b for b in full.content_blocks if b["type"] == "text"]
+    assert len(text_blocks) == 1
+    assert text_blocks[0]["text"] == ("News" if metadata_only else "News!")
+    if not with_supports:
+        assert not text_blocks[0].get("annotations")
+        return
+    citations = text_blocks[0]["annotations"]
+    assert len(citations) == 1
+    assert citations[0]["type"] == "citation"
+    assert citations[0]["url"] == "https://example.com/news"
+    assert citations[0]["cited_text"] == "News"
+    assert citations[0]["start_index"] == 0
+    assert citations[0]["end_index"] == 4
+
+
 def test_generation_config_gemini() -> None:
     """Test that generation config is set correctly in the request when overridden."""
     model = ChatVertexAI(

@@ -3027,6 +3027,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be merged
             generation_info.pop("is_blocked", None)
+            if (
+                self.output_version == "v1"
+                and not message.content
+                and generation_info.get("grounding_metadata", {}).get(
+                    "grounding_supports"
+                )
+            ):
+                message.content = [{"type": "text", "text": ""}]
 
         message.response_metadata["model_provider"] = "google_vertexai"
 
