@@ -403,7 +403,18 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
 
 
 def _text_document_source(block: dict) -> dict[str, Any]:
-    """Build an Anthropic plain-text document source."""
+    """Build an Anthropic plain-text document source.
+
+    Raises:
+        ValueError: If the block has no inline `text`, since Anthropic text
+            document sources cannot reference a URL, file ID, or base64 payload.
+    """
+    if "text" not in block:
+        msg = (
+            "Anthropic plain-text document sources require an inline 'text' field; "
+            f"got keys {sorted(block)}."
+        )
+        raise ValueError(msg)
     return {
         "type": "text",
         "media_type": block.get("mime_type") or "text/plain",
