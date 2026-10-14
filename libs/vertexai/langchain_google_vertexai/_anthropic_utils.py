@@ -465,7 +465,7 @@ def _format_document_source(block: dict) -> dict[str, Any]:
         return _text_document_source(block)
     if "file_id" in block:
         return {"type": "file", "file_id": block["file_id"]}
-    if block.get("source_type") == "id":
+    if block.get("source_type") == "id" and "id" in block:
         return {"type": "file", "file_id": block["id"]}
     msg = (
         "Anthropic only supports 'url', 'base64', 'text', or 'file_id' keys for "
