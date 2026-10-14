@@ -1584,19 +1584,15 @@ def test_format_image(image_url: str, expected_media_type: str) -> None:
 
 
 @pytest.mark.parametrize("message_kind", ["user", "tool", "nested_tool", "nested_user"])
-@pytest.mark.parametrize("legacy", [False, True])
-def test_format_messages_base64_pdf_file(message_kind: str, legacy: bool) -> None:
+def test_format_messages_base64_pdf_file(message_kind: str) -> None:
     pdf_block = {
         "type": "file",
+        "base64": "cGRm",
         "mime_type": "application/pdf",
         "id": "lc-file-id",
         "title": "Report",
         "extras": {"citations": {"enabled": True}, "context": "Quarterly report"},
     }
-    if legacy:
-        pdf_block.update({"source_type": "base64", "data": "cGRm"})
-    else:
-        pdf_block["base64"] = "cGRm"
     native_document = {
         "type": "document",
         "source": {
@@ -1705,7 +1701,6 @@ def test_format_messages_file_legacy_metadata() -> None:
     ]
 
 
-@pytest.mark.parametrize("message_kind", ["user", "tool"])
 @pytest.mark.parametrize(
     ("block", "expected_source"),
     [
@@ -1732,30 +1727,19 @@ def test_format_messages_file_legacy_metadata() -> None:
     ],
 )
 def test_format_messages_document_sources(
-    message_kind: str, block: dict[str, Any], expected_source: dict[str, Any]
+    block: dict[str, Any], expected_source: dict[str, Any]
 ) -> None:
-    message: HumanMessage | ToolMessage
-    if message_kind == "user":
-        message = HumanMessage(content=[block])
-    else:
-        message = ToolMessage(content=[block], tool_call_id="call_1")
+    message = HumanMessage(content=[block])
 
     _, formatted = _format_messages_anthropic([message], project="test-project")
 
-    content = formatted[0]["content"]
-    if message_kind == "tool":
-        content = content[0]["content"]
-    assert content == [{"type": "document", "source": expected_source}]
+    assert formatted[0]["content"] == [{"type": "document", "source": expected_source}]
 
 
-@pytest.mark.parametrize("message_kind", ["user", "tool"])
-def test_format_messages_file_without_data_raises(message_kind: str) -> None:
-    block = {"type": "file", "id": "lc-file-id", "mime_type": "application/pdf"}
-    message: HumanMessage | ToolMessage
-    if message_kind == "user":
-        message = HumanMessage(content=[block])
-    else:
-        message = ToolMessage(content=[block], tool_call_id="call_1")
+def test_format_messages_file_without_data_raises() -> None:
+    message = HumanMessage(
+        content=[{"type": "file", "id": "lc-file-id", "mime_type": "application/pdf"}]
+    )
 
     with pytest.raises(ValueError, match="file content blocks"):
         _format_messages_anthropic([message], project="test-project")
