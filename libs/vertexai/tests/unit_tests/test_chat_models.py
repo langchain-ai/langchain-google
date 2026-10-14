@@ -2178,6 +2178,56 @@ def test_thinking_budget_in_invocation_params() -> None:
     assert invocation_params["include_thoughts"] is False
 
 
+def test_with_structured_output_json_schema(
+    clear_prediction_client_cache: Any,
+) -> None:
+    """Test that `json_schema` sends `response_json_schema` with refs inlined."""
+
+    class Product(BaseModel):
+        name: str
+
+    class Inventory(BaseModel):
+        items: list[Product]
+        featured: Product | None = None
+
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as mc:
+        response = GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[Part(text='{"items": [{"name": "A"}]}')])
+                )
+            ]
+        )
+        mock_generate_content = MagicMock(return_value=response)
+        mc.return_value.generate_content = mock_generate_content
+
+        llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+        structured_llm = llm.with_structured_output(Inventory, method="json_schema")
+        result = structured_llm.invoke("Query.")
+
+    assert result == Inventory(items=[Product(name="A")])
+    config = mock_generate_content.call_args.kwargs["request"].generation_config
+    assert config.response_mime_type == "application/json"
+    assert "response_schema" not in config
+    product = {
+        "properties": {"name": {"title": "Name", "type": "string"}},
+        "required": ["name"],
+        "title": "Product",
+        "type": "object",
+    }
+    assert GenerationConfig.to_dict(config)["response_json_schema"] == {
+        "properties": {
+            "items": {"items": product, "title": "Items", "type": "array"},
+            "featured": {"anyOf": [product, {"type": "null"}], "default": None},
+        },
+        "required": ["items"],
+        "title": "Inventory",
+        "type": "object",
+    }
+
+
 def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
     """Test that json_mode uses serialization mode for Pydantic v2 model_json_schema.
 

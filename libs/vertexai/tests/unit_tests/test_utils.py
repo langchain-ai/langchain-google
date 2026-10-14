@@ -68,6 +68,15 @@ def test_schema_nested_ref_replacement() -> None:
     assert replace_defs_in_schema(schema) == expected_schema
 
 
+def test_schema_ref_replacement_in_list() -> None:
+    schema = {
+        "$defs": {"MyDefinition": {"type": "string"}},
+        "property": {"anyOf": [{"$ref": "#/$defs/MyDefinition"}, {"type": "null"}]},
+    }
+    expected_schema = {"property": {"anyOf": [{"type": "string"}, {"type": "null"}]}}
+    assert replace_defs_in_schema(schema) == expected_schema
+
+
 def test_schema_recursive_error_self_reference() -> None:
     schema = {
         "$defs": {
