@@ -419,7 +419,7 @@ def _format_document_source(block: dict) -> dict[str, Any]:
 
     Raises:
         ValueError: If a `file` block has no supported data field, or a base64
-            `file` block is not a PDF.
+            `file` block is not a PDF or has an empty payload.
     """
     if block["type"] == "text-plain":
         return _text_document_source(block)
@@ -435,11 +435,11 @@ def _format_document_source(block: dict) -> dict[str, Any]:
                 "for plain text or an 'image' block for images."
             )
             raise ValueError(msg)
-        return {
-            "type": "base64",
-            "media_type": media_type,
-            "data": block.get("base64") or block.get("data", ""),
-        }
+        data = block["base64"] if "base64" in block else block.get("data")
+        if not data:
+            msg = "Base64 file content block is missing its 'base64' or 'data' payload."
+            raise ValueError(msg)
+        return {"type": "base64", "media_type": media_type, "data": data}
     if block.get("source_type") == "text":
         return _text_document_source(block)
     if "file_id" in block:
