@@ -190,8 +190,8 @@ def _format_message_anthropic(
                     content.append(_format_image_content_block(block, project))
                     continue
 
-                if block["type"] == "file":
-                    content.append(_format_file_content_block(block))
+                if block["type"] in ("file", "text-plain"):
+                    content.append(_format_document_content_block(block))
                     continue
 
                 if block["type"] == "tool_result":
@@ -402,17 +402,59 @@ def _format_image_content_block(block: dict, project: str | None = None) -> dict
     raise ValueError(msg)
 
 
-def _format_file_content_block(block: dict) -> dict:
-    """Convert base64 PDF file blocks to Anthropic documents."""
-    if "base64" not in block and block.get("source_type") != "base64":
-        return block
-    formatted_block: dict[str, Any] = {
-        "type": "document",
-        "source": {
+def _text_document_source(block: dict) -> dict[str, Any]:
+    """Build an Anthropic plain-text document source."""
+    return {
+        "type": "text",
+        "media_type": block.get("mime_type") or "text/plain",
+        "data": block["text"],
+    }
+
+
+def _format_document_source(block: dict) -> dict[str, Any]:
+    """Build the Anthropic document source for a LangChain file block.
+
+    Mirrors `langchain_anthropic`, accepting both standard and legacy
+    (`source_type`) block shapes.
+
+    Raises:
+        ValueError: If a `file` block has no supported data field.
+    """
+    if block["type"] == "text-plain":
+        return _text_document_source(block)
+    if "url" in block:
+        return {"type": "url", "url": block["url"]}
+    if "base64" in block or block.get("source_type") == "base64":
+        return {
             "type": "base64",
             "media_type": block.get("mime_type") or "application/pdf",
             "data": block.get("base64") or block.get("data", ""),
-        },
+        }
+    if block.get("source_type") == "text":
+        return _text_document_source(block)
+    if "file_id" in block:
+        return {"type": "file", "file_id": block["file_id"]}
+    if block.get("source_type") == "id":
+        return {"type": "file", "file_id": block["id"]}
+    msg = (
+        "Anthropic only supports 'url', 'base64', 'text', or 'file_id' keys for "
+        "file content blocks."
+    )
+    raise ValueError(msg)
+
+
+def _format_document_content_block(block: dict) -> dict:
+    """Convert LangChain `file` and `text-plain` blocks to Anthropic documents.
+
+    Anthropic has no `file` content type, so these blocks must be converted
+    before reaching the API.
+
+    Raises:
+        ValueError: If a `file` block has no supported data field.
+    """
+    formatted_block: dict[str, Any] = {
+        "type": "document",
+        "source": _format_document_source(block),
     }
     for key in ("cache_control", "citations", "title", "context"):
         if key in block:
@@ -442,8 +484,8 @@ def _clean_content_block(block: Any) -> Any:
     # Convert LangChain image blocks to Anthropic wire format
     if block.get("type") == "image":
         return _format_image_content_block(block)
-    if block.get("type") == "file":
-        return _format_file_content_block(block)
+    if block.get("type") in ("file", "text-plain"):
+        return _format_document_content_block(block)
     if block.get("type") == "tool_result" and "content" in block:
         block = {**block, "content": _clean_content(block["content"])}
 

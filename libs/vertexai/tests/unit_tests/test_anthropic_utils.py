@@ -1592,7 +1592,6 @@ def test_format_messages_base64_pdf_file(message_kind: str, legacy: bool) -> Non
         "id": "lc-file-id",
         "title": "Report",
         "extras": {"citations": {"enabled": True}, "context": "Quarterly report"},
-        "cache_control": {"type": "ephemeral"},
     }
     if legacy:
         pdf_block.update({"source_type": "base64", "data": "cGRm"})
@@ -1648,7 +1647,6 @@ def test_format_messages_base64_pdf_file(message_kind: str, legacy: bool) -> Non
             "title": "Report",
             "citations": {"enabled": True},
             "context": "Quarterly report",
-            "cache_control": {"type": "ephemeral"},
         },
         native_document,
     ]
@@ -1676,6 +1674,91 @@ def test_format_messages_pdf_file_defaults() -> None:
             },
         }
     ]
+
+
+def test_format_messages_file_legacy_metadata() -> None:
+    message = HumanMessage(
+        content=[
+            {
+                "type": "file",
+                "source_type": "base64",
+                "data": "cGRm",
+                "metadata": {"title": "Report"},
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+    )
+
+    _, formatted = _format_messages_anthropic([message], project="test-project")
+
+    assert formatted[0]["content"] == [
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": "cGRm",
+            },
+            "title": "Report",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+
+@pytest.mark.parametrize("message_kind", ["user", "tool"])
+@pytest.mark.parametrize(
+    ("block", "expected_source"),
+    [
+        (
+            {"type": "file", "url": "https://example.com/report.pdf"},
+            {"type": "url", "url": "https://example.com/report.pdf"},
+        ),
+        (
+            {"type": "file", "file_id": "file_123"},
+            {"type": "file", "file_id": "file_123"},
+        ),
+        (
+            {"type": "file", "source_type": "id", "id": "file_123"},
+            {"type": "file", "file_id": "file_123"},
+        ),
+        (
+            {"type": "file", "source_type": "text", "text": "notes"},
+            {"type": "text", "media_type": "text/plain", "data": "notes"},
+        ),
+        (
+            {"type": "text-plain", "text": "notes", "mime_type": "text/markdown"},
+            {"type": "text", "media_type": "text/markdown", "data": "notes"},
+        ),
+    ],
+)
+def test_format_messages_document_sources(
+    message_kind: str, block: dict[str, Any], expected_source: dict[str, Any]
+) -> None:
+    message: HumanMessage | ToolMessage
+    if message_kind == "user":
+        message = HumanMessage(content=[block])
+    else:
+        message = ToolMessage(content=[block], tool_call_id="call_1")
+
+    _, formatted = _format_messages_anthropic([message], project="test-project")
+
+    content = formatted[0]["content"]
+    if message_kind == "tool":
+        content = content[0]["content"]
+    assert content == [{"type": "document", "source": expected_source}]
+
+
+@pytest.mark.parametrize("message_kind", ["user", "tool"])
+def test_format_messages_file_without_data_raises(message_kind: str) -> None:
+    block = {"type": "file", "id": "lc-file-id", "mime_type": "application/pdf"}
+    message: HumanMessage | ToolMessage
+    if message_kind == "user":
+        message = HumanMessage(content=[block])
+    else:
+        message = ToolMessage(content=[block], tool_call_id="call_1")
+
+    with pytest.raises(ValueError, match="file content blocks"):
+        _format_messages_anthropic([message], project="test-project")
 
 
 def test_format_messages_anthropic_system_not_first() -> None:
