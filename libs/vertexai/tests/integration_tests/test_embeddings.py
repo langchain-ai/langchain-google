@@ -28,6 +28,7 @@ def test_initialization() -> None:
         assert embeddings.model_name == _DEFAULT_MODEL
 
 
+@pytest.mark.asyncio
 @pytest.mark.release
 @pytest.mark.parametrize(
     "number_of_docs",
@@ -37,58 +38,63 @@ def test_initialization() -> None:
     ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
-def test_langchain_google_vertexai_embedding_documents(
+async def test_langchain_google_vertexai_embedding_documents(
     number_of_docs: int, model_name: str, embeddings_dim: int
 ) -> None:
     documents = ["foo bar"] * number_of_docs
     model = VertexAIEmbeddings(model=model_name)
-    output = model.embed_documents(documents)
+    output = await model.aembed_documents(documents)
     assert len(output) == number_of_docs
     for embedding in output:
         assert len(embedding) == embeddings_dim
 
 
+@pytest.mark.asyncio
 @pytest.mark.release
 @pytest.mark.parametrize(
     ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
-def test_langchain_google_vertexai_embedding_documents_with_task_type(
+async def test_langchain_google_vertexai_embedding_documents_with_task_type(
     model_name: str,
     embeddings_dim: int,
 ) -> None:
     documents = ["foo bar"] * 8
     model = VertexAIEmbeddings(model=model_name)
-    output = model.embed_documents(documents)
+    output = await model.aembed_documents(documents)
     assert len(output) == 8
     for embedding in output:
         assert len(embedding) == embeddings_dim
 
 
+@pytest.mark.asyncio
 @pytest.mark.release
 @pytest.mark.parametrize(
     ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
-def test_langchain_google_vertexai_embedding_query(model_name, embeddings_dim) -> None:
+async def test_langchain_google_vertexai_embedding_query(
+    model_name: str, embeddings_dim: int
+) -> None:
     document = "foo bar"
     model = VertexAIEmbeddings(model=model_name)
-    output = model.embed_query(document)
+    output = await model.aembed_query(document)
     assert len(output) == embeddings_dim
 
 
+@pytest.mark.asyncio
 @pytest.mark.release
 @pytest.mark.parametrize(
     ("model_name", "embeddings_dim"),
     _EMBEDDING_MODELS,
 )
-def test_langchain_google_vertexai_embedding_query_with_task_type(
+async def test_langchain_google_vertexai_embedding_query_with_task_type(
     model_name: str,
     embeddings_dim: int,
 ) -> None:
     document = "foo bar"
     model = VertexAIEmbeddings(model=model_name)
-    output = model.embed_query(document)
+    output = await model.aembed_query(document)
     assert len(output) == embeddings_dim
 
 
