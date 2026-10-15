@@ -54,11 +54,11 @@ model_locations = {
 @pytest.mark.extended
 @pytest.mark.parametrize("model_name", model_names)
 @pytest.mark.flaky(retries=3)
-def test_generate(model_name: str) -> None:
+async def test_generate(model_name: str) -> None:
     llm = get_vertex_maas_model(
         model_name=model_name, location=model_locations.get(model_name, "us-central1")
     )
-    output = llm.invoke("What is the meaning of life?")
+    output = await llm.ainvoke("What is the meaning of life?")
     assert isinstance(output, AIMessage)
 
 
