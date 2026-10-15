@@ -483,6 +483,9 @@ def _parse_chat_history_gemini(
                 result.append(part)
         return result
 
+    def _content_has_function_response(content: Content) -> bool:
+        return any(part.function_response.name for part in content.parts)
+
     vertex_messages: list[Content] = []
     system_parts: list[Part] | None = None
     system_instruction = None
@@ -506,7 +509,12 @@ def _parse_chat_history_gemini(
             if system_parts is not None:
                 parts = system_parts + parts
                 system_parts = None
-            if vertex_messages and vertex_messages[-1].role == "user":
+
+            if (
+                vertex_messages
+                and vertex_messages[-1].role == "user"
+                and not _content_has_function_response(vertex_messages[-1])
+            ):
                 prev_parts = list(vertex_messages[-1].parts)
                 vertex_messages[-1] = Content(role=role, parts=prev_parts + parts)
             else:
@@ -591,7 +599,11 @@ def _parse_chat_history_gemini(
             parts = [part]
             if vertex_messages:
                 prev_content = vertex_messages[-1]
-                prev_content_is_function = prev_content and prev_content.role == "user"
+                prev_content_is_function = (
+                    prev_content
+                    and prev_content.role == "user"
+                    and _content_has_function_response(prev_content)
+                )
                 if prev_content_is_function:
                     prev_parts = list(prev_content.parts)
                     prev_parts.extend(parts)
@@ -663,7 +675,11 @@ def _parse_chat_history_gemini(
             parts = [part]
 
             prev_content = vertex_messages[-1]
-            prev_content_is_tool_response = prev_content and prev_content.role == "user"
+            prev_content_is_tool_response = (
+                prev_content
+                and prev_content.role == "user"
+                and _content_has_function_response(prev_content)
+            )
 
             if prev_content_is_tool_response:
                 prev_parts = list(prev_content.parts)
