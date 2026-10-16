@@ -584,9 +584,10 @@ def _get_properties_from_schema(schema: dict) -> dict[str, Any]:
                     v_properties
                 )
                 if isinstance(v_properties, dict):
-                    properties_item["required"] = [
-                        k for k, v in v_properties.items() if "default" not in v
-                    ]
+                    required = v.get("required")
+                    properties_item["required"] = (
+                        list(required) if isinstance(required, list) else []
+                    )
             elif not v.get("additionalProperties"):
                 # Only provide dummy type for object without properties AND without
                 # additionalProperties
@@ -674,6 +675,8 @@ def _get_nullable_type_from_schema(schema: dict[str, Any]) -> types.Type | None:
 
 
 def _is_nullable_schema(schema: dict[str, Any]) -> bool:
+    if schema.get("nullable") is True:
+        return True
     if "anyOf" in schema:
         schema_types = [
             _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
