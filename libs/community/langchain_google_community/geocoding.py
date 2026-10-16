@@ -1,5 +1,6 @@
 """Wrapper and Tool for the Google Maps Geocoding API."""
 
+import asyncio
 import os
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
@@ -386,7 +387,17 @@ class GoogleGeocodingAPIWrapper(BaseModel):
                 ) as response:
                     data = await response.json()
                     if data.get("status") == "OK":
-                        return self.results(query, language, region)
+                        results = data.get("results", [])
+                        return {
+                            "status": "OK",
+                            "total_results": len(results),
+                            "results": self.clean_results(results),
+                            "query_info": {
+                                "original_query": query,
+                                "language": language or self.language,
+                                "region": region or self.region,
+                            },
+                        }
                     return {
                         "status": data.get("status", "ERROR"),
                         "error_message": data.get("error_message", "Request failed"),
@@ -506,11 +517,61 @@ class GoogleGeocodingTool(BaseTool):
             response: Raw response with status and query info.
         """
         try:
-            result = await self.api_wrapper.geocode_async(
-                query=query, language=self.language, region=self.region
-            )
-            if result.get("status") != "OK":
-                return [], {"error": result.get("error_message", "Geocoding failed")}
-            return result.get("results", []), result
+            locations = [loc.strip() for loc in query.split(",") if loc.strip()]
+            if len(locations) > self.max_results:
+                locations = locations[: self.max_results]
+
+            if len(locations) > 1:
+                responses = await asyncio.gather(
+                    *(
+                        self.api_wrapper.geocode_async(
+                            query=location, language=self.language, region=self.region
+                        )
+                        for location in locations
+                    )
+                )
+                successful = [r for r in responses if r.get("status") == "OK"]
+                errors = [
+                    {
+                        "query": location,
+                        "status": r.get("status"),
+                        "message": r.get("error_message"),
+                    }
+                    for location, r in zip(locations, responses)
+                    if r.get("status") != "OK"
+                ]
+                results: Dict[str, Any] = {
+                    "status": "OK" if successful else "ERROR",
+                    "total_results": len(successful),
+                    "results": [r["results"][0] for r in successful if r["results"]],
+                    "errors": errors,
+                    "query_info": {
+                        "total_queries": len(locations),
+                        "successful": len(successful),
+                        "failed": len(errors),
+                        "language": self.language,
+                        "region": self.region,
+                    },
+                }
+            else:
+                single = await self.api_wrapper.geocode_async(
+                    query=locations[0], language=self.language, region=self.region
+                )
+                results = {
+                    "status": single.get("status"),
+                    "total_results": 1,
+                    "results": single.get("results", []),
+                    "query_info": {
+                        "total_queries": 1,
+                        "successful": 1 if single.get("status") == "OK" else 0,
+                        "failed": 0 if single.get("status") == "OK" else 1,
+                    },
+                }
+
+            if results.get("status") != "OK":
+                return [], {"error": results.get("error_message", "Geocoding failed")}
+
+            return results["results"], results
+
         except Exception as e:
             return [], {"error": str(e)}
