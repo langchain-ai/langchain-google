@@ -498,29 +498,37 @@ _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
 _CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
 
 
+def _normalize_gemini_model_name(model_name: str | None) -> str:
+    """Normalize model names by stripping resource paths and regional prefixes."""
+    if not model_name:
+        return ""
+    normalized = model_name.lower().rsplit("/", 1)[-1]
+    return re.sub(r"^[a-z]{2,}\.(?=(?:gemini|gemma)-)", "", normalized)
+
+
 def _uses_fixed_sampling_and_disallows_prefill(model_name: str) -> bool:
     """Check whether a model uses fixed sampling and rejects model prefills."""
-    if not model_name:
+    normalized_model = _normalize_gemini_model_name(model_name)
+    if not normalized_model:
         return False
-    normalized_model = model_name.lower().rsplit("/", 1)[-1]
     normalized_model = re.sub(r"-\d{3}$", "", normalized_model)
     return normalized_model in _FIXED_SAMPLING_AND_NO_PREFILL_MODELS
 
 
+_GEMINI_MAJOR_VERSION = re.compile(r"gemini-(\d+)")
+
+
 def _is_gemini_3_or_later(model_name: str) -> bool:
     """Checks if the model is Gemini 3 or later."""
-    if not model_name:
+    normalized = _normalize_gemini_model_name(model_name)
+    if not normalized:
         return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-3" in model_name
+    return any(int(major) >= 3 for major in _GEMINI_MAJOR_VERSION.findall(normalized))
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
     """Checks if the model is a Gemini 2.5 model."""
-    if not model_name:
-        return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-2.5" in model_name
+    return "gemini-2.5" in _normalize_gemini_model_name(model_name)
 
 
 _PROVIDER_RESOLVED_HOSTS = (
@@ -1034,6 +1042,8 @@ def _convert_to_parts(
                 and (v1beta_part := _v1beta_dict_to_part(part)) is not None
             ):
                 parts.append(v1beta_part)
+            elif part.keys() == {"cachePoint"}:
+                pass
             else:
                 # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
@@ -2202,6 +2212,7 @@ def _response_to_result(
                     message=AIMessageChunk(
                         content="",
                         response_metadata=response_metadata,
+                        usage_metadata=lc_usage,
                     ),
                     generation_info={},
                 )
@@ -3510,7 +3521,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _set_model_profile(self) -> Self:
         """Set model profile if not overridden."""
         if self.profile is None:
-            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            model_id = re.sub(r"-\d{3}$", "", _normalize_gemini_model_name(self.model))
             self.profile = _get_default_model_profile(model_id)
         return self
 

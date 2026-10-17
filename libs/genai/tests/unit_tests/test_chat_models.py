@@ -86,6 +86,7 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _get_ai_message_tool_messages_parts,
+    _get_default_model_profile,
     _handle_client_error,
     _handle_server_error,
     _is_gemini_3_or_later,
@@ -1534,13 +1535,19 @@ def test_temperature_range_model_validation() -> None:
 def test_temperature_default_by_model_version() -> None:
     """Test that legacy models get 0.7 temperature by default.
 
-    Also ensures Gemini 3 models get None.
+    Also ensures Gemini 3 and later models get None.
     """
     llm_gemini_3 = ChatGoogleGenerativeAI(
         model="gemini-3.5-flash",
         google_api_key=SecretStr(FAKE_API_KEY),
     )
     assert llm_gemini_3.temperature is None
+
+    llm_gemini_4 = ChatGoogleGenerativeAI(
+        model="gemini-4-pro",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm_gemini_4.temperature is None
 
     llm_gemini_2_5 = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
@@ -5254,6 +5261,28 @@ def test_convert_to_parts_non_dict_mapping() -> None:
         _convert_to_parts(content)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_convert_to_parts_drops_bedrock_cache_point(wrapped: bool) -> None:
+    block: dict[str, Any] = {"cachePoint": {"type": "default"}}
+    if wrapped:
+        block = {"type": "non_standard", "value": block}
+    with patch("langchain_google_genai.chat_models.logger.warning") as mock_warning:
+        parts = _convert_to_parts([{"type": "text", "text": "Hello"}, block])
+    assert [part.text for part in parts] == ["Hello"]
+    if wrapped:
+        mock_warning.assert_called_once()
+        assert "cannot be represented as a Gemini part" in mock_warning.call_args[0][0]
+    else:
+        mock_warning.assert_not_called()
+
+
+def test_convert_to_parts_preserves_cache_point_with_other_keys() -> None:
+    block = {"cachePoint": {"type": "default"}, "other": "value"}
+    with patch("langchain_google_genai.chat_models.logger.warning"):
+        parts = _convert_to_parts([block])
+    assert [part.text for part in parts] == [str(block)]
+
+
 def test_convert_to_parts_unrecognized_format_warning() -> None:
     """Test `_convert_to_parts` with unrecognized format triggers warning."""
     content = [{"some_key": "some_value"}]  # Not a recognized format
@@ -6055,6 +6084,9 @@ def test_uses_fixed_sampling_and_disallows_prefill(
 
 def test_is_new_gemini_model() -> None:
     assert _is_gemini_3_or_later("gemini-3.0-pro") is True
+    assert _is_gemini_3_or_later("gemini-4-pro") is True
+    assert _is_gemini_3_or_later("models/gemini-4.1-flash-preview") is True
+    assert _is_gemini_3_or_later("GEMINI-10-PRO") is True
     assert _is_gemini_3_or_later("gemini-2.5-pro") is False
     assert _is_gemini_3_or_later("gemini-2.5-flash") is False
     assert _is_gemini_3_or_later("gemini-1.5-pro") is False
@@ -8919,3 +8951,44 @@ def test_invoke_surfaces_traffic_type_on_response_metadata() -> None:
     message = llm.invoke("which quota served this?")
 
     assert message.response_metadata["traffic_type"] == "ON_DEMAND_PRIORITY"
+
+
+def test_normalize_regional_and_resource_model_names() -> None:
+    """Verify regional and resource-path prefixes normalize properly."""
+    msg = HumanMessage(content="Hello")
+
+    regional_pro = ChatGoogleGenerativeAI(
+        model="publishers/google/models/au.gemini-3.1-pro-preview",
+        api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert regional_pro.temperature is None
+    assert regional_pro.profile
+    assert regional_pro.profile == _get_default_model_profile("gemini-3.1-pro-preview")
+
+    regional_fixed = ChatGoogleGenerativeAI(
+        model="au.gemini-3.5-flash-lite",
+        temperature=0.3,
+        api_key=SecretStr(FAKE_API_KEY),
+    )
+    with pytest.warns(UserWarning, match="will be ignored"):
+        req = regional_fixed._prepare_request([msg])
+    assert "temperature" not in req["config"].model_dump(exclude_unset=True)
+
+
+def test_stream_empty_candidates_preserves_usage_metadata() -> None:
+    """Streaming chunk with empty candidates still attaches usage_metadata."""
+    response = GenerateContentResponse(
+        candidates=[],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15,
+        ),
+    )
+    result = _response_to_result(response, stream=True)
+    chunk_msg = result.generations[0].message
+    assert isinstance(chunk_msg, AIMessageChunk)
+    assert chunk_msg.usage_metadata is not None
+    assert chunk_msg.usage_metadata["input_tokens"] == 10
+    assert chunk_msg.usage_metadata["output_tokens"] == 5
+    assert chunk_msg.usage_metadata["total_tokens"] == 15

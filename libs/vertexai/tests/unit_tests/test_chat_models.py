@@ -578,6 +578,72 @@ def test_default_params_gemini() -> None:
         assert not mock_generate_content.call_args.kwargs["request"].safety_settings
 
 
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+@pytest.mark.parametrize("metadata_only", [False, True])
+@pytest.mark.parametrize("with_supports", [False, True])
+def test_search_streaming_citations(
+    output_version: str,
+    metadata_only: bool,
+    with_supports: bool,
+    clear_prediction_client_cache: Any,
+) -> None:
+    grounding_metadata = {
+        "web_search_queries": ["news"],
+        "grounding_chunks": [
+            {"web": {"uri": "https://example.com/news", "title": "News"}}
+        ],
+        "grounding_supports": [
+            {
+                "segment": {"start_index": 0, "end_index": 4, "text": "News"},
+                "grounding_chunk_indices": [0],
+            }
+        ],
+    }
+    if not with_supports:
+        grounding_metadata["grounding_supports"] = []
+    responses = [
+        GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="News")]))]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[] if metadata_only else [Part(text="!")]),
+                    grounding_metadata=grounding_metadata,
+                    finish_reason="STOP",
+                )
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(
+            model=_DEFAULT_GEMINI_MODEL,
+            project="test-project",
+            output_version=output_version,
+        )
+        chunks = list(model.stream("News?"))
+    _get_prediction_client.cache_clear()
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    text_blocks = [b for b in full.content_blocks if b["type"] == "text"]
+    assert len(text_blocks) == 1
+    assert text_blocks[0]["text"] == ("News" if metadata_only else "News!")
+    if not with_supports:
+        assert not text_blocks[0].get("annotations")
+        return
+    citations = text_blocks[0]["annotations"]
+    assert len(citations) == 1
+    assert citations[0]["type"] == "citation"
+    assert citations[0]["url"] == "https://example.com/news"
+    assert citations[0]["cited_text"] == "News"
+    assert citations[0]["start_index"] == 0
+    assert citations[0]["end_index"] == 4
+
+
 def test_generation_config_gemini() -> None:
     """Test that generation config is set correctly in the request when overridden."""
     model = ChatVertexAI(
@@ -2668,3 +2734,61 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_cached_content_preserves_full_resource_path() -> None:
+    """Full cachedContent resource names must not be double-prefixed."""
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        location="us-central1",
+    )
+    full_name = "projects/other-proj/locations/global/cachedContents/cache-123"
+    req_full = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content=full_name
+    )
+    assert req_full.cached_content == full_name
+
+    req_short = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content="cache-123"
+    )
+    assert (
+        req_short.cached_content
+        == "projects/test-project/locations/us-central1/cachedContents/cache-123"
+    )
+
+
+def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> None:
+    """Verify thought/cache token details are preserved across streaming chunks."""
+    from langchain_core.messages.ai import subtract_usage
+
+    from langchain_google_vertexai.chat_models import _get_usage_metadata_gemini
+
+    chunk1 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 4,
+            "thoughts_token_count": 5,
+            "total_token_count": 29,
+            "cached_content_token_count": 5,
+        }
+    )
+    chunk2 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 10,
+            "thoughts_token_count": 15,
+            "total_token_count": 45,
+            "cached_content_token_count": 5,
+        }
+    )
+    assert chunk1 is not None
+    assert chunk2 is not None
+    assert chunk2["input_tokens"] == 20
+    assert chunk2["output_tokens"] == 10
+    assert chunk2["total_tokens"] == 45
+    assert chunk2["output_token_details"] == {"reasoning": 15}
+    assert chunk2["input_token_details"] == {"cache_read": 5}
+
+    delta = subtract_usage(chunk2, chunk1)
+    assert delta["output_token_details"] == {"reasoning": 10}
