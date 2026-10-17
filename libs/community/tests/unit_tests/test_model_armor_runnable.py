@@ -134,6 +134,58 @@ def test_response_sanitization(
         assert result == input_text
 
 
+@pytest.mark.parametrize(
+    "runnable_cls,client_method",
+    [
+        (ModelArmorSanitizePromptRunnable, "sanitize_user_prompt"),
+        (ModelArmorSanitizeResponseRunnable, "sanitize_model_response"),
+    ],
+)
+@pytest.mark.parametrize(
+    "constructor_fail_open,call_fail_open,should_raise",
+    [
+        # A per-call fail_open overrides the runnable's own setting.
+        (True, False, True),
+        (False, True, False),
+        # None leaves the runnable's setting in charge.
+        (True, None, False),
+        (False, None, True),
+    ],
+)
+@patch("langchain_google_community.model_armor._client_utils._get_model_armor_client")
+def test_invoke_fail_open_overrides_runnable_setting(
+    mock_get_client: MagicMock,
+    runnable_cls: type,
+    client_method: str,
+    constructor_fail_open: bool,
+    call_fail_open: Optional[bool],
+    should_raise: bool,
+) -> None:
+    """`invoke(..., fail_open=...)` must win over the runnable's `fail_open`."""
+    mock_client = MagicMock()
+    getattr(mock_client, client_method).return_value = type(
+        "Result",
+        (),
+        {"sanitization_result": DummySanitizationResult(match_found=True)},
+    )()
+    mock_get_client.return_value = mock_client
+
+    runnable = runnable_cls(
+        project="test-project",
+        location="us-central1",
+        template_id="test-template",
+        fail_open=constructor_fail_open,
+    )
+
+    if should_raise:
+        with pytest.raises(ValueError):
+            runnable.invoke("unsafe text", fail_open=call_fail_open)
+    else:
+        assert runnable.invoke("unsafe text", fail_open=call_fail_open) == (
+            "unsafe text"
+        )
+
+
 # Additional tests for event dispatch, input extraction, and serialization
 class MockCallbackHandler(BaseCallbackHandler):
     def __init__(self) -> None:
