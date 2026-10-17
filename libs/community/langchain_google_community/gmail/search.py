@@ -1,5 +1,6 @@
 import base64
 import email
+from email import policy
 from enum import Enum
 from typing import Any, Dict, List, Optional, Type
 
@@ -7,7 +8,7 @@ from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
 
 from langchain_google_community.gmail.base import GmailBaseTool
-from langchain_google_community.gmail.utils import clean_email_body
+from langchain_google_community.gmail.utils import get_email_body
 
 
 class Resource(str, Enum):
@@ -91,37 +92,12 @@ class GmailSearch(GmailBaseTool):
 
             raw_message = base64.urlsafe_b64decode(message_data["raw"])
 
-            email_msg = email.message_from_bytes(raw_message)
+            email_msg = email.message_from_bytes(raw_message, policy=policy.default)
 
             subject = email_msg.get("Subject", "")
             sender = email_msg.get("From", "")
 
-            message_body = ""
-            if email_msg.is_multipart():
-                for part in email_msg.walk():
-                    ctype = part.get_content_type()
-                    cdispo = str(part.get("Content-Disposition"))
-                    if ctype == "text/plain" and "attachment" not in cdispo:
-                        try:
-                            message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                                "utf-8", errors="replace"
-                            )
-                        except UnicodeDecodeError:
-                            message_body = part.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                                "latin-1", errors="replace"
-                            )
-                        break
-            else:
-                try:
-                    message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                        "utf-8", errors="replace"
-                    )
-                except UnicodeDecodeError:
-                    message_body = email_msg.get_payload(decode=True).decode(  # type: ignore[union-attr]
-                        "latin-1", errors="replace"
-                    )
-
-            body = clean_email_body(message_body)
+            body = get_email_body(email_msg)
 
             results.append(
                 {
