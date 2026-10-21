@@ -2785,10 +2785,33 @@ def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> Non
     assert chunk1 is not None
     assert chunk2 is not None
     assert chunk2["input_tokens"] == 20
-    assert chunk2["output_tokens"] == 10
+    assert chunk2["output_tokens"] == 25
     assert chunk2["total_tokens"] == 45
     assert chunk2["output_token_details"] == {"reasoning": 15}
     assert chunk2["input_token_details"] == {"cache_read": 5}
 
     delta = subtract_usage(chunk2, chunk1)
     assert delta["output_token_details"] == {"reasoning": 10}
+    assert delta["output_tokens"] == 16
+
+
+def test_usage_metadata_gemini_sums_to_total_with_tool_use_and_thoughts() -> None:
+    """Tool-use prompt and thinking tokens are counted so input + output == total."""
+    from langchain_google_vertexai.chat_models import _get_usage_metadata_gemini
+
+    usage = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 27,
+            "tool_use_prompt_token_count": 10309,
+            "candidates_token_count": 40,
+            "thoughts_token_count": 200,
+            "total_token_count": 10576,
+        }
+    )
+
+    assert usage is not None
+    assert usage["input_tokens"] == 10336
+    assert usage["output_tokens"] == 240
+    assert usage["total_tokens"] == 10576
+    assert usage["input_tokens"] + usage["output_tokens"] == usage["total_tokens"]
+    assert usage["output_token_details"] == {"reasoning": 200}
