@@ -389,6 +389,9 @@ def test_anthropic_vertex_model_aware_max_tokens(
     )
     assert llm.max_output_tokens == expected_max_tokens
     assert llm._default_params["max_tokens"] == expected_max_tokens
+    assert llm.profile is not None
+    assert llm.profile["max_output_tokens"] == expected_max_tokens
+    assert llm.profile["max_input_tokens"]
 
 
 def test_anthropic_vertex_unknown_model_fallback() -> None:
@@ -399,6 +402,7 @@ def test_anthropic_vertex_unknown_model_fallback() -> None:
         location="test-location",
     )
     assert llm.max_output_tokens == 4096
+    assert llm.profile is None
 
 
 def test_anthropic_vertex_explicit_max_tokens_override() -> None:
