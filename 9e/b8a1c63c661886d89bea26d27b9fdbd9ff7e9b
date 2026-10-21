@@ -1,0 +1,23 @@
+libs/vertexai/langchain_google_vertexai/model_garden.py
+  s_6522344368f48c::t_2cea19e19f1482 9,17
+  s_6522344368f48c::t_7380cdba9307ed 183-184,189-194,197,203-214
+  s_6522344368f48c::t_9f1c0dd7b7c867 486-488
+libs/vertexai/tests/unit_tests/test_chat_models.py
+  s_6522344368f48c::t_9d5ff95dc21ec5 392-394,405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9eb8a1c63c661886d89bea26d27b9fdbd9ff7e9b",
+  "prompts": {},
+  "sessions": {
+    "s_6522344368f48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82de6520-048f-4336-848e-a4ffb24afdfa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Bagatur Askaryan <baskaryan@gmail.com>"
+    }
+  }
+}
