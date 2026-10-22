@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import mimetypes
 import os
@@ -49,6 +50,17 @@ class ImageBytesLoader:
     - Google Cloud Storage URIs (gs://) passed directly to the API as file
         references
     """
+
+    async def aload_part(self, image_string: str) -> Part:
+        """Load a media part without blocking the event loop.
+
+        Args:
+            image_string: A base64 data URI, HTTP/HTTPS URL, or GCS URI.
+
+        Returns:
+            A media part using the same routing and validation as `load_part`.
+        """
+        return await asyncio.to_thread(self.load_part, image_string)
 
     def load_bytes(self, image_string: str) -> bytes:
         """Routes to the correct loader based on the `'image_string'`.
