@@ -12,7 +12,7 @@ authors = []
 version = "3.2.4"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
-    "langchain-core>=1.4.7",
+    "langchain-core>=1.4.7,<2.0.0",
     "google-cloud-aiplatform>=1.97.0",
     "google-cloud-storage>=2.18.0",
     "httpx>=0.28.0",
@@ -36,7 +36,7 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.35.0"]
-mistral = ["langchain-mistralai>=0.2.0"]
+mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
 ]
