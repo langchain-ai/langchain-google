@@ -927,10 +927,10 @@ typing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "filetype", specifier = ">=1.2.0,<2.0.0" },
-    { name = "google-genai", specifier = ">=2.20.0,<3.0.0" },
-    { name = "langchain-core", specifier = ">=1.6.10,<2.0.0" },
-    { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
+    { name = "filetype", specifier = ">=1.2.0" },
+    { name = "google-genai", specifier = ">=2.20.0" },
+    { name = "langchain-core", specifier = ">=1.6.10" },
+    { name = "pydantic", specifier = ">=2.0.0" },
 ]
 
 [package.metadata.requires-dev]

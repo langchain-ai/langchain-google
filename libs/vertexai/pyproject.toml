@@ -12,16 +12,16 @@ authors = []
 version = "3.2.4"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
-    "langchain-core>=1.4.7,<2.0.0",
-    "google-cloud-aiplatform>=1.97.0,<2.0.0",
-    "google-cloud-storage>=2.18.0,<4.0.0",
-    "httpx>=0.28.0,<1.0.0",
-    "httpx-sse>=0.4.0,<1.0.0",
-    "pydantic>=2.9.0,<3.0.0",
-    "validators>=0.22.0,<1.0.0",
-    "bottleneck>=1.4.0,<2.0.0",
-    "numexpr>=2.8.6,<3.0.0",
-    "pyarrow>=19.0.1,<26.0.0",
+    "langchain-core>=1.4.7",
+    "google-cloud-aiplatform>=1.97.0",
+    "google-cloud-storage>=2.18.0",
+    "httpx>=0.28.0",
+    "httpx-sse>=0.4.0",
+    "pydantic>=2.9.0",
+    "validators>=0.22.0",
+    "bottleneck>=1.4.0",
+    "numexpr>=2.8.6",
+    "pyarrow>=19.0.1",
     "google-cloud-vectorsearch>=0.2.0",
 ]
 
@@ -35,8 +35,8 @@ Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=0.35.0,<1.0.0"]
-mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
+anthropic = ["anthropic>=0.35.0"]
+mistral = ["langchain-mistralai>=0.2.0"]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
 ]
