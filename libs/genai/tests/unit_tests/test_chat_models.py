@@ -5477,6 +5477,26 @@ def test_convert_tool_message_to_parts_structured_tool_output_file_type() -> Non
     }
 
 
+@pytest.mark.parametrize(
+    "block",
+    [
+        {"type": "file", "file_uri": "gs://bucket/report.json"},
+        {"type": "image_url", "caption": "thumbnail", "id": 7},
+        {"type": "media", "file_uri": "gs://bucket/no-mime"},
+    ],
+)
+def test_convert_tool_message_to_parts_unconvertible_blocks_stay_in_output(
+    block: dict,
+) -> None:
+    """Blocks `_convert_to_parts` can't convert stay in the response payload."""
+    message = ToolMessage(name="test_tool", content=[block], tool_call_id="123")
+    result = _convert_tool_message_to_parts(message)
+    assert len(result) == 1
+    assert result[0].function_response is not None
+    assert not result[0].function_response.parts
+    assert result[0].function_response.response == {"output": [block]}
+
+
 def test_convert_tool_message_to_parts_with_name_parameter() -> None:
     """Test `_convert_tool_message_to_parts` with explicit name parameter."""
     message = ToolMessage(

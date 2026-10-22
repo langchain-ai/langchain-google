@@ -1059,6 +1059,32 @@ def _convert_to_parts(
     return parts
 
 
+def _is_convertible_media_block(block: Any) -> bool:
+    """Whether `_convert_to_parts` can turn a tool result block into media.
+
+    Anything else is ordinary structured tool output and stays in the function
+    response payload, even if it happens to use a `type` key like `file`.
+    """
+    if not isinstance(block, dict):
+        return False
+    if is_data_content_block(block) or is_openai_data_block(block):
+        return True
+    if block.get("type") == "file" and "file_id" in block:
+        return True
+    if block.get("type") == "image_url":
+        # `is_openai_data_block` rejects extra keys such as `display_name`
+        image_url = block.get("image_url")
+        return isinstance(image_url, str) or (
+            isinstance(image_url, dict) and "url" in image_url
+        )
+    # `media` blocks follow the LangChain.js shape, which neither predicate matches
+    return (
+        block.get("type") == "media"
+        and "mime_type" in block
+        and ("data" in block or "file_uri" in block)
+    )
+
+
 def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage,
     name: str | None = None,
@@ -1071,66 +1097,56 @@ def _convert_tool_message_to_parts(
     parts: list[Part] = []
     function_response_parts: list[FunctionResponsePart] = []
     if isinstance(message.content, list):
-        media_blocks = []
+        media_blocks: list[dict] = []
         other_blocks = []
         for block in message.content:
-            is_media = isinstance(block, dict) and (
-                is_data_content_block(block)
-                or is_openai_data_block(block)
-                or block.get("type") in ("media", "image_url")
-                or (
-                    block.get("type") == "file"
-                    and any(
-                        k in block
-                        for k in ("file_uri", "file_id", "data", "url", "base64")
-                    )
-                )
-            )
-            if is_media:
+            if isinstance(block, dict) and _is_convertible_media_block(block):
                 media_blocks.append(block)
             else:
                 other_blocks.append(block)
 
-        base_parts = _convert_to_parts(media_blocks, model=model)
-        for i, p in enumerate(base_parts):
-            original_block = media_blocks[i]
-            display_name = (
-                original_block.get("display_name")
-                if isinstance(original_block, dict)
-                else None
-            )
-            dropped_metadata = []
-            if getattr(p, "video_metadata", None) is not None:
-                dropped_metadata.append("video_metadata")
-            if getattr(p, "media_resolution", None) is not None:
-                dropped_metadata.append("media_resolution")
-            if getattr(p, "thought_signature", None) is not None:
-                dropped_metadata.append("thought_signature")
-            if dropped_metadata:
-                warnings.warn(
-                    f"Part-level metadata {dropped_metadata} on media block is not "
-                    "supported in FunctionResponsePart and was omitted.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-            if p.inline_data:
-                blob = FunctionResponseBlob(
-                    data=p.inline_data.data,
-                    mime_type=p.inline_data.mime_type,
-                )
-                if display_name:
-                    blob.display_name = display_name
-                function_response_parts.append(FunctionResponsePart(inline_data=blob))
-            elif p.file_data:
-                file_data = FunctionResponseFileData(
-                    file_uri=p.file_data.file_uri,
-                    mime_type=p.file_data.mime_type,
-                )
-                if display_name:
-                    file_data.display_name = display_name
-                function_response_parts.append(
-                    FunctionResponsePart(file_data=file_data)
-                )
+        # Convert one block at a time so each part keeps its own `display_name`
+        for block in media_blocks:
+            display_name = block.get("display_name")
+            for p in _convert_to_parts([block], model=model):
+                dropped_metadata = []
+                if getattr(p, "video_metadata", None) is not None:
+                    dropped_metadata.append("video_metadata")
+                if getattr(p, "media_resolution", None) is not None:
+                    dropped_metadata.append("media_resolution")
+                if getattr(p, "thought_signature", None) is not None:
+                    dropped_metadata.append("thought_signature")
+                if dropped_metadata:
+                    warnings.warn(
+                        f"Part-level metadata {dropped_metadata} on media block is "
+                        "not supported in FunctionResponsePart and was omitted.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                if p.inline_data:
+                    blob = FunctionResponseBlob(
+                        data=p.inline_data.data,
+                        mime_type=p.inline_data.mime_type,
+                    )
+                    if display_name:
+                        blob.display_name = display_name
+                    function_response_parts.append(
+                        FunctionResponsePart(inline_data=blob)
+                    )
+                elif p.file_data:
+                    file_data = FunctionResponseFileData(
+                        file_uri=p.file_data.file_uri,
+                        mime_type=p.file_data.mime_type,
+                    )
+                    if display_name:
+                        file_data.display_name = display_name
+                    function_response_parts.append(
+                        FunctionResponsePart(file_data=file_data)
+                    )
+                else:
+                    # Not representable as a FunctionResponsePart (e.g. text from a
+                    # plain-text data block); keep it as a sibling part, as before
+                    parts.append(p)
 
         response = other_blocks
 
