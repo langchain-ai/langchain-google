@@ -45,3 +45,7 @@ reasoning_effort_default = "minimal"
 [overrides."gemini-3.6-flash"]
 reasoning_effort_levels = ["minimal", "low", "medium", "high"]
 reasoning_effort_default = "medium"
+
+[overrides."gemini-4-argon"]
+reasoning_effort_levels = ["low", "medium", "high"]
+reasoning_effort_default = "medium"

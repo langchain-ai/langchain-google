@@ -3,7 +3,7 @@
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Union
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from google.cloud import bigquery
@@ -82,6 +82,42 @@ def test_filter_type_serialization(column: str, value: Any, expected: str) -> No
     _, kwargs = store._bq_client.query.call_args
     parameter = kwargs["job_config"].query_parameters[0]
     assert parameter.to_api_repr()["parameterValue"]["value"] == expected
+
+
+@pytest.mark.parametrize(
+    ("k", "options"),
+    [
+        ("1); DROP TABLE x --", None),
+        (True, None),
+        (0, None),
+        (5, {"use_brute_force": "true' ); DROP TABLE x --"}),
+        (5, {"unexpected": "' ); DROP TABLE x --"}),
+        (5, {"fraction_lists_to_search": 1.5}),
+    ],
+)
+def test_unsafe_search_arguments_rejected(k: Any, options: Any) -> None:
+    store = _store()
+    with pytest.raises(ValueError):
+        store._search_embeddings([[0.1]], k=k, options=options)
+    store._bq_client.query.assert_not_called()
+
+
+def test_batch_search_rejects_unsafe_options() -> None:
+    store = _store()
+    with patch.object(store, "_create_temp_bq_table", return_value="temp_table"):
+        with pytest.raises(ValueError):
+            store.batch_search(
+                embeddings=[[0.1]], options={"use_brute_force": "true' --"}
+            )
+    store._bq_client.query.assert_not_called()
+
+
+def test_valid_search_arguments() -> None:
+    store = _store()
+    store._search_embeddings([[0.1]], k=3, options={"fraction_lists_to_search": 0.2})
+    query, _ = store._bq_client.query.call_args
+    assert "top_k => 3" in query[0]
+    assert '"fraction_lists_to_search": 0.2' in query[0]
 
 
 def test_integral_scalar_filter() -> None:

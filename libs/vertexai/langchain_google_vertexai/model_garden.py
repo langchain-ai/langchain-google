@@ -6,6 +6,7 @@ from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    cast,
 )
 
 from google.auth.credentials import Credentials
@@ -13,7 +14,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import LanguageModelInput, ModelProfile
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     agenerate_from_stream,
@@ -179,27 +180,38 @@ _FALLBACK_MAX_OUTPUT_TOKENS: int = 4096
 """Fallback max output tokens when the model has no profile entry."""
 
 
+def _get_anthropic_profile(model_name: str | None) -> ModelProfile | None:
+    """Look up the profile for an Anthropic model.
+
+    Vertex profile keys are `@`-versioned (e.g. `claude-sonnet-4-6@default`),
+    but callers may pass a bare base name (`claude-sonnet-4-6`). When the exact
+    key misses, resolve a unique `{model_name}@...` entry so bare names get the
+    same profile. Bare bases are unique across the registry, so at most one
+    entry can match.
+
+    Returns:
+        A copy of the profile, or `None` when `model_name` is missing or has no
+            profile entry.
+    """
+    if not model_name:
+        return None
+    profile = _VERTEX_PROFILES.get(model_name)
+    if profile is None:
+        matches = [k for k in _VERTEX_PROFILES if k.startswith(f"{model_name}@")]
+        if len(matches) == 1:
+            profile = _VERTEX_PROFILES[matches[0]]
+    return cast("ModelProfile", dict(profile)) if profile else None
+
+
 def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
     """Look up the max output tokens for an Anthropic model from its profile.
 
     Returns the profile's `max_output_tokens` when known. Falls back to
     `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, has no profile
     entry, or whose profile lacks a `max_output_tokens` key.
-
-    Vertex profile keys are `@`-versioned (e.g. `claude-sonnet-4-6@default`),
-    but callers may pass a bare base name (`claude-sonnet-4-6`). When the exact
-    key misses, resolve a unique `{model_name}@...` entry so bare names get the
-    same profile instead of silently degrading to the fallback. Bare bases are
-    unique across the registry, so at most one entry can match.
     """
-    if not model_name:
-        return _FALLBACK_MAX_OUTPUT_TOKENS
-    profile = _VERTEX_PROFILES.get(model_name)
-    if profile is None:
-        matches = [k for k in _VERTEX_PROFILES if k.startswith(f"{model_name}@")]
-        if len(matches) == 1:
-            profile = _VERTEX_PROFILES[matches[0]]
-    return (profile or {}).get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
+    profile = _get_anthropic_profile(model_name) or {}
+    return profile.get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
 
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
@@ -470,6 +482,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return "anthropic-chat-vertexai"
+
+    def _resolve_model_profile(self) -> ModelProfile | None:
+        return _get_anthropic_profile(self.model_name)
 
     def _stream(
         self,
