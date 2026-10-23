@@ -21,7 +21,6 @@ dependencies = [
     "validators>=0.22.0",
     "bottleneck>=1.4.0",
     "numexpr>=2.8.6",
-    "pyarrow>=19.0.1",
     "google-cloud-vectorsearch>=0.2.0",
 ]
 
