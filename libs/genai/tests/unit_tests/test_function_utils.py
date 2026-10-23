@@ -1054,6 +1054,88 @@ def test_no_argument_tool_yields_none_parameters() -> None:
     assert fds[0].parameters is None
 
 
+@pytest.mark.parametrize("tool_format", ["pydantic", "structured_tool", "openai"])
+def test_tool_with_discriminated_union(tool_format: str) -> None:
+    """Preserve tagged object variants in properties and array items."""
+
+    class TextBlock(BaseModel):
+        type: Literal["text"]
+        text: str = Field(description="Text to display.")
+
+    class ImageBlock(BaseModel):
+        type: Literal["image"]
+        url: str = Field(description="Image URL.")
+        caption: str = ""
+
+    class SubmitBlocks(BaseModel):
+        """Submit content blocks."""
+
+        block: Annotated[TextBlock | ImageBlock, Field(discriminator="type")]
+        blocks: list[
+            Annotated[
+                TextBlock | ImageBlock,
+                Field(discriminator="type", description="A content block."),
+            ]
+        ]
+        nested: list[
+            list[Annotated[TextBlock | ImageBlock, Field(discriminator="type")]]
+        ]
+        optional_blocks: (
+            list[Annotated[TextBlock | ImageBlock, Field(discriminator="type")]] | None
+        ) = None
+
+    input_tool: _FunctionDeclarationLike
+    if tool_format == "pydantic":
+        input_tool = SubmitBlocks
+    elif tool_format == "structured_tool":
+
+        @tool(args_schema=SubmitBlocks)
+        def submit_blocks(**kwargs: object) -> str:
+            """Submit content blocks."""
+            return "ok"
+
+        input_tool = submit_blocks
+    else:
+        input_tool = convert_to_openai_tool(SubmitBlocks)
+
+    converted = convert_to_genai_function_declarations([input_tool])
+    declarations = converted[0].function_declarations
+    assert declarations is not None
+    parameters = declarations[0].parameters
+    assert parameters is not None
+    assert parameters.properties is not None
+    properties = parameters.properties
+    assert properties["blocks"].type == Type.ARRAY
+    assert properties["blocks"].items is not None
+    assert properties["blocks"].items.description == "A content block."
+    assert properties["nested"].items is not None
+    assert properties["nested"].items.type == Type.ARRAY
+    assert properties["optional_blocks"].nullable is True
+
+    for union_schema in (
+        properties["block"],
+        properties["blocks"].items,
+        properties["nested"].items.items,
+        properties["optional_blocks"].items,
+    ):
+        assert union_schema is not None
+        assert union_schema.type is None
+        assert union_schema.any_of is not None
+        assert len(union_schema.any_of) == 2
+        text_variant, image_variant = union_schema.any_of
+        assert text_variant.type == image_variant.type == Type.OBJECT
+        assert text_variant.properties is not None
+        assert set(text_variant.properties) == {"type", "text"}
+        assert text_variant.properties["type"].enum == ["text"]
+        assert text_variant.properties["text"].description == "Text to display."
+        assert text_variant.required == ["type", "text"]
+        assert image_variant.properties is not None
+        assert set(image_variant.properties) == {"type", "url", "caption"}
+        assert image_variant.properties["type"].enum == ["image"]
+        assert image_variant.properties["url"].description == "Image URL."
+        assert image_variant.required == ["type", "url"]
+
+
 def test_tool_with_union_types() -> None:
     """Test union types with tools.
 
