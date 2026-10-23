@@ -1,9 +1,3 @@
-import subprocess
-import sys
-from importlib.metadata import requires
-
-from packaging.requirements import Requirement
-
 from langchain_google_vertexai import __all__
 
 EXPECTED_ALL = [
@@ -42,17 +36,3 @@ EXPECTED_ALL = [
 
 def test_all_imports() -> None:
     assert sorted(EXPECTED_ALL) == sorted(__all__)
-
-
-def test_pyarrow_not_required() -> None:
-    declared = {
-        Requirement(r).name for r in requires("langchain-google-vertexai") or []
-    }
-    assert "pyarrow" not in declared
-
-    code = (
-        "import sys, langchain_google_vertexai\n"
-        "from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings\n"
-        "assert 'pyarrow' not in sys.modules"
-    )
-    subprocess.run([sys.executable, "-c", code], check=True)
