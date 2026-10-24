@@ -367,7 +367,11 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
     ) -> ChatResult:
         if stream:
             stream_iter = self._astream(
-                messages=messages, stop=stop, run_manager=run_manager, **kwargs
+                messages=messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                **kwargs,
             )
             return await agenerate_from_stream(stream_iter)
 

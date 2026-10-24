@@ -2,7 +2,14 @@ import json
 from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.tools import tool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
@@ -167,3 +174,29 @@ def test_parse_response() -> None:
             "type": "tool_call",
         }
     ]
+
+
+@patch("langchain_google_vertexai.model_garden_maas._base.auth")
+async def test_llama_agenerate_stream_passes_tools(mock_auth: Any) -> None:
+    llm = get_vertex_maas_model(
+        model_name=_MODEL_NAME,
+        project="test-project",
+        append_tools_to_system_message=True,
+    )
+    seen: dict[str, Any] = {}
+
+    async def fake_astream(*args: Any, **kwargs: Any) -> Any:
+        seen["tools"] = kwargs.get("tools")
+        yield ChatGenerationChunk(message=AIMessageChunk(content="hi"))
+
+    @tool
+    def get_weather(city: str) -> str:
+        """Get the weather for a city."""
+        return "sunny"
+
+    with patch.object(type(llm), "_astream", side_effect=fake_astream):
+        await llm._agenerate(
+            [HumanMessage(content="weather?")], stream=True, tools=[get_weather]
+        )
+
+    assert seen["tools"] == [get_weather]
