@@ -293,7 +293,9 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
                             "id": tool_call["id"],
                             "function": {
                                 "name": tool_call["name"],
-                                "arguments": json.dumps(tool_call.get("args", {})),
+                                "arguments": json.dumps(
+                                    tool_call.get("args", {}), ensure_ascii=False
+                                ),
                             },
                         }
                     )
