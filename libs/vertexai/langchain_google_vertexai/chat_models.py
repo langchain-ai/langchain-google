@@ -3046,9 +3046,15 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
     """Get `UsageMetadata` from raw response metadata."""
-    input_tokens = raw_metadata.get("prompt_token_count", 0)
+    # Tokens fetched by server-side tools (URL context, search, ...) are reported
+    # separately from the prompt; they are input tokens and are part of
+    # `total_token_count`. Thinking tokens are likewise reported apart from the
+    # candidates, so fold both in to keep the parts summing to the total.
+    input_tokens = raw_metadata.get("prompt_token_count", 0) + raw_metadata.get(
+        "tool_use_prompt_token_count", 0
+    )
     thought_tokens = raw_metadata.get("thoughts_token_count", 0)
-    output_tokens = raw_metadata.get("candidates_token_count", 0)
+    output_tokens = raw_metadata.get("candidates_token_count", 0) + thought_tokens
     total_tokens = raw_metadata.get("total_token_count", 0)
     cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
     if all(
