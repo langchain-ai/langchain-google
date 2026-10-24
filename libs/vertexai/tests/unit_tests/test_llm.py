@@ -1,4 +1,5 @@
 import warnings
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,8 @@ from google.cloud.aiplatform_v1beta1.types import (
     GenerationConfig,
     Part,
 )
+from langchain_core.messages import AIMessageChunk
+from langchain_core.outputs import ChatGenerationChunk
 from pydantic import model_validator
 from typing_extensions import Self
 
@@ -226,3 +229,47 @@ def test_timeout_parameter() -> None:
     llm = VertexAI(model=_DEFAULT_MODEL_NAME, project="test-project", timeout=30.0)
     assert llm.timeout == 30.0
     assert llm.client.timeout == 30.0
+
+
+def _usage_chunk() -> ChatGenerationChunk:
+    return ChatGenerationChunk(
+        message=AIMessageChunk(
+            content="hi",
+            usage_metadata={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+        ),
+        generation_info={"finish_reason": "STOP"},
+    )
+
+
+async def test_astream_keeps_generation_info_and_usage_like_stream() -> None:
+    class _Client:
+        def _stream(self, *args: Any, **kwargs: Any) -> Any:
+            yield _usage_chunk()
+
+        async def _astream(self, *args: Any, **kwargs: Any) -> Any:
+            yield _usage_chunk()
+
+    fake = SimpleNamespace(
+        client=_Client(),
+        verbose=False,
+        _lc_usage_to_metadata=VertexAI._lc_usage_to_metadata,
+    )
+
+    sync_chunks = list(VertexAI._stream(fake, "prompt"))  # type: ignore[arg-type]
+    async_chunks = [
+        chunk
+        async for chunk in VertexAI._astream(fake, "prompt")  # type: ignore[arg-type]
+    ]
+
+    assert async_chunks[0].generation_info == sync_chunks[0].generation_info
+    assert async_chunks[0].generation_info == {
+        "finish_reason": "STOP",
+        "usage_metadata": {
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "total_tokens": 5,
+            "prompt_token_count": 3,
+            "candidates_token_count": 2,
+            "total_token_count": 5,
+        },
+    }
