@@ -746,6 +746,13 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
     summary_spec_kwargs: Dict[str, Any] = Field(default_factory=dict)
     """ Additional kwargs for `SearchRequest.ContentSearchSpec.SummarySpec`"""
 
+    return_citations: bool = False
+    """ If `True`, return a JSON string with the summary text, citations, and
+    references instead of only the summary text.
+
+    Requires `summary_include_citations=True` so the API returns citation
+    metadata. """
+
     model_config = ConfigDict(
         extra="forbid",
         arbitrary_types_allowed=True,
@@ -781,11 +788,28 @@ class VertexAISearchSummaryTool(BaseTool, VertexAISearchRetriever):
         """Runs the tool.
 
         Args:
-            search_query: The query to run by the agent.
+            user_query: The query to run by the agent.
 
         Returns:
-            The response from the agent.
+            The summary text, or a JSON string with the summary, citations, and
+            references when `return_citations=True`.
         """
         request = self._create_search_request(user_query)
         response = self._client.search(request)
-        return response.summary.summary_text
+
+        if not self.return_citations:
+            return response.summary.summary_text
+
+        metadata = MessageToDict(
+            response.summary.summary_with_metadata._pb,
+            preserving_proto_field_name=True,
+        )
+        return json.dumps(
+            {
+                "summary_text": response.summary.summary_text,
+                "summary": metadata.get("summary", ""),
+                "citations": metadata.get("citation_metadata", {}).get("citations", []),
+                "references": metadata.get("references", []),
+            },
+            ensure_ascii=False,
+        )

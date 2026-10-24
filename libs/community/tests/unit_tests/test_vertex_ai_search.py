@@ -1,4 +1,5 @@
-from typing import Generator, Union
+import json
+from typing import Any, Generator, Union
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
@@ -16,7 +17,10 @@ from google.cloud.discoveryengine_v1beta import (
 )
 from langchain_core.embeddings import FakeEmbeddings
 
-from langchain_google_community.vertex_ai_search import VertexAISearchRetriever
+from langchain_google_community.vertex_ai_search import (
+    VertexAISearchRetriever,
+    VertexAISearchSummaryTool,
+)
 
 
 @pytest.fixture
@@ -542,3 +546,79 @@ def test_convert_unstructured_search_response_extractive_answers(
         assert "relevance_score" not in documents[1].metadata
         assert "previous_segments" not in documents[1].metadata
         assert "next_segments" not in documents[1].metadata
+
+
+def _summary_response(response_cls: Any) -> Any:
+    """Build a search response with summary metadata and citations."""
+    response = response_cls()
+    response.summary.summary_text = "The release code is FALCON-17 [1]."
+    metadata = response.summary.summary_with_metadata
+    metadata.summary = "The release code is FALCON-17."
+    citation = response_cls.Summary.Citation(start_index=0, end_index=35)
+    citation.sources.append(response_cls.Summary.CitationSource(reference_index=1))
+    metadata.citation_metadata.citations.append(citation)
+    metadata.references.append(
+        response_cls.Summary.Reference(
+            title="red",
+            document="projects/p/documents/doc-red",
+            uri="https://example.test/red/v1",
+        )
+    )
+    return response
+
+
+def _make_summary_tool(beta: bool, **kwargs: Any) -> VertexAISearchSummaryTool:
+    """Build the summary tool with a mocked client."""
+    return VertexAISearchSummaryTool(  # type: ignore[call-arg]
+        name="vertex_ai_search_summary",
+        description="Summarize search results.",
+        project_id="project_id_value",
+        data_store_id="data_store_id_value",
+        beta=beta,
+        credentials=ga_credentials.AnonymousCredentials(),
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("beta", [False, True])
+def test_summary_tool_returns_summary_text_by_default(
+    mock_stable_client: MagicMock,
+    mock_beta_client: MagicMock,
+    beta: bool,
+) -> None:
+    """The default output is unchanged: only the summary text is returned."""
+    mock_client = mock_beta_client if beta else mock_stable_client
+    response_cls = BetaSearchResponse if beta else SearchResponse
+    mock_client.search.return_value = _summary_response(response_cls)
+
+    tool = _make_summary_tool(beta=beta)
+
+    assert tool._run("query_value") == "The release code is FALCON-17 [1]."
+
+
+@pytest.mark.parametrize("beta", [False, True])
+def test_summary_tool_returns_citations_when_requested(
+    mock_stable_client: MagicMock,
+    mock_beta_client: MagicMock,
+    beta: bool,
+) -> None:
+    """Citation metadata and references are exposed when opted in."""
+    mock_client = mock_beta_client if beta else mock_stable_client
+    response_cls = BetaSearchResponse if beta else SearchResponse
+    mock_client.search.return_value = _summary_response(response_cls)
+
+    tool = _make_summary_tool(beta=beta, return_citations=True)
+
+    payload = json.loads(tool._run("query_value"))
+
+    assert payload["summary_text"] == "The release code is FALCON-17 [1]."
+    assert payload["summary"] == "The release code is FALCON-17."
+    assert payload["citations"][0]["end_index"] == "35"
+    assert payload["citations"][0]["sources"][0]["reference_index"] == "1"
+    assert payload["references"] == [
+        {
+            "title": "red",
+            "document": "projects/p/documents/doc-red",
+            "uri": "https://example.test/red/v1",
+        }
+    ]
