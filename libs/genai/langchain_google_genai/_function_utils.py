@@ -667,6 +667,13 @@ def _get_nullable_type_from_schema(schema: dict[str, Any]) -> types.Type | None:
             if type_ == "null":
                 return None
             return types.Type(type_)
+        if isinstance(type_, list):
+            # JSON Schema type array, e.g. ["integer", "null"]. Handle it like the
+            # equivalent `anyOf`: drop "null" and use the last remaining type.
+            list_types = [_get_nullable_type_from_schema({"type": t}) for t in type_]
+            list_types = [t for t in list_types if t is not None]
+            if list_types:
+                return list_types[-1]
         return None
     else:
         pass
@@ -687,6 +694,9 @@ def _is_nullable_schema(schema: dict[str, Any]) -> bool:
             # Handle integer type values (from tool_to_dict serialization)
             # Integer types are never null (except for NULL type handled separately)
             return type_ == 7  # 7 corresponds to NULL type
+        if isinstance(type_, list):
+            # JSON Schema type array, e.g. ["integer", "null"]
+            return "null" in type_
     else:
         pass
     return False
