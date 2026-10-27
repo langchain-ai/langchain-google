@@ -311,6 +311,72 @@ def test_tool_with_enum_anyof_nullable_param() -> None:
     ], "Expected 'status' to have enum values."
 
 
+def test_tool_with_type_array_nullable_param() -> None:
+    """Checks properties whose `type` is a list, such as `["integer", "null"]`.
+
+    They should keep their type and be marked as `nullable`, the same as the
+    equivalent `anyOf` form.
+    """
+    oai_tool = {
+        "type": "function",
+        "function": {
+            "name": "update_ticket",
+            "description": "Update a ticket.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "priority": {"type": ["integer", "null"]},
+                    "priority_anyof": {
+                        "anyOf": [{"type": "integer"}, {"type": "null"}]
+                    },
+                    "slug": {"type": ["null", "string"]},
+                    "status": {"type": ["string", "null"], "enum": ["open", "closed"]},
+                    "count": {"type": ["integer"]},
+                    "tags": {"type": ["array", "null"], "items": {"type": "string"}},
+                    "names": {
+                        "type": "array",
+                        "items": {"type": ["string", "null"]},
+                    },
+                },
+                "required": ["priority", "slug", "status", "count", "tags", "names"],
+            },
+        },
+    }
+
+    genai_tools = convert_to_genai_function_declarations([oai_tool])
+    function_declarations = genai_tools[0].function_declarations
+    assert function_declarations
+    parameters = function_declarations[0].parameters
+    assert parameters
+    properties = parameters.properties
+    assert properties
+
+    assert properties["priority"].type == Type.INTEGER
+    assert properties["priority"].nullable is True
+    assert properties["priority"] == properties["priority_anyof"]
+
+    assert properties["slug"].type == Type.STRING
+    assert properties["slug"].nullable is True
+
+    assert properties["status"].type == Type.STRING
+    assert properties["status"].nullable is True
+    assert properties["status"].enum == ["open", "closed"]
+
+    assert properties["count"].type == Type.INTEGER
+    assert not properties["count"].nullable
+
+    assert properties["tags"].type == Type.ARRAY
+    assert properties["tags"].nullable is True
+    tags_items = properties["tags"].items
+    assert tags_items
+    assert tags_items.type == Type.STRING
+
+    names_items = properties["names"].items
+    assert names_items
+    assert names_items.type == Type.STRING
+    assert names_items.nullable is True
+
+
 # reusable test inputs
 def search(question: str) -> str:
     """Search tool."""
