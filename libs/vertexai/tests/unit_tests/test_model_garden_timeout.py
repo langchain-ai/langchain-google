@@ -6,6 +6,7 @@ import pytest
 from langchain_google_vertexai.model_garden import (
     ChatAnthropicVertex,
     _move_betas_to_extra_body,
+    _move_sampling_params_to_extra_body,
 )
 
 TIMEOUT_TEST_CASES = [
@@ -39,6 +40,39 @@ def test_move_betas_to_extra_body_without_betas() -> None:
 
     assert _move_betas_to_extra_body(params) is False
     assert params == {"extra_body": {"existing": True}}
+
+
+def test_move_sampling_params_to_extra_body() -> None:
+    params = {
+        "model": "claude-sonnet-4-5@20250929",
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "top_k": 40,
+        "extra_body": {"existing": True},
+    }
+
+    _move_sampling_params_to_extra_body(params)
+
+    assert "temperature" not in params
+    assert "top_p" not in params
+    assert "top_k" not in params
+    assert params["extra_body"] == {
+        "existing": True,
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "top_k": 40,
+    }
+
+
+def test_move_sampling_params_to_extra_body_without_sampling_params() -> None:
+    params = {"model": "claude-sonnet-4-5@20250929", "extra_body": {"existing": True}}
+
+    _move_sampling_params_to_extra_body(params)
+
+    assert params == {
+        "model": "claude-sonnet-4-5@20250929",
+        "extra_body": {"existing": True},
+    }
 
 
 @pytest.mark.parametrize("timeout_value", TIMEOUT_TEST_CASES)
