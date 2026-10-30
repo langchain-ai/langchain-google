@@ -12,16 +12,16 @@ from tests.integration_tests.conftest import _DEFAULT_MODEL_NAME
     "model_name",
     [_DEFAULT_MODEL_NAME],
 )
-def test_llm_invoke(model_name: str) -> None:
+async def test_llm_invoke(model_name: str) -> None:
     vb = VertexAICallbackHandler()
     llm = VertexAI(model=model_name, temperature=0.0, callbacks=[vb])
-    _ = llm.invoke("2+2")
+    _ = await llm.ainvoke("2+2")
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
     assert vb.completion_tokens > 0
     prompt_tokens = vb.prompt_tokens
     completion_tokens = vb.completion_tokens
-    _ = llm.invoke("2+2")
+    _ = await llm.ainvoke("2+2")
     assert vb.successful_requests == 2
     assert vb.prompt_tokens > prompt_tokens
     assert vb.completion_tokens > completion_tokens
@@ -32,17 +32,17 @@ def test_llm_invoke(model_name: str) -> None:
     "model_name",
     [_DEFAULT_MODEL_NAME],
 )
-def test_chat_call(model_name: str) -> None:
+async def test_chat_call(model_name: str) -> None:
     vb = VertexAICallbackHandler()
     llm = ChatVertexAI(model=model_name, temperature=0.0, callbacks=[vb])
     message = HumanMessage(content="Hello")
-    _ = llm.invoke([message])
+    _ = await llm.ainvoke([message])
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
     assert vb.completion_tokens > 0
     prompt_tokens = vb.prompt_tokens
     completion_tokens = vb.completion_tokens
-    _ = llm.invoke([message])
+    _ = await llm.ainvoke([message])
     assert vb.successful_requests == 2
     assert vb.prompt_tokens > prompt_tokens
     assert vb.completion_tokens > completion_tokens
@@ -53,16 +53,16 @@ def test_chat_call(model_name: str) -> None:
     "model_name",
     [_DEFAULT_MODEL_NAME],
 )
-def test_invoke_config(model_name: str) -> None:
+async def test_invoke_config(model_name: str) -> None:
     vb = VertexAICallbackHandler()
     llm = VertexAI(model=model_name, temperature=0.0)
-    llm.invoke("2+2", config={"callbacks": [vb]})
+    await llm.ainvoke("2+2", config={"callbacks": [vb]})
     assert vb.successful_requests == 1
     assert vb.prompt_tokens > 0
     assert vb.completion_tokens > 0
     prompt_tokens = vb.prompt_tokens
     completion_tokens = vb.completion_tokens
-    llm.invoke("2+2", config={"callbacks": [vb]})
+    await llm.ainvoke("2+2", config={"callbacks": [vb]})
     assert vb.successful_requests == 2
     assert vb.prompt_tokens > prompt_tokens
     assert vb.completion_tokens > completion_tokens
