@@ -4297,6 +4297,101 @@ def test_parse_chat_history_strips_foreign_signatures(
     assert len([part for part in parts if part.function_call is not None]) == 1
 
 
+@pytest.mark.parametrize("output_version", [None, "v1"])
+@pytest.mark.parametrize("model_provider", ["google_genai", None])
+@pytest.mark.parametrize(
+    "image_source",
+    [
+        pytest.param({"base64": "aW1n"}, id="base64"),
+        pytest.param({"url": "gs://bucket/image.png"}, id="gcs-url"),
+    ],
+)
+def test_parse_chat_history_preserves_image_signature(
+    image_source: dict[str, str],
+    model_provider: str | None,
+    output_version: str | None,
+) -> None:
+    """Gemini rejects replayed image parts that lost their thought signature."""
+    response_metadata: dict[str, str] = {}
+    if model_provider:
+        response_metadata["model_provider"] = model_provider
+    if output_version:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[
+            {
+                "type": "image",
+                "mime_type": "image/png",
+                "extras": {"signature": "c2ln"},
+                **image_source,
+            }
+        ],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message], use_vertexai=True)
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].inline_data is not None or parts[0].file_data is not None
+    assert parts[0].thought_signature == b"sig"
+
+
+@pytest.mark.parametrize("output_version", [None, "v1"])
+def test_parse_chat_history_strips_foreign_image_signature(
+    output_version: str | None,
+) -> None:
+    response_metadata = {"model_provider": "openai"}
+    if output_version:
+        response_metadata["output_version"] = output_version
+    message = AIMessage(
+        content=[
+            {
+                "type": "image",
+                "base64": "aW1n",
+                "mime_type": "image/png",
+                "extras": {"signature": "c2ln"},
+            }
+        ],
+        response_metadata=response_metadata,
+    )
+
+    _, formatted_messages = _parse_chat_history([message])
+
+    parts = formatted_messages[0].parts
+    assert parts is not None
+    assert len(parts) == 1
+    assert parts[0].inline_data is not None
+    assert parts[0].thought_signature is None
+
+
+@pytest.mark.parametrize(
+    ("signature", "expected_signature"),
+    [
+        pytest.param("c2ln", b"sig", id="base64-string"),
+        pytest.param(b"sig", b"sig", id="bytes"),
+    ],
+)
+def test_convert_to_parts_preserves_data_block_signature(
+    signature: str | bytes,
+    expected_signature: bytes,
+) -> None:
+    parts = _convert_to_parts(
+        [
+            {
+                "type": "file",
+                "base64": "aW1n",
+                "mime_type": "application/pdf",
+                "extras": {"signature": signature},
+            }
+        ]
+    )
+
+    assert len(parts) == 1
+    assert parts[0].thought_signature == expected_signature
+
+
 def test_parse_chat_history_tool_calls_strips_tool_call_chunk_blocks() -> None:
     message = AIMessage(
         content=[
