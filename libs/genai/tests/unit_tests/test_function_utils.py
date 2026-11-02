@@ -251,6 +251,49 @@ def test_tool_with_nested_object_anyof_nullable_param() -> None:
     )
 
 
+def _nested_contact_tool() -> dict:
+    return {
+        "name": "create_contact",
+        "description": "Create an administrative contact under a group.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "role": {"type": "string"},
+                        "email": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                        "phone": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    },
+                    "required": ["name", "role"],
+                },
+            },
+            "required": ["contact"],
+        },
+    }
+
+
+def test_nested_object_keeps_source_required() -> None:
+    fn = _format_to_genai_function_declaration(_nested_contact_tool())
+    assert fn.parameters is not None
+    assert fn.parameters.properties is not None
+    contact = fn.parameters.properties["contact"]
+    # The source schema's `required` must be honored, not rebuilt from which
+    # properties lack a `default`.
+    assert list(contact.required or []) == ["name", "role"]
+
+
+def test_nested_object_keeps_nullable_on_leaf() -> None:
+    fn = _format_to_genai_function_declaration(_nested_contact_tool())
+    assert fn.parameters is not None
+    assert fn.parameters.properties is not None
+    contact = fn.parameters.properties["contact"]
+    assert contact.properties is not None
+    assert contact.properties["email"].nullable is True
+    assert contact.properties["phone"].nullable is True
+
+
 def test_tool_with_enum_anyof_nullable_param() -> None:
     """Checks a parameter with an enum, marked as optional.
 
