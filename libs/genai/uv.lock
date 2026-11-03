@@ -951,7 +951,7 @@ wheels = [
 [[package]]
 name = "langchain-core"
 version = "1.7.4"
-source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&rev=df38cd1a6f076a25926c7ead6e1261f843dc603b#df38cd1a6f076a25926c7ead6e1261f843dc603b" }
+source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&rev=48436ddf67e26098423d7be63f0cabff937db75c#48436ddf67e26098423d7be63f0cabff937db75c" }
 dependencies = [
     { name = "certifi" },
     { name = "httpx" },
@@ -1014,7 +1014,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0" },
     { name = "google-genai", specifier = ">=2.20.0" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&rev=df38cd1a6f076a25926c7ead6e1261f843dc603b" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&rev=48436ddf67e26098423d7be63f0cabff937db75c" },
     { name = "pydantic", specifier = ">=2.0.0" },
 ]
 
