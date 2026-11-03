@@ -62,6 +62,10 @@ test_integration = [
 [tool.uv]
 constraint-dependencies = ["urllib3>=2.6.3"]
 
+# TODO: replace with the released version once langchain-ai/langchain#41658 ships.
+[tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/core", rev = "df38cd1a6f076a25926c7ead6e1261f843dc603b" }
+
 [tool.ruff]
 fix = true
 
