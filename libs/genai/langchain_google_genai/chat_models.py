@@ -690,6 +690,14 @@ def _convert_to_parts(
                             thought_signature=_decode_signature(_block_signature(part)),
                         )
                     )
+                elif part["type"] == "text-plain":
+                    # Plain-text document block with inline text. Gemini has no
+                    # separate plain-text document part, so send the inline text
+                    # as a text part.
+                    if "text" not in part:
+                        msg = "text-plain block must contain 'text' field."
+                        raise ValueError(msg)
+                    parts.append(Part(text=part["text"]))
                 elif part.get("type") == "file" and "file_id" in part:
                     # Handle FileContentBlock with file_id (uploaded file reference)
                     mime_type = part.get("mime_type", "application/octet-stream")
