@@ -234,10 +234,20 @@ def convert_to_genai_function_declarations(
     result_tools: list[types.Tool] = []
     function_declarations: list[types.FunctionDeclaration] = []
 
-    # Special tool types that must be in separate Tool objects: every `types.Tool`
-    # field except function_declarations (google_search, enterprise_web_search, ...)
+    # Special tool types that must be in separate Tool objects
     special_tool_types = [
-        k for k in types.Tool.model_fields if k != "function_declarations"
+        "google_search_retrieval",
+        "google_search",
+        "google_maps",
+        "code_execution",
+        "url_context",
+        "computer_use",
+        "enterprise_web_search",
+        "file_search",
+        "retrieval",
+        "parallel_ai_search",
+        "exa_ai_search",
+        "mcp_servers",
     ]
 
     for tool in tools:
