@@ -63,7 +63,6 @@ def test_blocked_candidate_is_refusal(*, stream: bool) -> None:
     assert _refusal(message.message) == {
         "type": "refusal",
         "refusal": "Blocked for safety.",
-        "index": "lc_refusal",
         "extras": {"finish_reason": "SAFETY"},
     }
 

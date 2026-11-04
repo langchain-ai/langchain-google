@@ -950,8 +950,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.7.4"
-source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&rev=48436ddf67e26098423d7be63f0cabff937db75c#48436ddf67e26098423d7be63f0cabff937db75c" }
+version = "1.7.5"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "httpx" },
@@ -964,6 +964,10 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/1f/669c00443914aa5b1c73af4d7b64016c9e51b4a4c3f163ba9b42aa5716ac/langchain_core-1.7.5.tar.gz", hash = "sha256:d11d25e8603e0fa08ebb3549068e0bfb57448845d49c28caec053b8b6c815e32", size = 1034442, upload-time = "2026-11-04T15:49:45.486Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/e7/336b85cafb3f0d1b9e44cfcd4507b8ae46e2b5db790b33a5e54b08514b63/langchain_core-1.7.5-py3-none-any.whl", hash = "sha256:bd2629e8ef95cae10700b80bf3732a51f04e264b6629723e009a5dd58f45f496", size = 579760, upload-time = "2026-11-04T15:49:43.695Z" },
 ]
 
 [[package]]
@@ -1014,7 +1018,7 @@ typing = [
 requires-dist = [
     { name = "filetype", specifier = ">=1.2.0" },
     { name = "google-genai", specifier = ">=2.20.0" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&rev=48436ddf67e26098423d7be63f0cabff937db75c" },
+    { name = "langchain-core", specifier = ">=1.7.5,<2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
 ]
 

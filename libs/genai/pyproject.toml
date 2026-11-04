@@ -12,7 +12,7 @@ authors = []
 version = "4.4.2"
 requires-python = ">=3.10.0,<4.0.0"
 dependencies = [
-    "langchain-core>=1.6.10,<2.0.0",
+    "langchain-core>=1.7.5,<2.0.0",
     "google-genai>=2.20.0",
     "pydantic>=2.0.0",
     "filetype>=1.2.0",
@@ -61,10 +61,6 @@ test_integration = [
 
 [tool.uv]
 constraint-dependencies = ["urllib3>=2.6.3"]
-
-# TODO: replace with the released version once langchain-ai/langchain#41658 ships.
-[tool.uv.sources]
-langchain-core = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/core", rev = "48436ddf67e26098423d7be63f0cabff937db75c" }
 
 [tool.ruff]
 fix = true
