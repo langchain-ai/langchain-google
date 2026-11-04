@@ -73,6 +73,12 @@ _GoogleMapsLike = types.GoogleMaps | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
 _UrlContextLike = types.UrlContext | dict[str, Any]
 _ComputerUseLike = types.ComputerUse | dict[str, Any]
+_EnterpriseWebSearchLike = types.EnterpriseWebSearch | dict[str, Any]
+_FileSearchLike = types.FileSearch | dict[str, Any]
+_RetrievalLike = types.Retrieval | dict[str, Any]
+_ParallelAiSearchLike = types.ToolParallelAiSearch | dict[str, Any]
+_ExaAiSearchLike = types.ToolExaAiSearch | dict[str, Any]
+_McpServerLike = types.McpServer | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -83,6 +89,12 @@ class _ToolDict(TypedDict):
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
     computer_use: NotRequired[_ComputerUseLike]
+    enterprise_web_search: NotRequired[_EnterpriseWebSearchLike]
+    file_search: NotRequired[_FileSearchLike]
+    retrieval: NotRequired[_RetrievalLike]
+    parallel_ai_search: NotRequired[_ParallelAiSearchLike]
+    exa_ai_search: NotRequired[_ExaAiSearchLike]
+    mcp_servers: NotRequired[Sequence[_McpServerLike]]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -242,6 +254,12 @@ def convert_to_genai_function_declarations(
         "code_execution",
         "url_context",
         "computer_use",
+        "enterprise_web_search",
+        "file_search",
+        "retrieval",
+        "parallel_ai_search",
+        "exa_ai_search",
+        "mcp_servers",
     ]
 
     for tool in tools:
@@ -309,6 +327,58 @@ def convert_to_genai_function_declarations(
                         )
                     else:
                         tool_obj = types.Tool(url_context=tool["url_context"])
+                elif special_key == "enterprise_web_search":
+                    if isinstance(tool["enterprise_web_search"], dict):
+                        tool_obj = types.Tool(
+                            enterprise_web_search=types.EnterpriseWebSearch(
+                                **tool["enterprise_web_search"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            enterprise_web_search=tool["enterprise_web_search"]
+                        )
+                elif special_key == "file_search":
+                    if isinstance(tool["file_search"], dict):
+                        tool_obj = types.Tool(
+                            file_search=types.FileSearch(**tool["file_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(file_search=tool["file_search"])
+                elif special_key == "retrieval":
+                    if isinstance(tool["retrieval"], dict):
+                        tool_obj = types.Tool(
+                            retrieval=types.Retrieval(**tool["retrieval"])
+                        )
+                    else:
+                        tool_obj = types.Tool(retrieval=tool["retrieval"])
+                elif special_key == "parallel_ai_search":
+                    if isinstance(tool["parallel_ai_search"], dict):
+                        tool_obj = types.Tool(
+                            parallel_ai_search=types.ToolParallelAiSearch(
+                                **tool["parallel_ai_search"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            parallel_ai_search=tool["parallel_ai_search"]
+                        )
+                elif special_key == "exa_ai_search":
+                    if isinstance(tool["exa_ai_search"], dict):
+                        tool_obj = types.Tool(
+                            exa_ai_search=types.ToolExaAiSearch(**tool["exa_ai_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(exa_ai_search=tool["exa_ai_search"])
+                elif special_key == "mcp_servers":
+                    tool_obj = types.Tool(
+                        mcp_servers=[
+                            types.McpServer(**server)
+                            if isinstance(server, dict)
+                            else server
+                            for server in tool["mcp_servers"]
+                        ]
+                    )
                 elif special_key == "computer_use":
                     if isinstance(tool["computer_use"], dict):
                         # Handle enum conversion - extract string values from

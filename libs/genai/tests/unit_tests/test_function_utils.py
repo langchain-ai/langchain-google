@@ -513,6 +513,13 @@ def test_format_tool_to_genai_function() -> None:
     result = convert_to_genai_function_declarations([src_10])[0]
     assert result == src_9
 
+    # enterprise_web_search survives the bind_tools round trip through tool_to_dict
+    src_11 = Tool(enterprise_web_search={"exclude_domains": ["example.com"]})
+    result = convert_to_genai_function_declarations([src_11])[0]
+    assert result == src_11
+    round_trip = convert_to_genai_function_declarations([tool_to_dict(result)])
+    assert round_trip == [src_11]
+
     with pytest.raises(ValueError) as exc_info1:
         _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore
     assert str(exc_info1.value).startswith("Unsupported tool")
