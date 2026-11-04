@@ -73,6 +73,12 @@ _GoogleMapsLike = types.GoogleMaps | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
 _UrlContextLike = types.UrlContext | dict[str, Any]
 _ComputerUseLike = types.ComputerUse | dict[str, Any]
+_EnterpriseWebSearchLike = types.EnterpriseWebSearch | dict[str, Any]
+_FileSearchLike = types.FileSearch | dict[str, Any]
+_RetrievalLike = types.Retrieval | dict[str, Any]
+_ParallelAiSearchLike = types.ToolParallelAiSearch | dict[str, Any]
+_ExaAiSearchLike = types.ToolExaAiSearch | dict[str, Any]
+_McpServerLike = types.McpServer | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -83,6 +89,12 @@ class _ToolDict(TypedDict):
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
     computer_use: NotRequired[_ComputerUseLike]
+    enterprise_web_search: NotRequired[_EnterpriseWebSearchLike]
+    file_search: NotRequired[_FileSearchLike]
+    retrieval: NotRequired[_RetrievalLike]
+    parallel_ai_search: NotRequired[_ParallelAiSearchLike]
+    exa_ai_search: NotRequired[_ExaAiSearchLike]
+    mcp_servers: NotRequired[Sequence[_McpServerLike]]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -274,7 +286,100 @@ def convert_to_genai_function_declarations(
                 special_key = special_keys[0]
                 tool = cast("_ToolDict", tool)
 
-                if special_key == "computer_use":
+                if special_key == "google_search_retrieval":
+                    if isinstance(tool["google_search_retrieval"], dict):
+                        tool_obj = types.Tool(
+                            google_search_retrieval=types.GoogleSearchRetrieval(
+                                **tool["google_search_retrieval"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            google_search_retrieval=tool["google_search_retrieval"]
+                        )
+                elif special_key == "google_search":
+                    if isinstance(tool["google_search"], dict):
+                        tool_obj = types.Tool(
+                            google_search=types.GoogleSearch(**tool["google_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(google_search=tool["google_search"])
+                elif special_key == "google_maps":
+                    if isinstance(tool["google_maps"], dict):
+                        tool_obj = types.Tool(
+                            google_maps=types.GoogleMaps(**tool["google_maps"])
+                        )
+                    else:
+                        tool_obj = types.Tool(google_maps=tool["google_maps"])
+                elif special_key == "code_execution":
+                    if isinstance(tool["code_execution"], dict):
+                        tool_obj = types.Tool(
+                            code_execution=types.ToolCodeExecution(
+                                **tool["code_execution"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(code_execution=tool["code_execution"])
+                elif special_key == "url_context":
+                    if isinstance(tool["url_context"], dict):
+                        tool_obj = types.Tool(
+                            url_context=types.UrlContext(**tool["url_context"])
+                        )
+                    else:
+                        tool_obj = types.Tool(url_context=tool["url_context"])
+                elif special_key == "enterprise_web_search":
+                    if isinstance(tool["enterprise_web_search"], dict):
+                        tool_obj = types.Tool(
+                            enterprise_web_search=types.EnterpriseWebSearch(
+                                **tool["enterprise_web_search"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            enterprise_web_search=tool["enterprise_web_search"]
+                        )
+                elif special_key == "file_search":
+                    if isinstance(tool["file_search"], dict):
+                        tool_obj = types.Tool(
+                            file_search=types.FileSearch(**tool["file_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(file_search=tool["file_search"])
+                elif special_key == "retrieval":
+                    if isinstance(tool["retrieval"], dict):
+                        tool_obj = types.Tool(
+                            retrieval=types.Retrieval(**tool["retrieval"])
+                        )
+                    else:
+                        tool_obj = types.Tool(retrieval=tool["retrieval"])
+                elif special_key == "parallel_ai_search":
+                    if isinstance(tool["parallel_ai_search"], dict):
+                        tool_obj = types.Tool(
+                            parallel_ai_search=types.ToolParallelAiSearch(
+                                **tool["parallel_ai_search"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            parallel_ai_search=tool["parallel_ai_search"]
+                        )
+                elif special_key == "exa_ai_search":
+                    if isinstance(tool["exa_ai_search"], dict):
+                        tool_obj = types.Tool(
+                            exa_ai_search=types.ToolExaAiSearch(**tool["exa_ai_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(exa_ai_search=tool["exa_ai_search"])
+                elif special_key == "mcp_servers":
+                    tool_obj = types.Tool(
+                        mcp_servers=[
+                            types.McpServer(**server)
+                            if isinstance(server, dict)
+                            else server
+                            for server in tool["mcp_servers"]
+                        ]
+                    )
+                elif special_key == "computer_use":
                     if isinstance(tool["computer_use"], dict):
                         # Handle enum conversion - extract string values from
                         # Environment enums
@@ -292,10 +397,6 @@ def convert_to_genai_function_declarations(
                         )
                     else:
                         tool_obj = types.Tool(computer_use=tool["computer_use"])
-                else:
-                    tool_obj = types.Tool.model_validate(
-                        {special_key: tool[special_key]}  # type: ignore[literal-required]
-                    )
 
                 result_tools.append(tool_obj)
             elif (
