@@ -2098,6 +2098,9 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
     assert isinstance(response, AIMessage)
 
 
+@pytest.mark.xfail(
+    reason="Computer use preview model persistently returns 503 UNAVAILABLE"
+)
 def test_computer_use_tool(backend_config: dict) -> None:
     """Test computer use tool integration.
 
