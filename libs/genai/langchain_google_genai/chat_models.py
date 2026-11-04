@@ -2142,8 +2142,7 @@ def _response_to_result(
             message.response_metadata = {}
 
         if generation_info.get("finish_reason") in _REFUSAL_FINISH_REASONS:
-            # Needed on the message itself so `output_version="v1"` content, which
-            # is built before `generation_info` is merged, includes the refusal block.
+            # `v1` content is built from the message before `generation_info` is merged.
             message.response_metadata["finish_reason"] = generation_info[
                 "finish_reason"
             ]
