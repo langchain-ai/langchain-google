@@ -51,7 +51,6 @@ jobs:
     secrets: inherit
 
   compile-integration-tests:
-    if: github.event_name != 'pull_request'
     name: "-"
     uses: ./.github/workflows/_compile_integration_test.yml
     with:
