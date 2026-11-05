@@ -199,6 +199,29 @@ def test_api_version_defaults_to_none_embeddings() -> None:
     assert call_http_options.api_version is None
 
 
+def test_timeout_forwarded_to_http_options() -> None:
+    """`timeout` (seconds) is forwarded into `HttpOptions` as milliseconds."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-api-key"),
+            request_timeout=2.5,
+        )
+    call_http_options = mock_client.call_args.kwargs["http_options"]
+    assert call_http_options.timeout == 2500
+
+
+def test_timeout_defaults_to_none_embeddings() -> None:
+    """`timeout` is unset by default, deferring to the SDK's default."""
+    with patch("langchain_google_genai.embeddings.Client") as mock_client:
+        GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=SecretStr("test-api-key"),
+        )
+    call_http_options = mock_client.call_args.kwargs["http_options"]
+    assert call_http_options.timeout is None
+
+
 def test_embed_query_default_task_type() -> None:
     """Test that embed_query uses default `RETRIEVAL_QUERY` when `task_type` is
     `None`."""

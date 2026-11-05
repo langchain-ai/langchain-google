@@ -192,6 +192,9 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     Applied to both sync and async clients.
     """
 
+    timeout: float | None = Field(default=None, alias="request_timeout")
+    """The maximum number of seconds to wait for a response."""
+
     api_version: str | None = Field(default=None)
     """Override the API version path segment in request URLs.
 
@@ -265,6 +268,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
+            timeout=int(self.timeout * 1000) if self.timeout is not None else None,
         )
 
         if self._use_vertexai:  # type: ignore[attr-defined]
