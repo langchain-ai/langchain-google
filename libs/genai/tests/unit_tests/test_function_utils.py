@@ -5,9 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.genai.types import (
+    EnterpriseWebSearch,
     FunctionCallingConfig,
     FunctionCallingConfigMode,
     FunctionDeclaration,
+    PhishBlockThreshold,
     Schema,
     Tool,
     ToolConfig,
@@ -519,6 +521,16 @@ def test_format_tool_to_genai_function() -> None:
     assert result == src_11
     round_trip = convert_to_genai_function_declarations([tool_to_dict(result)])
     assert round_trip == [src_11]
+
+    # enum-valued fields (blocking_confidence) survive the same round trip
+    src_12 = Tool(
+        enterprise_web_search=EnterpriseWebSearch(
+            blocking_confidence=PhishBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            exclude_domains=["example.com"],
+        )
+    )
+    round_trip = convert_to_genai_function_declarations([tool_to_dict(src_12)])
+    assert round_trip == [src_12]
 
     with pytest.raises(ValueError) as exc_info1:
         _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore

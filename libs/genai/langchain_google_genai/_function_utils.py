@@ -331,7 +331,9 @@ def convert_to_genai_function_declarations(
                     if isinstance(tool["enterprise_web_search"], dict):
                         tool_obj = types.Tool(
                             enterprise_web_search=types.EnterpriseWebSearch(
-                                **tool["enterprise_web_search"]
+                                **_unwrap_serialized_enums(
+                                    tool["enterprise_web_search"]
+                                )
                             )
                         )
                     else:
@@ -447,6 +449,19 @@ def convert_to_genai_function_declarations(
         raise ValueError(msg)
 
     return result_tools
+
+
+def _unwrap_serialized_enums(config: dict[str, Any]) -> dict[str, Any]:
+    """Turn enums that `tool_to_dict` flattened into `{"_value_": ...}` back to values.
+
+    `tool_to_dict` walks enum members via `__dict__`, so an enum such as
+    `PhishBlockThreshold.BLOCK_LOW_AND_ABOVE` is stored as a dict of enum internals
+    rather than a string, which pydantic then rejects when the tool is rebuilt.
+    """
+    return {
+        k: v["_value_"] if isinstance(v, dict) and "_value_" in v else v
+        for k, v in config.items()
+    }
 
 
 def tool_to_dict(tool: types.Tool) -> _ToolDict:
