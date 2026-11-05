@@ -42,7 +42,7 @@ class VertexAI(_VertexAICommon, BaseLLM):
         **Vertex AI Platform** as backend options.
     """
 
-    model_name: str = Field(default="gemini-2.5-flash", alias="model")
+    model_name: str = Field(default="gemini-3.8-flash", alias="model")
     "The name of the Vertex AI text completion model."
 
     tuned_model_name: str | None = None
