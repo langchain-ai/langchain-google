@@ -43,10 +43,11 @@ def test_drive_invalid_scope() -> None:
 
 
 def _make_mock_service(mime_type: str, file_id: str) -> MagicMock:
-    """Return a mock Drive service whose files().list() returns one file entry."""
+    """Return a mock Drive service whose files().get() returns one file's mimeType."""
     mock_service = MagicMock()
-    mock_service.files().list().execute.return_value = {
-        "files": [{"id": file_id, "mimeType": mime_type}]
+    mock_service.files().get().execute.return_value = {
+        "id": file_id,
+        "mimeType": mime_type,
     }
     return mock_service
 
@@ -117,3 +118,28 @@ def test_load_documents_from_ids_dispatches_pdfs() -> None:
     mock_sheet.assert_not_called()
     mock_doc.assert_not_called()
     assert result == [pdf_doc]
+
+
+def test_load_documents_from_ids_resolves_mime_type_with_files_get() -> None:
+    """MIME types must be resolved with files().get, not a files().list query.
+
+    The Drive API `q` parameter has no `id` field, so a `files().list(q="id = '...'")`
+    lookup is rejected with HTTP 400 against the real API (a mocked service hides this).
+    Resolving each id with files().get keeps the call valid.
+    """
+    doc = Document(page_content="hello", metadata={})
+    mock_service = _make_mock_service(
+        "application/vnd.google-apps.document", "doc_id_456"
+    )
+    loader = GoogleDriveLoader(document_ids=["doc_id_456"])
+    with (
+        patch.object(loader, "_load_credentials"),
+        patch("googleapiclient.discovery.build", return_value=mock_service),
+        patch.object(loader, "_load_document_from_id", return_value=doc),
+    ):
+        loader._load_documents_from_ids()
+
+    mock_service.files().get.assert_any_call(
+        fileId="doc_id_456", fields="mimeType", supportsAllDrives=True
+    )
+    mock_service.files().list.assert_not_called()
