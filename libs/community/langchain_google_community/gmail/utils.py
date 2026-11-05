@@ -12,6 +12,8 @@ from langchain_google_community._utils import (
 )
 
 if TYPE_CHECKING:
+    from email.message import EmailMessage
+
     from google.oauth2.credentials import Credentials  # type: ignore[import]
     from googleapiclient.discovery import Resource  # type: ignore[import]
 
@@ -119,3 +121,29 @@ def clean_email_body(body: str) -> str:
     except ImportError:
         logger.warning("BeautifulSoup not installed. Skipping cleaning.")
         return str(body)
+
+
+def get_email_body(message: EmailMessage) -> str:
+    """Get the text of an email's body.
+
+    The body is the plain text part, or else the HTML part as text: an HTML email
+    that carries attachments or inline images often has no plain part. It is
+    decoded with the charset the email declares.
+
+    Args:
+        message: The email, parsed with `email.policy.default`.
+
+    Returns:
+        The text of the body, or an empty string when the email has none.
+    """
+    body = message.get_body(preferencelist=("plain", "html"))
+    if body is None:
+        return ""
+    try:
+        content = body.get_content()
+    except LookupError:
+        # A charset that Python does not know.
+        content = body.get_payload(decode=True).decode("utf-8", errors="replace")  # type: ignore[union-attr]
+    if body.get_content_type() == "text/html":
+        return clean_email_body(content)
+    return content
