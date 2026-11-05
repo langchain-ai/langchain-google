@@ -269,7 +269,21 @@ class VertexAI(_VertexAICommon, BaseLLM):
             run_manager=run_manager,
             **kwargs,
         ):
-            chunk = GenerationChunk(text=stream_chunk.message.content)
+            if stream_chunk.message.usage_metadata:
+                lc_usage = stream_chunk.message.usage_metadata
+                usage_metadata = {
+                    **lc_usage,
+                    **self._lc_usage_to_metadata(lc_usage=lc_usage),
+                }
+            else:
+                usage_metadata = {}
+            chunk = GenerationChunk(
+                text=stream_chunk.message.content,
+                generation_info={
+                    **stream_chunk.generation_info,
+                    "usage_metadata": usage_metadata,
+                },
+            )
             yield chunk
             if run_manager:
                 await run_manager.on_llm_new_token(
