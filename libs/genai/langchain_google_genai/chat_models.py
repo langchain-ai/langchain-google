@@ -779,17 +779,8 @@ def _convert_to_parts(
                             }
                     if "media_processing" in part:
                         part_kwargs["media_processing"] = part["media_processing"]
-                    thought_signature = None
-                    if "extras" in part and isinstance(part["extras"], dict):
-                        sig = part["extras"].get("signature")
-                        if isinstance(sig, str):
-                            thought_signature = base64.b64decode(sig)
-                        elif isinstance(sig, bytes):
-                            thought_signature = sig
-
-                        if thought_signature:
-                            pass
-
+                    if thought_signature := _decode_signature(_block_signature(part)):
+                        part_kwargs["thought_signature"] = thought_signature
                     parts.append(Part(**part_kwargs))
                 elif part["type"] == "image_url":
                     # Chat Completions image format
