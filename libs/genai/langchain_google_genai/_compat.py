@@ -1,10 +1,16 @@
 """Go from v1 content blocks to generativelanguage_v1beta format."""
 
+import base64
+import copy
 import json
 import logging
+from collections.abc import Mapping
 from typing import Any, Literal, cast
 
+import langchain_core.messages.block_translators.google_genai as _core_genai_translator
+from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages import content as types
+from langchain_core.messages.block_translators import register_translator
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +290,36 @@ def _convert_from_v1_to_generativelanguage_v1beta(
                 if file_data_block is not None:
                     new_content.append(file_data_block)
 
-        # TODO: AudioContentBlock -> audio once models support passing back in
+        # VideoContentBlock / AudioContentBlock
+        elif block_dict["type"] in ("video", "audio"):
+            default_av_mime = (
+                "video/mp4" if block_dict["type"] == "video" else "audio/wav"
+            )
+            if b64_data := block_dict.get("base64"):
+                new_content.append(
+                    {
+                        "inline_data": {
+                            "mime_type": block_dict.get("mime_type", default_av_mime),
+                            "data": b64_data,
+                        }
+                    }
+                )
+            elif (file_id := block_dict.get("file_id")) and provider_kind != "foreign":
+                file_data_block = _file_data_block(
+                    file_id,
+                    block_dict.get("mime_type", default_av_mime),
+                    use_vertexai=use_vertexai,
+                )
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
+            elif (url := block_dict.get("url")) and provider_kind != "foreign":
+                file_data_block = _file_data_block(
+                    url,
+                    block_dict.get("mime_type", default_av_mime),
+                    use_vertexai=use_vertexai,
+                )
+                if file_data_block is not None:
+                    new_content.append(file_data_block)
 
         # FileContentBlock (documents)
         elif block_dict["type"] == "file":
@@ -426,3 +461,766 @@ def _convert_from_v1_to_generativelanguage_v1beta(
             )
 
     return new_content
+
+
+_FC_THOUGHT_SIGS_KEY = "__gemini_function_call_thought_signatures__"
+_RAW_CALL_NAME_MAP: dict[str, str] = {
+    "code_execution_call": "code_interpreter",
+    "google_search_call": "google_search",
+    "url_context_call": "url_context",
+    "google_maps_call": "google_maps",
+    "file_search_call": "file_search",
+    "retrieval_call": "retrieval",
+    "processing_call": _MEDIA_PROCESSING_TOOL_NAME,
+}
+_RAW_RESULT_TYPES = frozenset(
+    {
+        "google_search_result",
+        "url_context_result",
+        "google_maps_result",
+        "file_search_result",
+        "mcp_server_tool_result",
+        "retrieval_result",
+        "processing_result",
+    }
+)
+_PASS_THROUGH_V1_TYPES = frozenset(
+    {
+        "server_tool_call",
+        "server_tool_call_chunk",
+        "server_tool_result",
+        "tool_call",
+        "tool_call_chunk",
+        "invalid_tool_call",
+        "refusal",
+    }
+)
+
+
+def _utf8_slice_to_char_span(
+    text: str, start_byte: Any, end_byte: Any
+) -> tuple[int, int, str]:
+    """Convert UTF-8 byte offsets `[start_byte, end_byte)` into Python char offsets."""
+    encoded = text.encode("utf-8")
+    total = len(encoded)
+    sb = max(0, min(int(start_byte) if isinstance(start_byte, int) else 0, total))
+    eb = max(sb, min(int(end_byte) if isinstance(end_byte, int) else total, total))
+    cs = len(encoded[:sb].decode("utf-8", errors="ignore"))
+    ce = len(encoded[:eb].decode("utf-8", errors="ignore"))
+    return cs, ce, text[cs:ce]
+
+
+def _normalize_annotation_to_v1(ann: Any, block_text: str) -> types.Annotation | None:
+    """Translate an inline or raw Interactions citation into v1 `Annotation`."""
+    if not isinstance(ann, Mapping):
+        return None
+    atype = ann.get("type")
+    if atype in ("citation", "non_standard_annotation"):
+        return cast("types.Annotation", copy.deepcopy(dict(ann)))
+    if atype in ("url_citation", "place_citation", "file_citation"):
+        cs, ce, cited = _utf8_slice_to_char_span(
+            block_text, ann.get("start_index"), ann.get("end_index")
+        )
+        if atype == "url_citation":
+            return types.create_citation(
+                url=str(ann["url"]) if ann.get("url") else None,
+                title=str(ann["title"]) if ann.get("title") else None,
+                start_index=cs,
+                end_index=ce,
+                cited_text=cited,
+            )
+        if atype == "place_citation":
+            extra_p = {"place_id": str(ann["place_id"])} if ann.get("place_id") else {}
+            title_p = ann.get("name") or ann.get("title")
+            kw_p: dict[str, Any] = {"google_ai_metadata": extra_p} if extra_p else {}
+            return types.create_citation(
+                url=str(ann["url"]) if ann.get("url") else None,
+                title=str(title_p) if title_p else None,
+                start_index=cs,
+                end_index=ce,
+                cited_text=cited,
+                **kw_p,
+            )
+        doc_uri = ann.get("document_uri") or ann.get("url")
+        fname = ann.get("file_name") or ann.get("source")
+        f_meta: dict[str, Any] = {"type": "file_citation"}
+        for fk in ("page_number", "media_id", "source", "custom_metadata"):
+            if ann.get(fk) is not None:
+                f_meta[fk] = copy.deepcopy(ann[fk])
+        return types.create_citation(
+            url=str(doc_uri) if doc_uri else None,
+            title=str(fname) if fname else None,
+            start_index=cs,
+            end_index=ce,
+            cited_text=cited,
+            file_citation_metadata=f_meta,
+        )
+    return {"type": "non_standard_annotation", "value": copy.deepcopy(dict(ann))}
+
+
+def _convert_interactions_dict_item(
+    item: Mapping[str, Any],
+) -> types.ContentBlock | None:
+    """Convert an Interactions or standard v1 dict block into a v1 `ContentBlock`."""
+    btype = item.get("type")
+    idx = item.get("index")
+
+    def _with_idx(blk: dict[str, Any]) -> types.ContentBlock:
+        if idx is not None and "index" not in blk:
+            blk["index"] = idx
+        return cast("types.ContentBlock", blk)
+
+    if btype == "text":
+        txt = str(item.get("text", ""))
+        out_t: dict[str, Any] = {
+            k: copy.deepcopy(v) for k, v in item.items() if k != "annotations"
+        }
+        out_t["type"] = "text"
+        out_t["text"] = txt
+        if isinstance(item.get("annotations"), list):
+            anns = [
+                norm
+                for a in item["annotations"]
+                if (norm := _normalize_annotation_to_v1(a, txt)) is not None
+            ]
+            if anns:
+                out_t["annotations"] = anns
+        return _with_idx(out_t)
+
+    if btype in ("reasoning", "thinking", "thought"):
+        out_r: dict[str, Any] = {"type": "reasoning"}
+        if btype == "reasoning":
+            r_txt = item.get("reasoning")
+            if not isinstance(r_txt, str):
+                summary = item.get("summary")
+                r_txt = (
+                    "".join(
+                        str(s.get("text", ""))
+                        for s in summary
+                        if isinstance(s, Mapping)
+                    )
+                    if isinstance(summary, list)
+                    else ""
+                )
+            out_r["reasoning"] = r_txt
+        elif btype == "thinking":
+            out_r["reasoning"] = str(item.get("thinking", ""))
+        else:
+            raw_sum = item.get("summary")
+            out_r["reasoning"] = (
+                "".join(
+                    str(s.get("text", ""))
+                    for s in raw_sum
+                    if isinstance(s, Mapping) and s.get("type") == "text"
+                )
+                if isinstance(raw_sum, list)
+                else ""
+            )
+        extras_r: dict[str, Any] = (
+            copy.deepcopy(dict(item["extras"]))
+            if isinstance(item.get("extras"), Mapping)
+            else {}
+        )
+        if item.get("signature") and "signature" not in extras_r:
+            sig_v = item["signature"]
+            extras_r["signature"] = (
+                base64.b64encode(sig_v).decode("ascii")
+                if isinstance(sig_v, bytes)
+                else str(sig_v)
+            )
+        if extras_r:
+            out_r["extras"] = extras_r
+        if item.get("id"):
+            out_r["id"] = str(item["id"])
+        return _with_idx(out_r)
+
+    if btype in ("image", "audio", "video", "file", "document"):
+        target_type = "file" if btype == "document" else str(btype)
+        out_d: dict[str, Any] = {"type": target_type}
+        if b64 := (item.get("base64") or item.get("data")):
+            out_d["base64"] = (
+                base64.b64encode(b64).decode("ascii")
+                if isinstance(b64, bytes)
+                else str(b64)
+            )
+        elif u := (item.get("url") or item.get("uri")):
+            out_d["url"] = str(u)
+        elif item.get("file_id"):
+            out_d["file_id"] = str(item["file_id"])
+        if item.get("mime_type"):
+            out_d["mime_type"] = str(item["mime_type"])
+        if item.get("id"):
+            out_d["id"] = str(item["id"])
+        if isinstance(item.get("extras"), Mapping) and item["extras"]:
+            out_d["extras"] = copy.deepcopy(dict(item["extras"]))
+        return _with_idx(out_d)
+
+    if btype in _PASS_THROUGH_V1_TYPES:
+        return _with_idx(copy.deepcopy(dict(item)))
+
+    if btype in _RAW_CALL_NAME_MAP or btype == "mcp_server_tool_call":
+        call_name = (
+            str(item.get("name") or "mcp_server_tool")
+            if btype == "mcp_server_tool_call"
+            else _RAW_CALL_NAME_MAP[str(btype)]
+        )
+        raw_args = item.get("arguments")
+        args_d = copy.deepcopy(dict(raw_args)) if isinstance(raw_args, Mapping) else {}
+        if btype == "code_execution_call":
+            args_d.setdefault("code", "")
+            args_d.setdefault("language", "python")
+        extras_sc: dict[str, Any] = {"step_type": str(btype)}
+        for ek in ("search_type", "server_name", "retrieval_type", "signature"):
+            if ek == "signature" and btype == "mcp_server_tool_call":
+                continue
+            if item.get(ek):
+                extras_sc[ek] = item[ek]
+        return _with_idx(
+            {
+                "type": "server_tool_call",
+                "name": call_name,
+                "id": str(item.get("id") or ""),
+                "args": args_d,
+                "extras": extras_sc,
+            }
+        )
+
+    if btype in _RAW_RESULT_TYPES or (
+        btype == "code_execution_result" and "code_execution_result" not in item
+    ):
+        is_err = bool(item.get("is_error"))
+        btag = (
+            _MEDIA_PROCESSING_TOOL_NAME if btype == "processing_result" else str(btype)
+        )
+        extras_sr: dict[str, Any] = {"block_type": btag, "step_type": str(btype)}
+        if btype == "code_execution_result":
+            extras_sr["outcome"] = 2 if is_err else 1
+        for ek in ("name", "server_name", "signature"):
+            if ek == "signature" and btype == "mcp_server_tool_result":
+                continue
+            if item.get(ek):
+                extras_sr[ek] = item[ek]
+        raw_out = item.get("result")
+        return _with_idx(
+            {
+                "type": "server_tool_result",
+                "tool_call_id": str(item.get("call_id") or ""),
+                "status": "error" if is_err else "success",
+                "output": copy.deepcopy(raw_out) if raw_out is not None else {},
+                "extras": extras_sr,
+            }
+        )
+
+    return None
+
+
+def _build_tool_blocks_for_message(
+    message: AIMessage,
+    existing_blocks: list[types.ContentBlock],
+    *,
+    is_chunk_streaming: bool,
+) -> list[types.ContentBlock]:
+    """Build v1 `ToolCallChunk` (mid-stream) or `ToolCall` (finalized) blocks."""
+    present_ids = {
+        b.get("id")
+        for b in existing_blocks
+        if isinstance(b, Mapping)
+        and b.get("type") in ("tool_call", "tool_call_chunk")
+        and b.get("id")
+    }
+    raw_sigs = message.additional_kwargs.get(_FC_THOUGHT_SIGS_KEY)
+    sig_map = raw_sigs if isinstance(raw_sigs, Mapping) else {}
+    out: list[types.ContentBlock] = []
+
+    if is_chunk_streaming and isinstance(message, AIMessageChunk):
+        for tcc in message.tool_call_chunks:
+            cid = tcc.get("id")
+            if cid and cid in present_ids:
+                continue
+            tc_blk: dict[str, Any] = {
+                "type": "tool_call_chunk",
+                "id": cid,
+                "name": tcc.get("name"),
+                "args": tcc.get("args"),
+            }
+            tidx = tcc.get("index")
+            if tidx is not None:
+                tc_blk["index"] = (
+                    tidx
+                    if isinstance(tidx, str) and tidx.startswith("lc_")
+                    else f"lc_tc_{tidx}"
+                )
+            if cid and sig_map.get(cid):
+                tc_blk["extras"] = {"signature": sig_map[cid]}
+            out.append(cast("types.ContentBlock", tc_blk))
+        return out
+
+    idx_map: dict[str, str] = {}
+    for tcc in getattr(message, "tool_call_chunks", None) or []:
+        tid = tcc.get("id")
+        tidx = tcc.get("index")
+        if tid and tidx is not None:
+            idx_map[tid] = (
+                tidx
+                if isinstance(tidx, str) and tidx.startswith("lc_")
+                else f"lc_tc_{tidx}"
+            )
+
+    for tc in message.tool_calls:
+        cid = tc.get("id")
+        if cid and cid not in present_ids:
+            final_tc: dict[str, Any] = {
+                "type": "tool_call",
+                "id": cid,
+                "name": tc["name"],
+                "args": tc["args"],
+            }
+            if cid in idx_map:
+                final_tc["index"] = idx_map[cid]
+            if sig_map.get(cid):
+                final_tc["extras"] = {"signature": sig_map[cid]}
+            out.append(cast("types.ContentBlock", final_tc))
+    return out
+
+
+_REFUSAL_FINISH_REASONS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"})
+
+
+def _reason_name(reason: object) -> str | None:
+    """Return the enum member name of a Gemini finish or block reason."""
+    if not reason:
+        return None
+    return str(getattr(reason, "name", reason)).rsplit(".", 1)[-1]
+
+
+def _fallback_refusal_from_metadata(
+    response_metadata: Mapping[str, Any],
+) -> types.ContentBlock | None:
+    """Build a refusal block when `langchain_core` lacks `_refusal_from_metadata`."""
+    extras: dict[str, Any] = {}
+    finish_reason = _reason_name(response_metadata.get("finish_reason"))
+    if finish_reason in _REFUSAL_FINISH_REASONS:
+        extras["finish_reason"] = finish_reason
+    feedback = response_metadata.get("prompt_feedback")
+    if isinstance(feedback, Mapping):
+        block_reason = _reason_name(feedback.get("block_reason"))
+        if block_reason and block_reason != "BLOCKED_REASON_UNSPECIFIED":
+            extras["block_reason"] = block_reason
+    if not extras:
+        return None
+    finish_message = response_metadata.get("finish_message")
+    refusal_text = (
+        finish_message if isinstance(finish_message, str) else str(finish_message or "")
+    )
+    return cast(
+        "types.ContentBlock",
+        {
+            "type": "refusal",
+            "refusal": refusal_text,
+            "extras": extras,
+        },
+    )
+
+
+def _refusal_from_metadata(
+    response_metadata: dict[str, Any],
+) -> types.ContentBlock | None:
+    """Resolve a v1 refusal block via `langchain_core` with a pure-Python fallback."""
+    core_fn = getattr(_core_genai_translator, "_refusal_from_metadata", None)
+    if callable(core_fn):
+        return cast("types.ContentBlock | None", core_fn(response_metadata))
+    return _fallback_refusal_from_metadata(response_metadata)
+
+
+def _core_convert_to_v1(message: AIMessage) -> list[types.ContentBlock]:
+    """Delegate legacy/`v0` block conversion to `langchain_core`'s GenAI translator."""
+    core_conv = getattr(_core_genai_translator, "_convert_to_v1_from_genai", None)
+    if callable(core_conv):
+        return cast("list[types.ContentBlock]", core_conv(message))
+    if isinstance(message, AIMessageChunk):
+        chunk_fn = getattr(_core_genai_translator, "translate_content_chunk", None)
+        if callable(chunk_fn):
+            return cast("list[types.ContentBlock]", chunk_fn(message))
+    content_fn = getattr(_core_genai_translator, "translate_content", None)
+    if callable(content_fn):
+        return cast("list[types.ContentBlock]", content_fn(message))
+    return _translate_interactions_v1_message(message, is_chunk_streaming=False)
+
+
+def _translate_interactions_v1_message(
+    message: AIMessage, *, is_chunk_streaming: bool
+) -> list[types.ContentBlock]:
+    """Translate an `output_version='interactions/v1'` message or chunk to v1 blocks."""
+    blocks: list[types.ContentBlock] = []
+    if isinstance(message.content, str):
+        if message.content:
+            blocks.append({"type": "text", "text": message.content})
+    elif isinstance(message.content, list):
+        for raw in message.content:
+            if isinstance(raw, str):
+                blocks.append({"type": "text", "text": raw})
+            elif isinstance(raw, Mapping):
+                if (
+                    is_chunk_streaming
+                    and isinstance(message, AIMessageChunk)
+                    and raw.get("type") == "tool_call"
+                ):
+                    # Streamed incrementally via message.tool_call_chunks during SSE;
+                    # kept in raw content so sum(chunks) matches unary interactions/v1.
+                    continue
+                conv = _convert_interactions_dict_item(raw)
+                if conv is not None:
+                    blocks.append(conv)
+                else:
+                    ns: dict[str, Any] = {
+                        "type": "non_standard",
+                        "value": copy.deepcopy(dict(raw)),
+                    }
+                    if raw.get("index") is not None:
+                        ns["index"] = raw["index"]
+                    blocks.append(cast("types.ContentBlock", ns))
+
+    gm = message.response_metadata.get("grounding_metadata")
+    cit_fn = getattr(
+        _core_genai_translator, "translate_grounding_metadata_to_citations", None
+    )
+    if (
+        gm
+        and callable(cit_fn)
+        and not any(b.get("type") == "text" and b.get("annotations") for b in blocks)
+    ):
+        cits = cit_fn(gm)
+        if cits:
+            for i, blk in enumerate(blocks):
+                if blk.get("type") == "text":
+                    blocks[i] = cast("types.ContentBlock", {**blk, "annotations": cits})
+                    break
+
+    aud = message.additional_kwargs.get("audio")
+    if (
+        isinstance(aud, bytes)
+        and aud
+        and not any(b.get("type") == "audio" for b in blocks)
+    ):
+        blocks.append(
+            {
+                "type": "audio",
+                "base64": base64.b64encode(aud).decode("ascii"),
+                "mime_type": "audio/wav",
+            }
+        )
+
+    blocks.extend(
+        _build_tool_blocks_for_message(
+            message, blocks, is_chunk_streaming=is_chunk_streaming
+        )
+    )
+    if not any(b.get("type") == "refusal" for b in blocks) and (
+        refusal := _refusal_from_metadata(message.response_metadata)
+    ):
+        blocks.append(refusal)
+    return blocks
+
+
+def _is_interactions_message(message: AIMessage) -> bool:
+    """Return True when `message` was produced by the Gemini Interactions API."""
+    meta = message.response_metadata or {}
+    return (
+        "interaction_id" in meta
+        or "status" in meta
+        or meta.get("output_version") == "interactions/v1"
+    )
+
+
+def _relocate_multistep_citations(
+    blocks: list[types.ContentBlock],
+) -> list[types.ContentBlock]:
+    """Attach byte-converted citations to the matching text block in multi-step runs."""
+    text_indices = [
+        i
+        for i, b in enumerate(blocks)
+        if isinstance(b, Mapping) and b.get("type") == "text"
+    ]
+    if len(text_indices) < 2:
+        return blocks
+    first_idx = text_indices[0]
+    first_blk = cast("dict[str, Any]", blocks[first_idx])
+    raw_anns = first_blk.get("annotations")
+    if not isinstance(raw_anns, list) or not raw_anns:
+        return blocks
+
+    first_txt = str(first_blk.get("text", ""))
+    per_block_anns: dict[int, list[Any]] = {ti: [] for ti in text_indices}
+    moved = False
+    for ann in raw_anns:
+        if not isinstance(ann, Mapping) or ann.get("type") != "citation":
+            per_block_anns[first_idx].append(ann)
+            continue
+        cs = ann.get("start_index")
+        ce = ann.get("end_index")
+        cited = ann.get("cited_text")
+        if (
+            isinstance(cs, int)
+            and isinstance(ce, int)
+            and isinstance(cited, str)
+            and cited
+            and first_txt[cs:ce] != cited
+        ):
+            placed = False
+            for cand_i in text_indices[1:]:
+                cand_txt = str(blocks[cand_i].get("text", ""))
+                if cand_txt[cs:ce] == cited:
+                    per_block_anns[cand_i].append(ann)
+                    moved = True
+                    placed = True
+                    break
+            if not placed:
+                per_block_anns[first_idx].append(ann)
+        else:
+            per_block_anns[first_idx].append(ann)
+
+    if not moved:
+        return blocks
+
+    out = list(blocks)
+    for ti in text_indices:
+        orig_b = dict(cast("dict[str, Any]", out[ti]))
+        anns_for_ti = per_block_anns[ti]
+        if ti == first_idx:
+            if anns_for_ti:
+                orig_b["annotations"] = anns_for_ti
+            else:
+                orig_b.pop("annotations", None)
+        elif anns_for_ti:
+            existing_a = list(orig_b.get("annotations") or [])
+            orig_b["annotations"] = [*existing_a, *anns_for_ti]
+        out[ti] = cast("types.ContentBlock", orig_b)
+    return out
+
+
+def _translate_legacy_genai_message(message: AIMessage) -> list[types.ContentBlock]:
+    """Delegate default `generateContent` messages/chunks unchanged to core."""
+    base_blocks = _core_convert_to_v1(message)
+    if not any(b.get("type") == "refusal" for b in base_blocks) and (
+        refusal := _refusal_from_metadata(message.response_metadata)
+    ):
+        base_blocks = [*base_blocks, refusal]
+    return base_blocks
+
+
+def _translate_interactions_v0_message(
+    message: AIMessage, *, is_chunk_streaming: bool
+) -> list[types.ContentBlock]:
+    """Translate `v0` Interactions messages/chunks to v1 blocks with tool/sig parity."""
+    msg_for_core = message
+    if (
+        is_chunk_streaming
+        and isinstance(message, AIMessageChunk)
+        and message.tool_call_chunks
+    ):
+        # Prevent core from promoting streaming deltas to finalized `tool_call` blocks
+        # (and dropping `id=None` `arguments_delta` chunks).
+        msg_for_core = message.model_copy(
+            update={"tool_calls": [], "tool_call_chunks": []}
+        )
+
+    base_blocks = _core_convert_to_v1(msg_for_core)
+
+    raw_sigs = message.additional_kwargs.get(_FC_THOUGHT_SIGS_KEY)
+    sig_map = raw_sigs if isinstance(raw_sigs, Mapping) else {}
+
+    # Upgrade any Interactions-emitted blocks core wrapped as `non_standard`, preserve
+    # `executable_code`/`code_execution_result` extras, merge inline `file_citation`s
+    # that `grounding_metadata` replaced, and enrich `tool_call` blocks with signatures.
+    upgraded: list[types.ContentBlock] = []
+    src_exec_extras: dict[str, dict[str, Any]] = {}
+    src_cer_extras: list[dict[str, Any]] = []
+    src_text_file_cits: dict[int, list[types.Annotation]] = {}
+    if isinstance(message.content, list):
+        src_t_ord = 0
+        for raw_c in message.content:
+            if isinstance(raw_c, str):
+                src_t_ord += 1
+                continue
+            if not isinstance(raw_c, Mapping):
+                continue
+            rc_type = raw_c.get("type")
+            if rc_type == "text":
+                raw_fc_anns = raw_c.get("annotations")
+                if isinstance(raw_fc_anns, list):
+                    rc_txt = str(raw_c.get("text", ""))
+                    kept_fc: list[types.Annotation] = []
+                    for ra in raw_fc_anns:
+                        norm_a = _normalize_annotation_to_v1(ra, rc_txt)
+                        if (
+                            norm_a is not None
+                            and norm_a.get("type") == "citation"
+                            and isinstance(
+                                cast("Mapping[str, Any]", norm_a).get("extras"), Mapping
+                            )
+                            and "file_citation_metadata"
+                            in cast("Mapping[str, Any]", norm_a)["extras"]
+                        ):
+                            kept_fc.append(norm_a)
+                    if kept_fc:
+                        src_text_file_cits[src_t_ord] = kept_fc
+                src_t_ord += 1
+            elif (
+                rc_type == "executable_code"
+                and isinstance(raw_c.get("extras"), Mapping)
+                and raw_c["extras"]
+            ):
+                src_exec_extras[str(raw_c.get("id", ""))] = copy.deepcopy(
+                    dict(raw_c["extras"])
+                )
+            elif rc_type == "code_execution_result":
+                cer_ex = (
+                    copy.deepcopy(dict(raw_c["extras"]))
+                    if isinstance(raw_c.get("extras"), Mapping) and raw_c["extras"]
+                    else {}
+                )
+                src_cer_extras.append(cer_ex)
+
+    cer_ord = 0
+    dst_t_ord = 0
+    for blk in base_blocks:
+        raw_blk = cast("dict[str, Any]", blk)
+        if raw_blk.get("type") == "non_standard" and isinstance(
+            raw_blk.get("value"), Mapping
+        ):
+            inner = cast("Mapping[str, Any]", raw_blk["value"])
+            # Leave legacy `image_url` fallback error cases untouched
+            if inner.get("type") not in ("image_url", None):
+                conv = _convert_interactions_dict_item(inner)
+                if conv is not None:
+                    if raw_blk.get("index") is not None and "index" not in conv:
+                        conv = cast(
+                            "types.ContentBlock", {**conv, "index": raw_blk["index"]}
+                        )
+                    upgraded.append(conv)
+                    continue
+        elif (
+            raw_blk.get("type") == "server_tool_call"
+            and raw_blk.get("name") == "code_interpreter"
+            and str(raw_blk.get("id", "")) in src_exec_extras
+            and "extras" not in raw_blk
+        ):
+            blk = cast(
+                "types.ContentBlock",
+                {**raw_blk, "extras": src_exec_extras[str(raw_blk.get("id", ""))]},
+            )
+        elif (
+            raw_blk.get("type") == "server_tool_result"
+            and isinstance(raw_blk.get("extras"), Mapping)
+            and raw_blk["extras"].get("block_type") == "code_execution_result"
+        ):
+            extra_cer = src_cer_extras[cer_ord] if cer_ord < len(src_cer_extras) else {}
+            cer_ord += 1
+            if extra_cer:
+                blk = cast(
+                    "types.ContentBlock",
+                    {
+                        **raw_blk,
+                        "extras": {**dict(raw_blk["extras"]), **extra_cer},
+                    },
+                )
+        elif raw_blk.get("type") == "tool_call":
+            tc_id = raw_blk.get("id")
+            if tc_id and sig_map.get(tc_id):
+                existing_ex = (
+                    dict(raw_blk["extras"])
+                    if isinstance(raw_blk.get("extras"), Mapping)
+                    else {}
+                )
+                if "signature" not in existing_ex:
+                    blk = cast(
+                        "types.ContentBlock",
+                        {
+                            **raw_blk,
+                            "extras": {**existing_ex, "signature": sig_map[tc_id]},
+                        },
+                    )
+        elif raw_blk.get("type") == "text":
+            cur_t_ord = dst_t_ord
+            dst_t_ord += 1
+            norm_anns: list[types.Annotation] = []
+            if isinstance(raw_blk.get("annotations"), list):
+                norm_anns = [
+                    n
+                    for a in cast("list[Any]", raw_blk["annotations"])
+                    if (
+                        n := _normalize_annotation_to_v1(
+                            a, str(raw_blk.get("text", ""))
+                        )
+                    )
+                    is not None
+                ]
+            extra_fcs = src_text_file_cits.get(cur_t_ord, [])
+            for fc_ann in extra_fcs:
+                if fc_ann not in norm_anns:
+                    norm_anns.append(fc_ann)
+            if norm_anns:
+                blk = cast("types.ContentBlock", {**raw_blk, "annotations": norm_anns})
+        upgraded.append(blk)
+
+    upgraded = _relocate_multistep_citations(upgraded)
+
+    if (
+        is_chunk_streaming
+        and isinstance(message, AIMessageChunk)
+        and message.tool_call_chunks
+    ):
+        upgraded.extend(
+            _build_tool_blocks_for_message(message, upgraded, is_chunk_streaming=True)
+        )
+    if not any(b.get("type") == "refusal" for b in upgraded) and (
+        refusal := _refusal_from_metadata(message.response_metadata)
+    ):
+        upgraded.append(refusal)
+    return upgraded
+
+
+def translate_genai_content(message: AIMessage) -> list[types.ContentBlock]:
+    """Translate a `google_genai` `AIMessage` into standard v1 content blocks.
+
+    Args:
+        message: The `AIMessage` to translate.
+
+    Returns:
+        Derived standard v1 `ContentBlock` dictionaries.
+    """
+    if message.response_metadata.get("output_version") == "interactions/v1":
+        return _translate_interactions_v1_message(message, is_chunk_streaming=False)
+    if _is_interactions_message(message):
+        return _translate_interactions_v0_message(message, is_chunk_streaming=False)
+    return _translate_legacy_genai_message(message)
+
+
+def translate_genai_content_chunk(message: AIMessageChunk) -> list[types.ContentBlock]:
+    """Translate a `google_genai` `AIMessageChunk` into standard v1 content blocks.
+
+    Args:
+        message: The streaming `AIMessageChunk` to translate.
+
+    Returns:
+        Derived standard v1 `ContentBlock` (and `ToolCallChunk`) dictionaries.
+    """
+    if message.response_metadata.get("output_version") == "interactions/v1":
+        return _translate_interactions_v1_message(
+            message, is_chunk_streaming=message.chunk_position != "last"
+        )
+    if _is_interactions_message(message):
+        return _translate_interactions_v0_message(
+            message, is_chunk_streaming=message.chunk_position != "last"
+        )
+    return _translate_legacy_genai_message(message)
+
+
+def _register_genai_translator() -> None:
+    """Register the Interactions-aware `google_genai` content block translator."""
+    register_translator(
+        "google_genai", translate_genai_content, translate_genai_content_chunk
+    )
+
+
+_register_genai_translator()
