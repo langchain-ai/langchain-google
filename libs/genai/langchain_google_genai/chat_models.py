@@ -5728,8 +5728,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """Execute a synchronous request via the Gemini Interactions API."""
-        msg = "Gemini Interactions API request translation is not yet wired."
-        raise NotImplementedError(msg)
+        from langchain_google_genai._interactions_response import (
+            generate_interactions,
+        )
+
+        return generate_interactions(
+            self,
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content,
+            tool_choice=tool_choice,
+            **kwargs,
+        )
 
     async def _agenerate_interactions(
         self,
@@ -5747,8 +5763,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """Execute an asynchronous request via the Gemini Interactions API."""
-        msg = "Gemini Interactions API async request translation is not yet wired."
-        raise NotImplementedError(msg)
+        from langchain_google_genai._interactions_response import (
+            agenerate_interactions,
+        )
+
+        return await agenerate_interactions(
+            self,
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content,
+            tool_choice=tool_choice,
+            **kwargs,
+        )
 
     def _stream_interactions(
         self,
