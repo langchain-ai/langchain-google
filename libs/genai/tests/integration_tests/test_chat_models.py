@@ -2099,7 +2099,8 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
 
 
 @pytest.mark.xfail(
-    reason="Computer use preview model persistently returns 503 UNAVAILABLE"
+    reason="Computer use preview model persistently returns 503 UNAVAILABLE",
+    raises=ServerError,
 )
 def test_computer_use_tool(backend_config: dict) -> None:
     """Test computer use tool integration.
