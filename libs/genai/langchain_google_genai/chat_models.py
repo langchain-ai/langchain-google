@@ -3355,11 +3355,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         # TODO: Refactor to use `capabilities` property when supported upstream
         # (or done via augmentation)
-        return (
-            re.match(
-                r"^gemini-[234](?:\.\d+)?-", _normalize_gemini_model_name(self.model)
+        model = _normalize_gemini_model_name(self.model)
+        return model.startswith(
+            (
+                "gemini-2-",
+                "gemini-2.",
+                "gemini-3-",
+                "gemini-3.",
+                "gemini-4-",
+                "gemini-4.",
             )
-            is not None
         )
 
     @classmethod
