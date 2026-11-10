@@ -3,7 +3,7 @@ from __future__ import annotations
 import collections
 import importlib
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import (
     Any,
     Literal,
@@ -227,6 +227,74 @@ def _format_dict_to_function_declaration(
     )
 
 
+def _interactions_builtin_tool_to_genai(tool: Mapping[str, Any]) -> types.Tool | None:
+    """Translate an Interactions-shaped `{"type": ...}` server tool dict to `Tool`."""
+    tool_type = tool.get("type")
+    if tool_type in {"mcp_server", "file_search", "retrieval"}:
+        from langchain_google_genai.chat_models import GoogleInvalidRequestError
+
+        msg = (
+            f"Tool type '{tool_type}' requires the Gemini Interactions API "
+            "(use_interactions_api=True) and is not supported on generateContent "
+            "(use_interactions_api=False)."
+        )
+        raise GoogleInvalidRequestError(msg)
+
+    if tool_type == "google_search":
+        raw_st = tool.get("search_types")
+        if isinstance(raw_st, list):
+            lowered_st = [str(s).lower() for s in raw_st]
+            if lowered_st == ["enterprise_web_search"]:
+                return types.Tool(enterprise_web_search=types.EnterpriseWebSearch())
+        gs_kwargs: dict[str, Any] = {}
+        for k in ("exclude_domains", "time_range_filter", "blocking_confidence"):
+            if k in tool and tool[k] is not None:
+                gs_kwargs[k] = tool[k]
+        gs_kwargs = _unwrap_enums(gs_kwargs, "blocking_confidence")
+        return types.Tool(google_search=types.GoogleSearch(**gs_kwargs))
+
+    if tool_type == "google_maps":
+        gm_kwargs: dict[str, Any] = {}
+        if tool.get("enable_widget") is not None:
+            gm_kwargs["enable_widget"] = bool(tool["enable_widget"])
+        return types.Tool(google_maps=types.GoogleMaps(**gm_kwargs))
+
+    if tool_type == "code_execution":
+        return types.Tool(code_execution=types.ToolCodeExecution())
+
+    if tool_type == "url_context":
+        return types.Tool(url_context=types.UrlContext())
+
+    if tool_type == "computer_use":
+        cu_kwargs = _unwrap_enums(
+            {
+                k: tool[k]
+                for k in (
+                    "environment",
+                    "excluded_predefined_functions",
+                    "enable_prompt_injection_detection",
+                    "disabled_safety_policies",
+                )
+                if k in tool and tool[k] is not None
+            },
+            "environment",
+            "disabled_safety_policies",
+        )
+        env = cu_kwargs.get("environment")
+        if isinstance(env, str) and not env.upper().startswith("ENVIRONMENT_"):
+            cu_kwargs["environment"] = f"ENVIRONMENT_{env.upper()}"
+        elif isinstance(env, str):
+            cu_kwargs["environment"] = env.upper()
+        if isinstance(cu_kwargs.get("disabled_safety_policies"), list):
+            cu_kwargs["disabled_safety_policies"] = [
+                p.upper() if isinstance(p, str) else p
+                for p in cu_kwargs["disabled_safety_policies"]
+            ]
+        return types.Tool(computer_use=types.ComputerUse(**cu_kwargs))
+
+    return None
+
+
 # Info: gapicTool means function_declarations and other tool types
 def convert_to_genai_function_declarations(
     tools: _ToolsType,
@@ -262,11 +330,33 @@ def convert_to_genai_function_declarations(
         "mcp_servers",
     ]
 
+    _CAMEL_TO_SNAKE_SPECIAL_TOOLS: dict[str, str] = {
+        "googleSearch": "google_search",
+        "googleSearchRetrieval": "google_search_retrieval",
+        "googleMaps": "google_maps",
+        "codeExecution": "code_execution",
+        "urlContext": "url_context",
+        "computerUse": "computer_use",
+        "enterpriseWebSearch": "enterprise_web_search",
+        "fileSearch": "file_search",
+        "mcpServers": "mcp_servers",
+    }
+
     for tool in tools:
         if isinstance(tool, types.Tool):
             # Already a Tool object, add it directly
             result_tools.append(tool)
         elif isinstance(tool, dict):
+            builtin_ia_tool = _interactions_builtin_tool_to_genai(tool)
+            if builtin_ia_tool is not None:
+                result_tools.append(builtin_ia_tool)
+                continue
+
+            if any(k in _CAMEL_TO_SNAKE_SPECIAL_TOOLS for k in tool):
+                tool = {
+                    _CAMEL_TO_SNAKE_SPECIAL_TOOLS.get(k, k): v for k, v in tool.items()
+                }
+
             # Check if this is a special tool type dict
             # Only count keys that have non-None values
             special_keys = [
@@ -525,25 +615,48 @@ def tool_to_dict(tool: types.Tool) -> _ToolDict:
 def _format_to_genai_function_declaration(
     tool: _FunctionDeclarationLike,
 ) -> types.FunctionDeclaration:
+    if isinstance(tool, types.FunctionDeclaration):
+        return tool
     if isinstance(tool, BaseTool):
         return _format_base_tool_to_function_declaration(tool)
     if isinstance(tool, type) and is_basemodel_subclass_safe(tool):
         return _convert_pydantic_to_genai_function(tool)
     if isinstance(tool, dict):
         if all(k in tool for k in ("type", "function")) and tool["type"] == "function":
-            function = tool["function"]
+            function = dict(tool["function"])
+        elif (
+            tool.get("type") == "function" and "name" in tool and "function" not in tool
+        ):
+            function = {
+                "name": tool["name"],
+                "description": tool.get("description"),
+                "parameters": tool.get("parameters") or {},
+            }
+        elif "name" in tool and "input_schema" in tool and "parameters" not in tool:
+            function = {
+                "name": tool["name"],
+                "description": tool.get("description"),
+                "parameters": tool.get("input_schema") or {},
+            }
         elif (
             all(k in tool for k in ("name", "description")) and "parameters" not in tool
         ):
-            function = cast("dict", tool)
-        elif "parameters" in tool and tool["parameters"].get("properties"):
-            function = convert_to_openai_tool(cast("dict", tool))["function"]
+            function = dict(tool)
+        elif (
+            "parameters" in tool
+            and isinstance(tool["parameters"], dict)
+            and tool["parameters"].get("properties")
+            and "name" not in tool
+        ):
+            converted = convert_to_openai_tool(cast("dict", tool))
+            function = dict(converted.get("function", converted))
         else:
-            function = cast("dict", tool)
-        function["parameters"] = function.get("parameters") or {}
+            function = dict(tool)
+        params = function.get("parameters") or {}
         # Empty 'properties' field not supported.
-        if not function["parameters"].get("properties"):
-            function["parameters"] = {}
+        function["parameters"] = (
+            params if isinstance(params, dict) and params.get("properties") else {}
+        )
         return _format_dict_to_function_declaration(
             cast("FunctionDescription", function)
         )
