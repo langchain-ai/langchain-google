@@ -3355,7 +3355,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         # TODO: Refactor to use `capabilities` property when supported upstream
         # (or done via augmentation)
-        return "gemini-2" in self.model or "gemini-3" in self.model
+        return (
+            re.match(
+                r"^gemini-[234](?:\.\d+)?-", _normalize_gemini_model_name(self.model)
+            )
+            is not None
+        )
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -3590,7 +3595,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
-                    "Code execution is only supported on Gemini 2.0, and 2.5 models. "
+                    "Code execution is only supported on Gemini 2, 3, and 4 models. "
                     f"Current model: {self.model}"
                 )
                 raise ValueError(msg)

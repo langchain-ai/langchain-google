@@ -332,6 +332,92 @@ def test_profile() -> None:
     assert model.profile == {}
 
 
+def test_carbon_profile() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-carbon",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.profile is not None
+    expected = {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 65536,
+        "text_inputs": True,
+        "image_inputs": True,
+        "audio_inputs": True,
+        "pdf_inputs": True,
+        "video_inputs": True,
+        "text_outputs": True,
+        "image_outputs": False,
+        "audio_outputs": False,
+        "video_outputs": False,
+        "reasoning_output": True,
+        "tool_calling": True,
+        "structured_output": True,
+        "temperature": False,
+        "image_url_inputs": True,
+        "image_tool_message": True,
+        "tool_choice": True,
+    }
+    assert {key: llm.profile.get(key) for key in expected} == expected
+
+
+@pytest.mark.parametrize("reasoning_effort", ["low", "medium", "high"])
+def test_carbon_request(reasoning_effort: Literal["low", "medium", "high"]) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-carbon",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+    request = llm._prepare_request([HumanMessage(content="Solve this problem")])
+    config = request["config"]
+    assert request["model"] == "gemini-4-carbon"
+    assert config.temperature is None
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == reasoning_effort.upper()
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "gemini-2.0-flash",
+        "gemini-2.5-pro",
+        "gemini-3.5-flash",
+        "gemini-4-argon",
+        "gemini-4-carbon",
+        "models/gemini-4-carbon",
+        "projects/test/locations/global/publishers/google/models/gemini-4-carbon",
+        "us.gemini-4-carbon",
+    ],
+)
+def test_code_execution_supported_models(model_name: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    with patch(
+        "langchain_core.language_models.chat_models.BaseChatModel.invoke",
+        return_value=AIMessage(content="2"),
+    ) as invoke:
+        llm.invoke("Calculate 1 + 1", code_execution=True)
+
+    tools = invoke.call_args.kwargs["tools"]
+    assert len(tools) == 1
+    assert tools[0].code_execution is not None
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["gemma-3-27b-it", "gemini-20-flash", "custom-gemini-4-carbon", "gemini-5-pro"],
+)
+def test_code_execution_unsupported_models(model_name: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    with pytest.raises(ValueError, match="Code execution is only supported on Gemini"):
+        llm.invoke("Calculate 1 + 1", code_execution=True)
+
+
 def test_parse_history() -> None:
     convert_system_message_to_human = False
     system_input = "You're supposed to answer math questions."
@@ -6496,6 +6582,7 @@ _ALL_REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high"]
         ("gemini-3.5-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
         ("gemini-3.5-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
         ("gemini-3.6-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-4-carbon", ["low", "medium", "high"], "medium"),
         ("gemini-2.5-pro", None, None),
     ],
 )
