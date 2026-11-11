@@ -427,7 +427,7 @@ def test_format_tool_to_genai_function() -> None:
     @tool
     def get_datetime() -> str:
         """Gets the current datetime."""
-        return datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
+        return datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
 
     schema = convert_to_genai_function_declarations([get_datetime])[0]
     assert schema.function_declarations is not None

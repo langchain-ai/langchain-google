@@ -1,7 +1,7 @@
 import os
 import re
 import string
-from typing import Any
+from typing import Any, Self
 
 from google.genai.client import Client
 from google.genai.errors import ClientError
@@ -9,7 +9,6 @@ from google.genai.types import EmbedContentConfig, HttpOptions
 from langchain_core.embeddings import Embeddings
 from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
-from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,

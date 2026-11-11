@@ -24,6 +24,7 @@ from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    Self,
     cast,
 )
 from urllib.parse import urlparse
@@ -122,7 +123,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Self, is_typeddict
+from typing_extensions import is_typeddict
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,

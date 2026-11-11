@@ -23,6 +23,9 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
+        # libs/genai requires Python >=3.11
+        exclude:
+          - python-version: ${{ inputs.working-directory == 'libs/genai' && '3.10' || '' }}
     name: "uv run pytest -m compile tests/integration_tests #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v7

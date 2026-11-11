@@ -29,6 +29,9 @@ jobs:
           - "3.12"
           - "3.13"
           - "3.14"
+        # libs/genai requires Python >=3.11
+        exclude:
+          - python-version: ${{ inputs.working-directory == 'libs/genai' && '3.10' || '' }}
     name: "make test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v7

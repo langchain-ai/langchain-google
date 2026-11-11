@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from difflib import get_close_matches
-from typing import Any
+from typing import Any, Self
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -13,7 +13,6 @@ from langchain_core.language_models.llms import BaseLLM
 from langchain_core.messages import HumanMessage
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from pydantic import ConfigDict, model_validator
-from typing_extensions import Self
 
 from langchain_google_genai._common import (
     _BaseGoogleGenerativeAI,

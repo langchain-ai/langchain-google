@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from typing import (
     Any,
     Literal,
+    NotRequired,
     TypedDict,
     cast,
 )
@@ -21,7 +22,6 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import NotRequired
 
 logger = logging.getLogger(__name__)
 

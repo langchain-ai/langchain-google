@@ -1,11 +1,10 @@
 import os
 from importlib import metadata
-from typing import Any
+from typing import Any, Self
 
 from langchain_core.utils import from_env, secret_from_env
 from langchain_core.utils._gateway import _apply_gateway_config
 from pydantic import BaseModel, Field, SecretStr, model_validator
-from typing_extensions import Self
 
 from langchain_google_genai._enums import (
     HarmBlockThreshold,

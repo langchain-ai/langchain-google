@@ -34,9 +34,8 @@ jobs:
         # GitHub rate-limits how many jobs can be running at any one time.
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
-        python-version:
-          - "3.10"
-          - "3.14"
+        # libs/genai requires Python >=3.11, so its min version differs.
+        python-version: ${{ fromJSON(inputs.working-directory == 'libs/genai' && '["3.11", "3.14"]' || '["3.10", "3.14"]') }}
     steps:
       - uses: actions/checkout@v7
 
