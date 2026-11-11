@@ -12,8 +12,8 @@ authors = []
 version = "4.4.3"
 requires-python = ">=3.11.0,<4.0.0"
 dependencies = [
-    "langchain-core>=1.7.5,<2.0.0",
-    "google-genai>=2.20.0",
+    "langchain-core>=1.8.0,<2.0.0",
+    "google-genai>=3.2.0",
     "pydantic>=2.0.0",
     "filetype>=1.2.0",
 ]
