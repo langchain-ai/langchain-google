@@ -49,3 +49,9 @@ reasoning_effort_default = "medium"
 [overrides."gemini-4-argon"]
 reasoning_effort_levels = ["low", "medium", "high"]
 reasoning_effort_default = "medium"
+
+[overrides."gemini-4-carbon"]
+max_output_tokens = 65536
+temperature = false
+reasoning_effort_levels = ["low", "medium", "high"]
+reasoning_effort_default = "medium"
