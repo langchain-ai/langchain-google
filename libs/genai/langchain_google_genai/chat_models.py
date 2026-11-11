@@ -24,6 +24,7 @@ from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    Self,
     cast,
 )
 from urllib.parse import urlparse
@@ -122,12 +123,13 @@ from pydantic import (
     model_validator,
 )
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Self, is_typeddict
+from typing_extensions import is_typeddict
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
+    _default_api_version,
     get_user_agent,
 )
 from langchain_google_genai._compat import (
@@ -167,6 +169,8 @@ _GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
         "code_execution_result",
     }
 )
+_REFUSAL_FINISH_REASONS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"})
+"""Candidate finish reasons that core translates to a refusal content block."""
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
@@ -1034,6 +1038,9 @@ def _convert_to_parts(
                             "represented as a Gemini part (inner type: %s).",
                             value.get("type") if isinstance(value, Mapping) else None,
                         )
+                elif part["type"] == "refusal":
+                    # Gemini has no refusal input part.
+                    continue
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
@@ -2136,6 +2143,14 @@ def _response_to_result(
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
 
+        if generation_info.get("finish_reason") in _REFUSAL_FINISH_REASONS:
+            # `v1` content is built from the message before `generation_info` is merged.
+            message.response_metadata["finish_reason"] = generation_info[
+                "finish_reason"
+            ]
+            if candidate.finish_message:
+                message.response_metadata["finish_message"] = candidate.finish_message
+
         try:
             if candidate.grounding_metadata:
                 grounding_metadata = candidate.grounding_metadata.model_dump()
@@ -2187,12 +2202,10 @@ def _response_to_result(
             "Gemini produced an empty response. Continuing with empty message\n"
             f"Feedback: {response.prompt_feedback}"
         )
+        response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
+        if response.prompt_feedback:
+            response_metadata["prompt_feedback"] = response.prompt_feedback.model_dump()
         if stream:
-            response_metadata = (
-                {"prompt_feedback": response.prompt_feedback.model_dump()}
-                if response.prompt_feedback
-                else {}
-            )
             generations = [
                 ChatGenerationChunk(
                     message=AIMessageChunk(
@@ -2204,7 +2217,12 @@ def _response_to_result(
                 )
             ]
         else:
-            generations = [ChatGeneration(message=AIMessage(""), generation_info={})]
+            generations = [
+                ChatGeneration(
+                    message=AIMessage("", response_metadata=response_metadata),
+                    generation_info={},
+                )
+            ]
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
@@ -3448,7 +3466,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
-            api_version=self.api_version,
+            api_version=_default_api_version(
+                self.api_version,
+                vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+            ),
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,

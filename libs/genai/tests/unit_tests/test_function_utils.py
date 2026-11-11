@@ -5,9 +5,25 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from google.genai.types import (
+    ApiKeyConfig,
+    ApiSpec,
+    AuthConfig,
+    AuthType,
+    ComputerUse,
+    DynamicRetrievalConfig,
+    DynamicRetrievalConfigMode,
+    EnterpriseWebSearch,
+    ExternalApi,
     FunctionCallingConfig,
     FunctionCallingConfigMode,
     FunctionDeclaration,
+    GoogleMaps,
+    GoogleSearch,
+    GoogleSearchRetrieval,
+    HttpElementLocation,
+    PhishBlockThreshold,
+    Retrieval,
+    SafetyPolicy,
     Schema,
     Tool,
     ToolConfig,
@@ -411,7 +427,7 @@ def test_format_tool_to_genai_function() -> None:
     @tool
     def get_datetime() -> str:
         """Gets the current datetime."""
-        return datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d")
+        return datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
 
     schema = convert_to_genai_function_declarations([get_datetime])[0]
     assert schema.function_declarations is not None
@@ -512,6 +528,60 @@ def test_format_tool_to_genai_function() -> None:
     src_10: dict[str, Any] = {"google_maps": {}}
     result = convert_to_genai_function_declarations([src_10])[0]
     assert result == src_9
+
+    # enterprise_web_search survives the bind_tools round trip through tool_to_dict
+    src_11 = Tool(enterprise_web_search={"exclude_domains": ["example.com"]})
+    result = convert_to_genai_function_declarations([src_11])[0]
+    assert result == src_11
+    round_trip = convert_to_genai_function_declarations([tool_to_dict(result)])
+    assert round_trip == [src_11]
+
+    # enum-valued fields (blocking_confidence) survive the same round trip
+    src_12 = Tool(
+        enterprise_web_search=EnterpriseWebSearch(
+            blocking_confidence=PhishBlockThreshold.BLOCK_LOW_AND_ABOVE,
+            exclude_domains=["example.com"],
+        )
+    )
+    round_trip = convert_to_genai_function_declarations([tool_to_dict(src_12)])
+    assert round_trip == [src_12]
+
+    auth_config = AuthConfig(
+        auth_type=AuthType.API_KEY_AUTH,
+        api_key_config=ApiKeyConfig(
+            http_element_location=HttpElementLocation.HTTP_IN_HEADER
+        ),
+    )
+    for src_13 in [
+        Tool(
+            google_search=GoogleSearch(
+                blocking_confidence=PhishBlockThreshold.BLOCK_LOW_AND_ABOVE
+            )
+        ),
+        Tool(
+            google_search_retrieval=GoogleSearchRetrieval(
+                dynamic_retrieval_config=DynamicRetrievalConfig(
+                    mode=DynamicRetrievalConfigMode.MODE_DYNAMIC
+                )
+            )
+        ),
+        Tool(google_maps=GoogleMaps(auth_config=auth_config)),
+        Tool(
+            retrieval=Retrieval(
+                external_api=ExternalApi(
+                    api_spec=ApiSpec.SIMPLE_SEARCH, auth_config=auth_config
+                )
+            )
+        ),
+        Tool(
+            computer_use=ComputerUse(
+                environment=Environment.ENVIRONMENT_BROWSER,
+                disabled_safety_policies=[SafetyPolicy.FINANCIAL_TRANSACTIONS],
+            )
+        ),
+    ]:
+        round_trip = convert_to_genai_function_declarations([tool_to_dict(src_13)])
+        assert round_trip == [src_13]
 
     with pytest.raises(ValueError) as exc_info1:
         _ = convert_to_genai_function_declarations(["fake_tool"])  # type: ignore

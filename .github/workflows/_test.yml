@@ -24,7 +24,6 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
@@ -39,11 +38,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libqpdf-dev
 
       - name: Install dependencies
         shell: bash

@@ -92,14 +92,10 @@ resource "google_cloudbuild_trigger" "cloudbuild_trigger" {
   location        = var.region
   service_account = google_service_account.cloudbuild_service_account.id
 
-  included_files = ["libs/${var.library}/**"]
-
-  repository_event_config {
+  source_to_build {
     repository = var.cloudbuildv2_repository_id
-    pull_request {
-      branch = "^main$"
-      #comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY" #Configure builds to run whether a repository owner or collaborator need to comment /gcbrun
-    }
+    ref        = "refs/heads/main"
+    repo_type  = "GITHUB"
   }
 
   substitutions = local.cloudbuild_env_vars
