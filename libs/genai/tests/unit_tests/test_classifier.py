@@ -210,15 +210,6 @@ def test_http_options() -> None:
     assert options.retry_options.attempts == 1
 
 
-def test_client_without_decisions_support_raises() -> None:
-    client = MagicMock(spec=genai.Client)
-    del client.decisions
-    classifier = GoogleGenAIClassifier(model=MODEL_NAME, client=client)
-
-    with pytest.raises(ImportError, match="Decisions API support"):
-        classifier.invoke({"state": "text", "questions": _QUESTIONS})
-
-
 def test_traced_config_sets_provider_metadata() -> None:
     config = _classifier()._traced_config({"metadata": {"user": "value"}})
 

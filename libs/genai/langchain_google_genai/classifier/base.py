@@ -37,8 +37,7 @@ class GoogleGenAIClassifier(BaseDecisionModel):
     selected label or level. The API's `NoulAnswer` confidence, `max(noul, 1 - noul)`,
     is not kept because it can be computed from `noul`.
 
-    Requests always use the Gemini Developer API. The Decisions API requires a
-    `google-genai` release that exposes `client.decisions`.
+    Requests always use the Gemini Developer API.
 
     Args:
         model: Decisions model used to answer questions.
@@ -201,12 +200,6 @@ class GoogleGenAIClassifier(BaseDecisionModel):
                 api_key=api_key,
                 http_options=self._http_options,
             )
-        if not hasattr(client, "decisions"):
-            msg = (
-                "GoogleGenAIClassifier requires a `google-genai` release with "
-                "Decisions API support (`client.decisions`)."
-            )
-            raise ImportError(msg)
         return client
 
     @property
@@ -231,7 +224,7 @@ class GoogleGenAIClassifier(BaseDecisionModel):
         self, state: State, questions: dict[str, Question]
     ) -> ClassifierResponse:
         payload = self._payload(state, questions)
-        response = self._client.decisions.create(**payload)  # type: ignore[attr-defined]
+        response = self._client.decisions.create(**payload)
         return self._parse_response(response)
 
     @override
@@ -239,7 +232,7 @@ class GoogleGenAIClassifier(BaseDecisionModel):
         self, state: State, questions: dict[str, Question]
     ) -> ClassifierResponse:
         payload = self._payload(state, questions)
-        response = await self._client.aio.decisions.create(**payload)  # type: ignore[attr-defined]
+        response = await self._client.aio.decisions.create(**payload)
         return self._parse_response(response)
 
     def _payload(self, state: State, questions: dict[str, Question]) -> dict[str, Any]:

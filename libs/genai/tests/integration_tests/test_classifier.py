@@ -4,7 +4,6 @@ import base64
 import io
 
 import pytest
-from google import genai
 from langchain_core.messages import AIMessage, HumanMessage
 
 from langchain_google_genai.classifier import (
@@ -15,11 +14,6 @@ from langchain_google_genai.classifier import (
 )
 
 _MODEL = "gemini-decision-1"
-
-pytestmark = pytest.mark.skipif(
-    not hasattr(genai.Client, "decisions"),
-    reason="Installed google-genai release does not support the Decisions API.",
-)
 
 _QUESTIONS: dict[str, Noul | Choice | Score] = {
     "damaged": Noul(
