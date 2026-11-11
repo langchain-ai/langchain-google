@@ -10,7 +10,7 @@ readme = "README.md"
 authors = []
 
 version = "4.4.3"
-requires-python = ">=3.10.0,<4.0.0"
+requires-python = ">=3.11.0,<4.0.0"
 dependencies = [
     "langchain-core>=1.7.5,<2.0.0",
     "google-genai>=2.20.0",
