@@ -15,8 +15,8 @@ from pydantic import SecretStr, ValidationError
 
 from langchain_google_genai.classifier import GoogleGenAIClassifier
 from langchain_google_genai.classifier._input import (
-    to_decision_input,
-    to_decision_questions,
+    _to_decision_input,
+    _to_decision_questions,
 )
 
 MODEL_NAME = "gemini-decision-1"
@@ -227,7 +227,7 @@ def _sent_questions(questions: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_noul_criteria_mapped_to_descriptions() -> None:
-    questions = to_decision_questions(
+    questions = _to_decision_questions(
         {
             "both": Noul(instructions="q", criteria={"true": "Yes.", "false": "No."}),
             "one": Noul(instructions="q", criteria={"true": None, "false": "No."}),
@@ -244,7 +244,7 @@ def test_noul_criteria_mapped_to_descriptions() -> None:
 
 
 def test_json_content_is_sent_as_json_text() -> None:
-    questions = to_decision_questions(
+    questions = _to_decision_questions(
         {
             "urgent": Noul(
                 instructions={"task": "Is this urgent?"},
@@ -289,19 +289,19 @@ def test_box_questions_raise() -> None:
 
 
 def test_string_state_is_sent_as_is() -> None:
-    assert to_decision_input("hello") == "hello"
+    assert _to_decision_input("hello") == "hello"
 
 
 def test_json_state_is_sent_as_json_text() -> None:
     state = {"ticket": {"subject": "Refund", "priority": 2}, "tags": ["a", None]}
 
-    assert json.loads(to_decision_input(state)) == state  # type: ignore[arg-type]
+    assert json.loads(_to_decision_input(state)) == state  # type: ignore[arg-type]
 
 
 def test_messages_are_sent_as_role_content_json() -> None:
     state = [SystemMessage("Be helpful."), HumanMessage("Hi"), AIMessage("Hello")]
 
-    assert json.loads(to_decision_input(state)) == [  # type: ignore[arg-type]
+    assert json.loads(_to_decision_input(state)) == [  # type: ignore[arg-type]
         {"role": "system", "content": "Be helpful."},
         {"role": "user", "content": "Hi"},
         {"role": "assistant", "content": "Hello"},
@@ -316,7 +316,7 @@ def test_media_blocks_in_json_are_sent_in_place() -> None:
         "after": "y",
     }
 
-    content = to_decision_input(state)
+    content = _to_decision_input(state)
 
     assert isinstance(content, list)
     assert [block["type"] for block in content] == [
@@ -343,7 +343,7 @@ def test_media_in_messages_is_sent_in_place() -> None:
         ]
     )
 
-    content = to_decision_input(message)
+    content = _to_decision_input(message)
 
     assert isinstance(content, list)
     media = [block for block in content if block["type"] != "text"]
@@ -357,22 +357,22 @@ def test_media_in_messages_is_sent_in_place() -> None:
 def test_dicts_without_media_data_are_json() -> None:
     state = {"type": "image", "caption": "no data here"}
 
-    assert json.loads(to_decision_input(state)) == state  # type: ignore[arg-type]
+    assert json.loads(_to_decision_input(state)) == state  # type: ignore[arg-type]
 
 
 def test_message_media_without_supported_data_raises() -> None:
     message = HumanMessage(content=[{"type": "image", "file_id": "file-123"}])
 
     with pytest.raises(ValueError, match="Only `base64` and `url`"):
-        to_decision_input(message)
+        _to_decision_input(message)
 
 
 @pytest.mark.parametrize("state", [None, 1, 1.5, True])
 def test_scalar_state_raises(state: Any) -> None:
     with pytest.raises(TypeError, match="state must be"):
-        to_decision_input(state)
+        _to_decision_input(state)
 
 
 def test_unsupported_state_value_raises() -> None:
     with pytest.raises(TypeError, match="Unsupported classifier state value"):
-        to_decision_input({"value": object()})  # type: ignore[dict-item]
+        _to_decision_input({"value": object()})  # type: ignore[dict-item]

@@ -28,7 +28,7 @@ _MEDIA_TYPES = {
 """LangChain standard media block types mapped to Decisions API input types."""
 
 
-def to_decision_input(state: State) -> str | list[dict[str, Any]]:
+def _to_decision_input(state: State) -> str | list[dict[str, Any]]:
     """Convert state to a string or a list of Decisions API content blocks.
 
     Strings are sent as-is. Any other state is serialized to JSON text, with
@@ -70,7 +70,7 @@ def to_decision_input(state: State) -> str | list[dict[str, Any]]:
     return content
 
 
-def to_decision_questions(questions: dict[str, Question]) -> dict[str, dict[str, Any]]:
+def _to_decision_questions(questions: dict[str, Question]) -> dict[str, dict[str, Any]]:
     """Convert validated questions to the Decisions API `questions` field.
 
     JSON instructions and criteria are sent as JSON text.

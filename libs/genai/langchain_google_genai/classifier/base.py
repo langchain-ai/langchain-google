@@ -15,8 +15,8 @@ from pydantic import ConfigDict, Field, SecretStr, model_validator
 from typing_extensions import override
 
 from langchain_google_genai.classifier._input import (
-    to_decision_input,
-    to_decision_questions,
+    _to_decision_input,
+    _to_decision_questions,
 )
 
 if TYPE_CHECKING:
@@ -240,8 +240,8 @@ class GoogleGenAIClassifier(BaseDecisionModel):
     def _payload(self, state: State, questions: dict[str, Question]) -> dict[str, Any]:
         return {
             "model": self.model,
-            "input": to_decision_input(state),
-            "questions": to_decision_questions(questions),
+            "input": _to_decision_input(state),
+            "questions": _to_decision_questions(questions),
             # google-genai defaults to `v1`, where the Decisions API is not served.
             "api_version": "v1beta",
         }
