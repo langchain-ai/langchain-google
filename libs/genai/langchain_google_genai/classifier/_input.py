@@ -82,7 +82,8 @@ def _to_decision_questions(questions: dict[str, Question]) -> dict[str, dict[str
         Questions in the Decisions API format, keyed by answer ID.
 
     Raises:
-        ValueError: If a question is a `Box`.
+        ValueError: If a question is a `Box`, or its instructions or criteria contain
+            a media block.
     """
     return {
         name: _question_to_api(name, question) for name, question in questions.items()
@@ -92,6 +93,12 @@ def _to_decision_questions(questions: dict[str, Question]) -> dict[str, dict[str
 def _question_to_api(name: str, question: Question) -> dict[str, Any]:
     if isinstance(question, Box):
         msg = f"Question {name!r}: the Decisions API does not support Box questions."
+        raise ValueError(msg)
+    if _contains_media(question.model_dump()):
+        msg = (
+            f"Question {name!r}: the Decisions API accepts only text in question "
+            "instructions and criteria."
+        )
         raise ValueError(msg)
     payload: dict[str, Any] = {
         "type": question.type,
@@ -126,6 +133,16 @@ def _to_text(content: JsonValue) -> str:
     if isinstance(content, str):
         return content
     return json.dumps(content, ensure_ascii=False)
+
+
+def _contains_media(value: object) -> bool:
+    if _is_media_block(value):
+        return True
+    if isinstance(value, Mapping):
+        return any(_contains_media(item) for item in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return any(_contains_media(item) for item in value)
+    return False
 
 
 def _to_json_value(value: object, media: list[dict[str, Any]], token: str) -> Any:

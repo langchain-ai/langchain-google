@@ -58,7 +58,8 @@ class GoogleGenAIClassifier(BaseDecisionModel):
 
     Raises:
         ValueError: If no API key is available and no `client` is supplied. Also
-            raised by `invoke` for a `Box` question.
+            raised by `invoke` for a `Box` question, or for media blocks in question
+            instructions or criteria.
         ModelRefusalError: From `invoke` when the API blocked the input and
             returned no answers.
 

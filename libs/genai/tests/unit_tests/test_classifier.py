@@ -11,7 +11,7 @@ from google import genai
 from langchain_core.decisions import Box, Choice, Noul, Score
 from langchain_core.exceptions import ModelRefusalError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from pydantic import SecretStr, ValidationError
+from pydantic import JsonValue, SecretStr, ValidationError
 
 from langchain_google_genai.classifier import GoogleGenAIClassifier
 from langchain_google_genai.classifier._input import (
@@ -281,6 +281,31 @@ def test_box_questions_raise() -> None:
         classifier.invoke(
             {"state": "text", "questions": {"q": Box(instructions="The dog.")}}
         )
+
+    classifier.client.decisions.create.assert_not_called()  # type: ignore[union-attr]
+
+
+_IMAGE: dict[str, JsonValue] = {
+    "type": "image",
+    "base64": "AAAA",
+    "mime_type": "image/png",
+}
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        Noul(instructions=[{"type": "text", "text": "Does this match?"}, _IMAGE]),
+        Noul(instructions="Damaged?", criteria={"true": _IMAGE}),
+        Choice(instructions="Which?", criteria={"a": _IMAGE, "b": "B."}),
+        Score(instructions="How bad?", criteria=["Fine.", {"example": _IMAGE}]),
+    ],
+)
+def test_media_in_questions_raises(question: Noul | Choice | Score) -> None:
+    classifier = _classifier()
+
+    with pytest.raises(ValueError, match="only text in question"):
+        classifier.invoke({"state": "text", "questions": {"q": question}})
 
     classifier.client.decisions.create.assert_not_called()  # type: ignore[union-attr]
 
