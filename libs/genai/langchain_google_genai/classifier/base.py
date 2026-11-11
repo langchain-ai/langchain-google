@@ -240,6 +240,8 @@ class GoogleGenAIClassifier(BaseDecisionModel):
             "model": self.model,
             "input": to_decision_input(state),
             "questions": to_decision_questions(questions),
+            # google-genai defaults to `v1`, where the Decisions API is not served.
+            "api_version": "v1beta",
         }
 
     def _parse_response(self, response: Any) -> ClassifierResponse:

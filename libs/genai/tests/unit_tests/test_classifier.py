@@ -92,6 +92,7 @@ def test_invoke_sends_request_and_parses_answers() -> None:
                 "criteria": ["Calm.", "Concerned.", "Angry."],
             },
         },
+        api_version="v1beta",
     )
     assert response.model == MODEL_NAME
     assert response.nouls["urgent"].noul == 0.9
