@@ -807,8 +807,21 @@ def test_base_url_passed_to_client() -> None:
         assert "langchain-google-genai" in call_http_options.headers["user-agent"]
 
 
-def test_api_version_defaults_to_none() -> None:
-    """`api_version` is unset by default, deferring to the SDK's default."""
+def test_api_version_defaults_to_v1beta(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Gemini Developer API defaults to `v1beta`, not the SDK's `v1`."""
+    monkeypatch.delenv("GOOGLE_GENAI_API_VERSION", raising=False)
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=SecretStr(FAKE_API_KEY),
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version == "v1beta"
+
+
+def test_api_version_env_var_defers_to_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`GOOGLE_GENAI_API_VERSION` is left for the SDK to apply."""
+    monkeypatch.setenv("GOOGLE_GENAI_API_VERSION", "v1")
     with patch("langchain_google_genai.chat_models.Client") as mock_client:
         ChatGoogleGenerativeAI(
             model=MODEL_NAME,
@@ -848,6 +861,18 @@ def test_api_version_forwarded_to_http_options_vertex() -> None:
         call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
         assert call_http_options.api_version == "v1"
         assert call_http_options.base_url == "https://gateway.example.com/api/gemini"
+
+
+def test_api_version_vertex_defers_to_sdk() -> None:
+    """Vertex AI keeps the SDK's default API version."""
+    with patch("langchain_google_genai.chat_models.Client") as mock_client:
+        ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            vertexai=True,
+            project="test-project",
+        )
+        call_http_options = mock_client.call_args_list[0].kwargs["http_options"]
+        assert call_http_options.api_version is None
 
 
 def test_async_client_property() -> None:
