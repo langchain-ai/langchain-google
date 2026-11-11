@@ -8,17 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from google import genai
-from langchain_core.decisions import Box
+from langchain_core.decisions import Box, Choice, Noul, Score
 from langchain_core.exceptions import ModelRefusalError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import SecretStr, ValidationError
 
-from langchain_google_genai.classifier import (
-    Choice,
-    GoogleGenAIClassifier,
-    Noul,
-    Score,
-)
+from langchain_google_genai.classifier import GoogleGenAIClassifier
 from langchain_google_genai.classifier._input import (
     to_decision_input,
     to_decision_questions,

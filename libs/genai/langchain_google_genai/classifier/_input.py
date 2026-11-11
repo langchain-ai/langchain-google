@@ -8,18 +8,16 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.decisions import Box, Choice, Noul
 from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     convert_to_openai_messages,
 )
 
-from langchain_google_genai.classifier.types import Box, Choice, Noul
-
 if TYPE_CHECKING:
+    from langchain_core.decisions import Question, State
     from pydantic import JsonValue
-
-    from langchain_google_genai.classifier.types import Question, State
 
 _MEDIA_TYPES = {
     "image": "image",

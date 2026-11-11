@@ -4,14 +4,10 @@ import base64
 import io
 
 import pytest
+from langchain_core.decisions import Choice, Noul, Score
 from langchain_core.messages import AIMessage, HumanMessage
 
-from langchain_google_genai.classifier import (
-    Choice,
-    GoogleGenAIClassifier,
-    Noul,
-    Score,
-)
+from langchain_google_genai.classifier import GoogleGenAIClassifier
 
 _MODEL = "gemini-decision-1"
 

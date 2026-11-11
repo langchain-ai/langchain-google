@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Self
 from google import genai
 from google.genai import types
 from langchain_core._api import beta
-from langchain_core.decisions import BaseDecisionModel
+from langchain_core.decisions import BaseDecisionModel, ClassifierResponse
 from langchain_core.exceptions import ModelRefusalError
 from langchain_core.utils import secret_from_env
 from pydantic import ConfigDict, Field, SecretStr, model_validator
@@ -18,10 +18,9 @@ from langchain_google_genai.classifier._input import (
     to_decision_input,
     to_decision_questions,
 )
-from langchain_google_genai.classifier.types import ClassifierResponse
 
 if TYPE_CHECKING:
-    from langchain_google_genai.classifier.types import Question, State
+    from langchain_core.decisions import Question, State
 
 
 @beta()
@@ -38,6 +37,12 @@ class GoogleGenAIClassifier(BaseDecisionModel):
     is not kept because it can be computed from `noul`.
 
     Requests always use the Gemini Developer API.
+
+    Strings are sent as-is. Any other state, such as JSON objects, arrays, or LangChain
+    messages, is sent as JSON text, with messages converted to role/content objects.
+    LangChain standard media blocks (`type` of `image`, `audio`, `video`, or `file`,
+    with `base64` or `url` data) are sent as native media at the position where they
+    appear in the JSON text.
 
     Args:
         model: Decisions model used to answer questions.
@@ -60,12 +65,9 @@ class GoogleGenAIClassifier(BaseDecisionModel):
     ??? example "Ask several questions about the same state"
 
         ```python
-        from langchain_google_genai.classifier import (
-            Choice,
-            GoogleGenAIClassifier,
-            Noul,
-            Score,
-        )
+        from langchain_core.decisions import Choice, Noul, Score
+
+        from langchain_google_genai import GoogleGenAIClassifier
 
         classifier = GoogleGenAIClassifier(model="gemini-decision-1")
         response = classifier.invoke(
