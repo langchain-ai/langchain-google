@@ -34,7 +34,8 @@ class GoogleGenAIClassifier(BaseDecisionModel):
 
     `ChoiceAnswer.confidence` and `ScoreAnswer.confidence` are the probability of the
     selected label or level. The API's `NoulAnswer` confidence, `max(noul, 1 - noul)`,
-    is not kept because it can be computed from `noul`.
+    is not kept because it can be computed from `noul`. `NoulAnswer.noul` is always
+    between `0.01` and `0.99`, so a threshold above `0.99` never matches.
 
     Requests always use the Gemini Developer API.
 
@@ -60,8 +61,8 @@ class GoogleGenAIClassifier(BaseDecisionModel):
         ValueError: If no API key is available and no `client` is supplied. Also
             raised by `invoke` for a `Box` question, or for media blocks in question
             instructions or criteria.
-        ModelRefusalError: From `invoke` when the API blocked the input and
-            returned no answers.
+        ModelRefusalError: From `invoke` when the API's content filters blocked the
+            input.
 
     ??? example "Ask several questions about the same state"
 
@@ -227,7 +228,11 @@ class GoogleGenAIClassifier(BaseDecisionModel):
         self, state: State, questions: dict[str, Question]
     ) -> ClassifierResponse:
         payload = self._payload(state, questions)
-        response = self._client.decisions.create(**payload)
+        try:
+            response = self._client.decisions.create(**payload)
+        except Exception as exc:
+            _raise_if_block_error(exc)
+            raise
         return self._parse_response(response)
 
     @override
@@ -235,7 +240,11 @@ class GoogleGenAIClassifier(BaseDecisionModel):
         self, state: State, questions: dict[str, Question]
     ) -> ClassifierResponse:
         payload = self._payload(state, questions)
-        response = await self._client.aio.decisions.create(**payload)
+        try:
+            response = await self._client.aio.decisions.create(**payload)
+        except Exception as exc:
+            _raise_if_block_error(exc)
+            raise
         return self._parse_response(response)
 
     def _payload(self, state: State, questions: dict[str, Question]) -> dict[str, Any]:
@@ -275,6 +284,25 @@ def _raise_if_blocked(prompt_feedback: dict[str, Any] | None) -> None:
     if details := prompt_feedback.get("block_reason_message"):  # type: ignore[union-attr]
         msg = f"{msg} {details}"
     raise ModelRefusalError(msg)
+
+
+_BLOCK_ERROR_CODES = frozenset(
+    {"safety", "prohibited_content", "blocklist", "image_safety", "content_blocked"}
+)
+"""Error codes the Decisions API returns, with HTTP 400, when it blocks the input."""
+
+
+def _raise_if_block_error(exc: Exception) -> None:
+    """Raise `ModelRefusalError` when `exc` is the API blocking the input."""
+    body = getattr(exc, "body", None)
+    error = body.get("error") if isinstance(body, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    if code not in _BLOCK_ERROR_CODES:
+        return
+    msg = f"The Decisions API blocked the input (code={code!r})."
+    if details := error.get("message"):  # type: ignore[union-attr]
+        msg = f"{msg} {details}"
+    raise ModelRefusalError(msg) from exc
 
 
 __all__ = ["GoogleGenAIClassifier"]

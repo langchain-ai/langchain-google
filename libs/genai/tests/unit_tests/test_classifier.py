@@ -141,6 +141,57 @@ def test_blocked_input_raises_model_refusal_error() -> None:
         classifier.invoke({"state": "text", "questions": _QUESTIONS})
 
 
+class _FakeAPIError(Exception):
+    """Stands in for the SDK's error, which keeps the parsed JSON body on `body`."""
+
+    def __init__(self, body: Any) -> None:
+        super().__init__("API error")
+        self.body = body
+
+
+@pytest.mark.parametrize("code", ["safety", "content_blocked"])
+def test_block_error_raises_model_refusal_error(code: str) -> None:
+    classifier = _classifier()
+    error = _FakeAPIError({"error": {"code": code, "message": "Input was blocked."}})
+    classifier.client.decisions.create.side_effect = error  # type: ignore[union-attr]
+
+    with pytest.raises(
+        ModelRefusalError, match=rf"'{code}'.*Input was blocked\."
+    ) as info:
+        classifier.invoke({"state": "text", "questions": _QUESTIONS})
+
+    assert info.value.__cause__ is error
+
+
+async def test_async_block_error_raises_model_refusal_error() -> None:
+    classifier = _classifier()
+    classifier.client.aio.decisions.create.side_effect = _FakeAPIError(  # type: ignore[union-attr]
+        {"error": {"code": "image_safety", "message": "Input was blocked."}}
+    )
+
+    with pytest.raises(ModelRefusalError, match="'image_safety'"):
+        await classifier.ainvoke({"state": "text", "questions": _QUESTIONS})
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"error": {"code": "invalid_request", "message": "Bad question ID."}},
+        "not json",
+        None,
+    ],
+)
+def test_other_api_errors_are_reraised(body: Any) -> None:
+    classifier = _classifier()
+    error = _FakeAPIError(body)
+    classifier.client.decisions.create.side_effect = error  # type: ignore[union-attr]
+
+    with pytest.raises(_FakeAPIError) as info:
+        classifier.invoke({"state": "text", "questions": _QUESTIONS})
+
+    assert info.value is error
+
+
 def test_unknown_answer_types_raise() -> None:
     classifier = _classifier(
         {
