@@ -20,6 +20,13 @@ class GoogleSearchAPIWrapper(BaseModel):
         2. Create API key in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
         3. Create custom search engine at [Programmable Search Engine](https://programmablesearchengine.google.com)
         4. Set `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` environment variables
+
+    !!! tip "Custom endpoint"
+
+        Set `google_api_endpoint` (or the `GOOGLE_CSE_API_ENDPOINT` environment
+        variable) to send requests to a Custom Search JSON API-compatible
+        endpoint instead of Google's. Google is discontinuing the Custom Search
+        JSON API on January 1, 2027.
     """
 
     search_engine: Any = None
@@ -35,6 +42,13 @@ class GoogleSearchAPIWrapper(BaseModel):
 
     siterestrict: bool = False
     """Whether to restrict search to specific sites."""
+
+    google_api_endpoint: Optional[str] = None
+    """Base URL of a Custom Search JSON API-compatible endpoint.
+
+    If not set, Google's default endpoint is used. Can also be provided via the
+    `GOOGLE_CSE_API_ENDPOINT` environment variable.
+    """
 
     model_config = ConfigDict(
         extra="forbid",
@@ -68,7 +82,16 @@ class GoogleSearchAPIWrapper(BaseModel):
                 "Please install it with `pip install langchain-google-community`"
             )
 
-        service = build("customsearch", "v1", developerKey=google_api_key)
+        google_api_endpoint = get_from_dict_or_env(
+            values, "google_api_endpoint", "GOOGLE_CSE_API_ENDPOINT", default=""
+        )
+        values["google_api_endpoint"] = google_api_endpoint or None
+
+        build_kwargs: Dict[str, Any] = {"developerKey": google_api_key}
+        if google_api_endpoint:
+            build_kwargs["client_options"] = {"api_endpoint": google_api_endpoint}
+
+        service = build("customsearch", "v1", **build_kwargs)
         values["search_engine"] = service
 
         return values
