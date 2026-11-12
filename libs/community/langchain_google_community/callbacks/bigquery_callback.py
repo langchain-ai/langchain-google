@@ -2048,6 +2048,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         self._latency_tracker = AsyncLatencyTracker()
         self._run_context_registry = AsyncRunContextRegistry()
         self._skipped_runs: set[uuid.UUID] = set()
+        self._root_invocation_runs: set[uuid.UUID] = set()
 
         _ensure_dataset_exists(
             self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
@@ -2281,6 +2282,17 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         """Return True (and forget) if `on_*_start` skipped this run."""
         if run_id in self._skipped_runs:
             self._skipped_runs.discard(run_id)
+            return True
+        return False
+
+    def _mark_root_invocation(self, run_id: uuid.UUID) -> None:
+        """Record that `on_chain_start` emitted `INVOCATION_STARTING`."""
+        self._root_invocation_runs.add(run_id)
+
+    def _take_root_invocation(self, run_id: uuid.UUID) -> bool:
+        """Return True (and forget) if `on_chain_start` emitted an invocation."""
+        if run_id in self._root_invocation_runs:
+            self._root_invocation_runs.discard(run_id)
             return True
         return False
 
@@ -2911,6 +2923,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
 
         if is_graph_root:
             # This is a graph root invocation
+            self._mark_root_invocation(run_id)
             self._reset_execution_order()
             event_type = "INVOCATION_STARTING"
             attributes = self._build_langgraph_attributes(metadata=metadata)
@@ -2957,6 +2970,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Check if this was a LangGraph node
         context = await self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
+        was_root_invocation = self._take_root_invocation(run_id)
 
         if langgraph_node or (context and context.name == langgraph_node):
             # This was a LangGraph node
@@ -2965,8 +2979,10 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
-        elif parent_run_id is None and self.graph_name:
-            # This might be graph end (no parent, graph_name set)
+        elif was_root_invocation or (
+            # Start not observed by this handler: fall back to the heuristic.
+            context is None and parent_run_id is None and self.graph_name
+        ):
             event_type = "INVOCATION_COMPLETED"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
@@ -3207,6 +3223,7 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
         # Check if this was a LangGraph node
         context = await self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
+        was_root_invocation = self._take_root_invocation(run_id)
 
         if langgraph_node or (context and context.name == langgraph_node):
             node_name = langgraph_node or (context.name if context else None)
@@ -3214,7 +3231,10 @@ class AsyncBigQueryCallbackHandler(AsyncCallbackHandler):
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
-        elif parent_run_id is None and self.graph_name:
+        elif was_root_invocation or (
+            # Start not observed by this handler: fall back to the heuristic.
+            context is None and parent_run_id is None and self.graph_name
+        ):
             event_type = "INVOCATION_ERROR"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
@@ -3319,6 +3339,8 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         self._run_context_registry = RunContextRegistry()
         self._skipped_runs: set[uuid.UUID] = set()
         self._skipped_runs_lock = threading.Lock()
+        self._root_invocation_runs: set[uuid.UUID] = set()
+        self._root_invocation_runs_lock = threading.Lock()
 
         _ensure_dataset_exists(
             self.bigquery, self.project_id, self.dataset_id, self.cloud_exceptions
@@ -3636,6 +3658,19 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         with self._skipped_runs_lock:
             if run_id in self._skipped_runs:
                 self._skipped_runs.discard(run_id)
+                return True
+            return False
+
+    def _mark_root_invocation(self, run_id: uuid.UUID) -> None:
+        """Record that `on_chain_start` emitted `INVOCATION_STARTING`."""
+        with self._root_invocation_runs_lock:
+            self._root_invocation_runs.add(run_id)
+
+    def _take_root_invocation(self, run_id: uuid.UUID) -> bool:
+        """Return True (and forget) if `on_chain_start` emitted an invocation."""
+        with self._root_invocation_runs_lock:
+            if run_id in self._root_invocation_runs:
+                self._root_invocation_runs.discard(run_id)
                 return True
             return False
 
@@ -4058,6 +4093,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
 
         if is_graph_root:
             # This is a graph root invocation
+            self._mark_root_invocation(run_id)
             self._reset_execution_order()
             event_type = "INVOCATION_STARTING"
             attributes = self._build_langgraph_attributes(metadata=metadata)
@@ -4100,6 +4136,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Check if this was a LangGraph node
         context = self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
+        was_root_invocation = self._take_root_invocation(run_id)
 
         if langgraph_node or (context and context.name == langgraph_node):
             node_name = langgraph_node or (context.name if context else None)
@@ -4107,7 +4144,10 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
-        elif parent_run_id is None and self.graph_name:
+        elif was_root_invocation or (
+            # Start not observed by this handler: fall back to the heuristic.
+            context is None and parent_run_id is None and self.graph_name
+        ):
             event_type = "INVOCATION_COMPLETED"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:
@@ -4144,6 +4184,7 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
         # Check if this was a LangGraph node
         context = self._run_context_registry.pop(run_id)
         langgraph_node = metadata.get("langgraph_node")
+        was_root_invocation = self._take_root_invocation(run_id)
 
         if langgraph_node or (context and context.name == langgraph_node):
             node_name = langgraph_node or (context.name if context else None)
@@ -4151,7 +4192,10 @@ class BigQueryCallbackHandler(BaseCallbackHandler):
             attributes = self._build_langgraph_attributes(
                 node_name=node_name, metadata=metadata
             )
-        elif parent_run_id is None and self.graph_name:
+        elif was_root_invocation or (
+            # Start not observed by this handler: fall back to the heuristic.
+            context is None and parent_run_id is None and self.graph_name
+        ):
             event_type = "INVOCATION_ERROR"
             attributes = self._build_langgraph_attributes(metadata=metadata)
         else:

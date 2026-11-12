@@ -39,7 +39,17 @@ end-to-end smoke test.
 python basic_example.py
 ```
 
-### 2. LangGraph Agent (`langgraph_agent_example.py`)
+### 2. Plain LangChain without LangGraph (`plain_langchain_example.py`)
+
+An LCEL chain (`prompt | llm | parser`) wrapped in `graph_context()` for
+request-level spans, with `session_id` / `user_id` attribution on every
+event. See [Usage without LangGraph](#usage-without-langgraph).
+
+```bash
+python plain_langchain_example.py
+```
+
+### 3. LangGraph Agent (`langgraph_agent_example.py`)
 
 A complete LangGraph ReAct agent with realistic tools. Demonstrates:
 
@@ -56,7 +66,7 @@ A complete LangGraph ReAct agent with realistic tools. Demonstrates:
 python langgraph_agent_example.py
 ```
 
-### 3. Event Filtering (`event_filtering_example.py`)
+### 4. Event Filtering (`event_filtering_example.py`)
 
 Three ways to control which events land in BigQuery:
 
@@ -70,7 +80,7 @@ Three ways to control which events land in BigQuery:
 python event_filtering_example.py
 ```
 
-### 4. Async Example (`async_example.py`)
+### 5. Async Example (`async_example.py`)
 
 `AsyncBigQueryCallbackHandler` with an async LangGraph agent. Useful as a
 template for any async agent runtime (Vertex AI Agent Engine, FastAPI, …).
@@ -79,13 +89,13 @@ template for any async agent runtime (Vertex AI Agent Engine, FastAPI, …).
 python async_example.py
 ```
 
-### 5. Analytics Notebook (`langgraph_agent_analytics.ipynb`)
+### 6. Analytics Notebook (`langgraph_agent_analytics.ipynb`)
 
 Jupyter notebook covering real-time event monitoring, tool usage analytics,
 latency analysis, error debugging, user engagement, and time-series
 visualization. Open in Jupyter or upload to Google Colab.
 
-### 6. Populate Sample Data (`populate_sample_data.py`)
+### 7. Populate Sample Data (`populate_sample_data.py`)
 
 Generates diverse sample data across multiple agents (`finance_assistant`,
 `travel_planner`, `customer_support`) so the notebook and webapp dashboards
@@ -95,7 +105,7 @@ have something to show.
 python populate_sample_data.py
 ```
 
-### 7. Real-time Analytics Dashboard (`webapp/`)
+### 8. Real-time Analytics Dashboard (`webapp/`)
 
 FastAPI dashboard with a live event stream, auto-refreshing charts, session
 tracing, and error tracking. See `webapp/README.md` for details.
@@ -209,6 +219,47 @@ with `auto_schema_upgrade=False`.
 - **`handler.shutdown()`** — drains the queue and closes resources.
   Implicit when used as a context manager (`with handler:` /
   `async with handler:`).
+
+## Usage without LangGraph
+
+The handler works with any LangChain `Runnable` (LCEL chains, chat models,
+retrievers, legacy chains). LangGraph is only needed for the node-level
+`AGENT_*` events and automatic `langgraph_*` metadata.
+
+```python
+request_metadata = {"session_id": "session-123", "user_id": "user-42"}
+
+with handler.graph_context("my_app", metadata=request_metadata):
+    result = chain.invoke(
+        inputs,
+        config={"callbacks": [handler], "metadata": request_metadata},
+    )
+
+handler.flush(timeout=5.0)
+```
+
+- **`graph_context()` provides the request span.** It emits
+  `INVOCATION_STARTING` on entry and `INVOCATION_COMPLETED` (with total
+  latency) or `INVOCATION_ERROR` on exit. Without it you get only the
+  `CHAIN_*`, `LLM_*`, `TOOL_*` and `RETRIEVER_*` events of the run.
+- **Pass `metadata=` to the run as well.** `session_id` and `user_id` are read
+  from the run's metadata, so the dict given to `graph_context()` only
+  covers the `INVOCATION_*` rows. Passing `callbacks=` alone leaves those
+  columns `NULL` on chain and LLM rows.
+- **`graph_name` sets the default `agent` column.** Set it on the handler
+  constructor (or via `graph_context("name")`), or put `"agent"` in the
+  metadata to override it per run.
+- **`custom_tags` are written under `attributes.custom_tags`**, not to
+  top-level columns; use `metadata=` for `session_id` / `user_id`.
+
+A single chain call inside `graph_context()` produces:
+
+| Event | Notes |
+|---|---|
+| `INVOCATION_STARTING` | Emitted by `graph_context()` on entry. |
+| `CHAIN_START` / `CHAIN_END` | One pair per `Runnable` in the chain. `skip_internal_chain_events=True` drops wrappers such as `RunnableSequence`; `event_denylist` drops them all. |
+| `LLM_REQUEST` / `LLM_RESPONSE` | Per model call, with latency and token usage. `LLM_ERROR` on failure. |
+| `INVOCATION_COMPLETED` | Emitted by `graph_context()` on exit, with total latency. `INVOCATION_ERROR` if the block raised. |
 
 ## Sub-agent attribution
 
