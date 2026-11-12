@@ -10,8 +10,11 @@ from uuid import uuid4
 import pytest
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.documents import Document
+from langchain_core.language_models.fake import FakeListLLM
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, Generation, LLMResult
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableLambda
 
 from langchain_google_community.callbacks.bigquery_callback import (
     AsyncBigQueryCallbackHandler,
@@ -1377,6 +1380,173 @@ async def test_async_context_manager_handles_errors(
     calls = handler.async_batch_processor.append.call_args_list
     assert calls[0][0][0]["event_type"] == "INVOCATION_STARTING"
     assert calls[1][0][0]["event_type"] == "INVOCATION_ERROR"
+
+
+# ==============================================================================
+# PLAIN LANGCHAIN (NO LANGGRAPH) TESTS
+# ==============================================================================
+
+
+def _event_types(rows: list) -> list:
+    return [call[0][0]["event_type"] for call in rows]
+
+
+def test_plain_chain_in_graph_context_emits_single_invocation_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """A non-LangGraph root chain must end with CHAIN_END, not a second
+    INVOCATION_COMPLETED, when run inside `graph_context()` (issue #1812)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    chain = PromptTemplate.from_template("Q: {q}") | FakeListLLM(responses=["A"])
+    metadata = {"session_id": "s1", "user_id": "u1"}
+
+    with sync_handler.graph_context("my_app", metadata=metadata):
+        chain.invoke(
+            {"q": "hi"}, config={"callbacks": [sync_handler], "metadata": metadata}
+        )
+
+    rows = sync_handler.batch_processor.append.call_args_list
+    event_types = _event_types(rows)
+    assert event_types[0] == "INVOCATION_STARTING"
+    assert event_types[-1] == "INVOCATION_COMPLETED"
+    assert event_types.count("INVOCATION_STARTING") == 1
+    assert event_types.count("INVOCATION_COMPLETED") == 1
+    assert event_types.count("CHAIN_START") == event_types.count("CHAIN_END")
+    assert "LLM_REQUEST" in event_types
+    assert "LLM_RESPONSE" in event_types
+    for row in rows:
+        assert row[0][0]["session_id"] == "s1"
+        assert row[0][0]["user_id"] == "u1"
+        assert row[0][0]["agent"] == "my_app"
+
+
+def test_plain_chain_error_with_graph_name_emits_chain_error_sync(
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """With `graph_name` set, a failing plain root chain emits CHAIN_ERROR
+    to match its CHAIN_START instead of a stray INVOCATION_ERROR."""
+    handler = BigQueryCallbackHandler(
+        project_id="test-project",
+        dataset_id="test_dataset",
+        table_id="test_table",
+        graph_name="my_app",
+    )
+    handler._ensure_started()
+    if not handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+
+    def _fail(_: Any) -> Any:
+        raise ValueError("boom")
+
+    try:
+        with pytest.raises(ValueError, match="boom"):
+            RunnableLambda(_fail).invoke({}, config={"callbacks": [handler]})
+    finally:
+        handler.shutdown()
+
+    rows = handler.batch_processor.append.call_args_list
+    assert _event_types(rows) == ["CHAIN_START", "CHAIN_ERROR"]
+    assert rows[1][0][0]["agent"] == "my_app"
+    assert "boom" in rows[1][0][0]["error_message"]
+
+
+def test_graph_root_without_graph_name_emits_invocation_completed_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """A run that started as INVOCATION_STARTING always ends as an
+    INVOCATION_* event, even when the handler has no `graph_name`."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+    assert sync_handler.graph_name is None
+
+    ok_run, failed_run = uuid4(), uuid4()
+    sync_handler.on_chain_start({"name": "LangGraph"}, {}, run_id=ok_run)
+    sync_handler.on_chain_end({}, run_id=ok_run)
+    sync_handler.on_chain_start({"name": "LangGraph"}, {}, run_id=failed_run)
+    sync_handler.on_chain_error(ValueError("x"), run_id=failed_run)
+
+    assert _event_types(sync_handler.batch_processor.append.call_args_list) == [
+        "INVOCATION_STARTING",
+        "INVOCATION_COMPLETED",
+        "INVOCATION_STARTING",
+        "INVOCATION_ERROR",
+    ]
+    assert not sync_handler._root_invocation_runs
+
+
+def test_root_chain_end_without_observed_start_keeps_fallback_sync(
+    sync_handler: BigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """When the start was never seen, a parentless end with `graph_name` set
+    still maps to INVOCATION_COMPLETED (previous behavior)."""
+    if not sync_handler.batch_processor:
+        raise ValueError("Batch processor not initialized")
+    sync_handler.batch_processor.append = MagicMock()  # type: ignore[method-assign]
+    sync_handler.graph_name = "my_app"
+
+    sync_handler.on_chain_end({}, run_id=uuid4())
+
+    assert _event_types(sync_handler.batch_processor.append.call_args_list) == [
+        "INVOCATION_COMPLETED"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_plain_chain_in_graph_context_emits_single_invocation_async(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Async counterpart of the plain-LangChain `graph_context()` test."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+
+    chain = PromptTemplate.from_template("Q: {q}") | FakeListLLM(responses=["A"])
+    metadata = {"session_id": "s1", "user_id": "u1"}
+
+    async with handler.graph_context("my_app", metadata=metadata):
+        await chain.ainvoke(
+            {"q": "hi"}, config={"callbacks": [handler], "metadata": metadata}
+        )
+
+    rows = handler.async_batch_processor.append.call_args_list
+    event_types = _event_types(rows)
+    assert event_types[0] == "INVOCATION_STARTING"
+    assert event_types[-1] == "INVOCATION_COMPLETED"
+    assert event_types.count("INVOCATION_STARTING") == 1
+    assert event_types.count("INVOCATION_COMPLETED") == 1
+    assert event_types.count("CHAIN_START") == event_types.count("CHAIN_END")
+    assert "LLM_RESPONSE" in event_types
+    for row in rows:
+        assert row[0][0]["session_id"] == "s1"
+
+
+@pytest.mark.asyncio
+async def test_plain_chain_error_with_graph_name_emits_chain_error_async(
+    handler: AsyncBigQueryCallbackHandler,
+    mock_bigquery_clients: Dict[str, Any],
+) -> None:
+    """Async counterpart: a failing plain root chain emits CHAIN_ERROR."""
+    if not handler.async_batch_processor:
+        raise ValueError("Batch processor not initialized")
+    handler.async_batch_processor.append = AsyncMock()  # type: ignore[method-assign]
+    handler.graph_name = "my_app"
+
+    run_id = uuid4()
+    await handler.on_chain_start({"name": "RunnableSequence"}, {}, run_id=run_id)
+    await handler.on_chain_error(ValueError("boom"), run_id=run_id)
+
+    rows = handler.async_batch_processor.append.call_args_list
+    assert _event_types(rows) == ["CHAIN_START", "CHAIN_ERROR"]
+    assert not handler._root_invocation_runs
 
 
 # ==============================================================================
