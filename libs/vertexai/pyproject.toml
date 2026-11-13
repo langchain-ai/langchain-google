@@ -41,7 +41,7 @@ vectorsearch_v2 = [
 ]
 
 [dependency-groups]
-lint = ["ruff>=0.13.1,<0.16.0"]
+lint = ["ruff>=0.13.1,<0.18.0"]
 typing = [
     "mypy>=1.18.1,<1.21.0",
     "types-requests>=2.31.0,<3.0.0",
