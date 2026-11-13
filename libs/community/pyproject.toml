@@ -81,7 +81,7 @@ test = [
 ]
 
 test_integration = [
-    "pillow>=12.0.0,<13.0.0",
+    "pillow>=12.0.0,<14.0.0",
 ]
 
 lint = [
@@ -98,7 +98,7 @@ typing = [
 ]
 
 dev = [
-    "pillow>=12.0.0,<13.0.0",
+    "pillow>=12.0.0,<14.0.0",
     "types-requests>=2.31.0.10,<3.0.0.0",
     "types-pillow>=10.1.0.2,<11.0.0.0",
     "types-google-cloud-ndb>=2.2.0.1,<3.0.0.0",
