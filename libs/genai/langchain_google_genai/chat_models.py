@@ -4235,7 +4235,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
-        request = self._prepare_request(
+        # Request preparation may download media, so keep it off the event loop.
+        request = await asyncio.to_thread(
+            self._prepare_request,
             messages,
             stop=stop,
             tools=tools,
@@ -4247,6 +4249,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+
         try:
             response: GenerateContentResponse = (
                 await self.async_client.models.generate_content(
@@ -4339,7 +4342,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
-        request = self._prepare_request(
+        # Request preparation may download media, so keep it off the event loop.
+        request = await asyncio.to_thread(
+            self._prepare_request,
             messages,
             stop=stop,
             tools=tools,
@@ -4351,6 +4356,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
+
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         indexer = _StreamBlockIndexer()
         stream = await self.async_client.models.generate_content_stream(
