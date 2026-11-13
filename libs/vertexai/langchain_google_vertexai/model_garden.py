@@ -65,16 +65,6 @@ from langchain_google_vertexai._retry import create_base_retry_decorator
 from langchain_google_vertexai.data._profiles import _PROFILES as _VERTEX_PROFILES
 
 
-def _move_betas_to_extra_body(params: dict[str, Any]) -> bool:
-    betas = params.pop("betas", None)
-    if not betas:
-        return False
-
-    extra_body = params.get("extra_body") or {}
-    params["extra_body"] = {**extra_body, "anthropic_beta": betas}
-    return True
-
-
 def _create_retry_decorator(
     *,
     max_retries: int = 3,
@@ -440,9 +430,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return self.client.beta.messages.create(**params)
+            params.pop("betas", None)
             return self.client.messages.create(**params)
 
         data = _completion_with_retry_inner(**params)
@@ -470,9 +460,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return await self.async_client.beta.messages.create(**params)
+            params.pop("betas", None)
             return await self.async_client.messages.create(**params)
 
         data = await _acompletion_with_retry_inner(**params)
@@ -507,9 +497,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return self.client.beta.messages.create(**params, stream=True)
+            params.pop("betas", None)
             return self.client.messages.create(**params, stream=True)
 
         stream = _stream_with_retry(**params)
@@ -551,11 +541,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return await self.async_client.beta.messages.create(
                     stream=True, **params
                 )
+            params.pop("betas", None)
             return await self.async_client.messages.create(**params, stream=True)
 
         stream = await _astream_with_retry(**params)
