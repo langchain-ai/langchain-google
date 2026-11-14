@@ -120,7 +120,7 @@ class BaseReadTool(SheetsBaseTool):
             return []
 
         # Convert to records if requested
-        if convert_to_records and len(values) > 1:
+        if convert_to_records:
             headers = values[0]
             data_rows = values[1:]
 
@@ -823,7 +823,7 @@ class SheetsFilteredReadDataTool(BaseReadTool):
                     # Extract simple data
                     simple_data = self._extract_simple_data([grid_data])
 
-                    if convert_to_records and len(simple_data) > 1:
+                    if convert_to_records and simple_data:
                         headers = simple_data[0]
                         data_rows = simple_data[1:]
 
