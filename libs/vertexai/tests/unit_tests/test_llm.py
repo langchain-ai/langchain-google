@@ -34,6 +34,12 @@ def clear_prediction_client_cache() -> None:
     _get_prediction_client.cache_clear()
 
 
+def test_default_model_is_not_retired() -> None:
+    # Gemini 2.5 models retire from Vertex AI on 2026-10-20
+    default = VertexAI.model_fields["model_name"].default
+    assert default == "gemini-3.8-flash"
+
+
 def test_model_name() -> None:
     for llm in [
         VertexAI(
