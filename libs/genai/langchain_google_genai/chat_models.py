@@ -2593,18 +2593,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         * `method='json_schema'` (default): Uses Gemini's native structured output API.
 
-            The Google GenAI SDK automatically transforms schemas to ensure
-            compatibility with Gemini. This includes:
+            The schema is sent as JSON Schema in Gemini's `response_json_schema`
+            API param. The Google GenAI SDK passes it through unchanged (it does
+            not inline `$defs`, resolve `$ref` or add `propertyOrdering`), so the
+            JSON Schema features you can use are the ones the Gemini API supports.
+            Refer to the Gemini API
+            [docs](https://ai.google.dev/gemini-api/docs/structured-output) for
+            details. Streaming yields partial JSON chunks.
 
-            - Inlining `$defs` definitions (Union types work correctly)
-            - Resolving `$ref` references for nested schemas
-            - Property ordering preservation
-            - Support for streaming partial JSON chunks
-
-            Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
-            [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
-            details. This method is recommended for better reliability as it
-            constrains the model's generation process directly.
+            This method constrains the model's generation process directly, so it
+            is usually the better choice. Structured output can still fail in some
+            configurations, for example when combined with thinking on Vertex AI
+            (see [#2002](https://github.com/langchain-ai/langchain-google/issues/2002)).
 
         * `method='function_calling'`: Uses tool calling to extract structured data.
             Less reliable than `json_schema` but compatible with all models.
