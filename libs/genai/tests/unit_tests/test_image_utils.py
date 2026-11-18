@@ -1,8 +1,20 @@
 """Tests for the _image_utils module."""
 
+import base64
+from pathlib import Path
+from threading import get_ident
+from unittest.mock import Mock, patch
+
 import pytest
+import requests
+from google.genai.types import Blob, Part
 
 from langchain_google_genai._image_utils import ImageBytesLoader, Route
+
+BASE64_PNG = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf"
+    "FcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
 
 
 class TestImageBytesLoader:
@@ -73,12 +85,83 @@ class TestImageBytesLoader:
     def test_load_part_base64(self) -> None:
         """Test that load_part handles base64 data URIs."""
         # A minimal valid base64 PNG (1x1 transparent pixel)
-        base64_png = (
-            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf"
-            "FcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-        )
-        part = self.loader.load_part(base64_png)
+        part = self.loader.load_part(BASE64_PNG)
 
         assert part.inline_data is not None
         assert part.inline_data.mime_type == "image/png"
         assert part.file_data is None
+
+    @pytest.mark.parametrize(
+        "image_string",
+        [
+            "gs://bucket/image.png",
+            "gs://bucket/document.pdf",
+            "gs://bucket/file",
+            BASE64_PNG,
+            "data:application/pdf;base64,JVBERi0xLjQK",
+        ],
+        ids=["gcs-image", "gcs-pdf", "gcs-unknown-mime", "base64-image", "base64-pdf"],
+    )
+    async def test_aload_part_matches_load_part(self, image_string: str) -> None:
+        """Async loading preserves routing, MIME detection, and media content."""
+        with patch("langchain_google_genai._image_utils.requests.get") as mock_get:
+            expected = self.loader.load_part(image_string)
+            assert await self.loader.aload_part(image_string) == expected
+        mock_get.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "image_url", ["https://example.com/image.png", "http://example.com/image"]
+    )
+    async def test_aload_part_url_runs_off_event_loop(self, image_url: str) -> None:
+        """Downloads run in a worker and preserve URL/content-based MIME detection."""
+        event_loop_thread = get_ident()
+        image_bytes = base64.b64decode(BASE64_PNG.split(",", 1)[1])
+
+        def download_image(url: str) -> Mock:
+            assert url == image_url
+            assert get_ident() != event_loop_thread
+            return Mock(ok=True, content=image_bytes)
+
+        with patch(
+            "langchain_google_genai._image_utils.requests.get",
+            side_effect=download_image,
+        ) as mock_get:
+            part = await self.loader.aload_part(image_url)
+
+        mock_get.assert_called_once_with(image_url)
+        assert part == Part(inline_data=Blob(data=image_bytes, mime_type="image/png"))
+
+    @pytest.mark.parametrize(
+        "image_string",
+        ["invalid-media-input", "data:image/png,invalid", "data:image/png;base64,a"],
+        ids=["invalid-route", "invalid-data-uri", "invalid-base64"],
+    )
+    async def test_aload_part_invalid_input_matches_load_part(
+        self, image_string: str
+    ) -> None:
+        with pytest.raises(ValueError) as sync_error:
+            self.loader.load_part(image_string)
+        with pytest.raises(type(sync_error.value)) as async_error:
+            await self.loader.aload_part(image_string)
+        assert str(async_error.value) == str(sync_error.value)
+
+    async def test_aload_part_rejects_local_file(self, tmp_path: Path) -> None:
+        """Async loading must retain the local-file security restriction."""
+        image_path = tmp_path / "image.png"
+        image_path.write_bytes(base64.b64decode(BASE64_PNG.split(",", 1)[1]))
+        with pytest.raises(
+            ValueError, match="no longer supported for security reasons"
+        ):
+            await self.loader.aload_part(str(image_path))
+
+    async def test_aload_part_url_http_error_propagates(self) -> None:
+        error = requests.HTTPError("Image download failed")
+        response = Mock(ok=False)
+        response.raise_for_status.side_effect = error
+        with patch(
+            "langchain_google_genai._image_utils.requests.get", return_value=response
+        ):
+            with pytest.raises(requests.HTTPError) as exc_info:
+                await self.loader.aload_part("https://example.com/missing.png")
+        assert exc_info.value is error
+        response.raise_for_status.assert_called_once_with()
