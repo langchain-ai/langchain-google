@@ -52,6 +52,17 @@ def _will_use_vertexai(values: dict[str, Any]) -> bool:
     return values.get("project") is not None
 
 
+def _default_api_version(api_version: str | None, *, vertexai: bool) -> str | None:
+    """Return the API version to send, defaulting the Gemini Developer API to `v1beta`.
+
+    `google-genai` 3.0 changed its Gemini Developer API default from `v1beta` to `v1`,
+    which doesn't serve preview models or context caching.
+    """
+    if api_version is not None or vertexai or os.getenv("GOOGLE_GENAI_API_VERSION"):
+        return api_version
+    return "v1beta"
+
+
 class _BaseGoogleGenerativeAI(BaseModel):
     """Base class for Google Generative AI LLMs.
 
@@ -325,8 +336,9 @@ class _BaseGoogleGenerativeAI(BaseModel):
     api_version: str | None = Field(default=None)
     """Override the API version path segment in request URLs.
 
-    By default, the underlying `google-genai` SDK currently uses `v1beta1` for
-    Vertex AI and `v1beta` for the Gemini Developer API. Set this when
+    Defaults to `v1beta` for the Gemini Developer API, where preview models and
+    context caching are served, unless `GOOGLE_GENAI_API_VERSION` is set. Vertex AI
+    uses the `google-genai` SDK default (`v1beta1`). Set this when
     targeting a proxy or gateway that expects a different API version segment
     (e.g. `'v1'`).
 

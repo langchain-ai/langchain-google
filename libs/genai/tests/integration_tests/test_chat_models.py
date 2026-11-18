@@ -11,7 +11,7 @@ from collections.abc import Generator, Sequence
 from typing import Literal, cast
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 import requests
 from google.genai.errors import ServerError
@@ -1177,7 +1177,7 @@ def test_timeout_non_streaming(backend_config: dict) -> None:
         timeout=0.001,  # 1ms - too short to complete
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
+    with pytest.raises((httpx2.TimeoutException, httpx2.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
@@ -1189,7 +1189,7 @@ def test_timeout_streaming(backend_config: dict) -> None:
         streaming=True,
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
+    with pytest.raises((httpx2.TimeoutException, httpx2.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 

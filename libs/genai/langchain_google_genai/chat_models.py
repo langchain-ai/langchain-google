@@ -129,6 +129,7 @@ from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
+    _default_api_version,
     get_user_agent,
 )
 from langchain_google_genai._compat import (
@@ -3465,7 +3466,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
-            api_version=self.api_version,
+            api_version=_default_api_version(
+                self.api_version,
+                vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+            ),
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
