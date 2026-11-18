@@ -2075,12 +2075,14 @@ def _response_to_result(
             response.usage_metadata.candidates_token_count or 0
         ) + thought_tokens
         total_tokens = response.usage_metadata.total_token_count or 0
-        # Cached tokens are a subset of the input. With grounding (for example
-        # `google_search`), Gemini can report a cached count well above the
-        # prompt, which inflates downstream cost, so cap it at the input.
-        cache_read_tokens = min(
-            response.usage_metadata.cached_content_token_count or 0, input_tokens
-        )
+        # Cached tokens are a subset of `prompt_token_count`. With grounding (for
+        # example `google_search`), Gemini can report a cached count well above
+        # the prompt. That count can't be trusted, and clamping it would report a
+        # full cache hit, so drop it instead.
+        prompt_tokens = response.usage_metadata.prompt_token_count or 0
+        cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
+        if cache_read_tokens > prompt_tokens:
+            cache_read_tokens = 0
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
             if thought_tokens > 0:
                 cumulative_usage = UsageMetadata(
