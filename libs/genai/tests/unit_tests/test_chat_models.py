@@ -59,6 +59,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages import content as types
+from langchain_core.messages.ai import UsageMetadata, add_usage
 from langchain_core.messages.block_translators.google_genai import (
     _convert_to_v1_from_genai,
 )
@@ -8806,6 +8807,85 @@ def test_tool_use_prompt_tokens_counted_as_input() -> None:
     assert usage["input_tokens"] == 58 + 131
     assert usage["output_tokens"] == 61 + 152
     assert usage["input_tokens"] + usage["output_tokens"] == usage["total_tokens"]
+
+
+def test_grounded_cache_read_includes_tool_use_prompt() -> None:
+    """Grounded calls cache tool-use tokens, which count toward the input."""
+    response = GenerateContentResponse(
+        candidates=[Candidate(content=Content(role="model", parts=[Part(text="ok")]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=58_700,
+            tool_use_prompt_token_count=40_000,
+            cached_content_token_count=90_000,
+            candidates_token_count=3_800,
+            total_token_count=102_500,
+        ),
+    )
+
+    message = _response_to_result(response).generations[0].message
+    assert isinstance(message, AIMessage)
+    usage = message.usage_metadata
+
+    assert usage is not None
+    assert usage["input_tokens"] == 98_700
+    assert usage["input_token_details"]["cache_read"] == 90_000
+    assert usage["input_tokens"] + usage["output_tokens"] == usage["total_tokens"]
+
+
+def test_cache_read_capped_at_input_tokens() -> None:
+    """`cache_read` is a subset of the input, so it can never exceed it."""
+    response = GenerateContentResponse(
+        candidates=[Candidate(content=Content(role="model", parts=[Part(text="ok")]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=58_700,
+            cached_content_token_count=2_900_000,
+            candidates_token_count=3_800,
+            total_token_count=62_500,
+        ),
+    )
+
+    message = _response_to_result(response).generations[0].message
+    assert isinstance(message, AIMessage)
+    usage = message.usage_metadata
+
+    assert usage is not None
+    assert usage["input_tokens"] == 58_700
+    assert usage["input_token_details"]["cache_read"] == 58_700
+
+
+def test_stream_cache_read_capped_at_input_tokens() -> None:
+    """Summed streaming chunks keep `cache_read` within the input."""
+    chunks = [
+        GenerateContentResponse(
+            candidates=[
+                Candidate(content=Content(role="model", parts=[Part(text=text)]))
+            ],
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=58_700,
+                cached_content_token_count=cached,
+                candidates_token_count=out,
+                total_token_count=58_700 + out,
+            ),
+        )
+        for text, cached, out in [
+            ("a", 1_000_000, 10),
+            ("b", 2_900_000, 20),
+        ]
+    ]
+
+    prev: UsageMetadata | None = None
+    total: UsageMetadata | None = None
+    for chunk in chunks:
+        msg = _response_to_result(chunk, stream=True, prev_usage=prev)
+        message = msg.generations[0].message
+        assert isinstance(message, AIMessage)
+        usage = message.usage_metadata
+        prev = usage if prev is None else add_usage(prev, usage)
+        total = prev
+
+    assert total is not None
+    assert total["input_tokens"] == 58_700
+    assert total["input_token_details"]["cache_read"] == 58_700
 
 
 def _video_media_block(**overrides: Any) -> dict[str, Any]:
