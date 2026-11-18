@@ -497,7 +497,7 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
 # affected models are tracked by an explicit allowlist. Add future GA models here
 # as they ship.
 _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
-    {"gemini-3.5-flash-lite", "gemini-3.6-flash"}
+    {"gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-4-carbon"}
 )
 _CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
 

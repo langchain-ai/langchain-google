@@ -572,7 +572,9 @@ def test_parse_history() -> None:
         assert system_instruction == Content(parts=[Part(text=system_input)])
 
 
-@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+@pytest.mark.parametrize(
+    "model", ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-4-carbon"]
+)
 def test_fixed_sampling_models_reject_model_prefill(model: str) -> None:
     llm = ChatGoogleGenerativeAI(
         model=model,
@@ -6181,6 +6183,7 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         ("models/gemini-3.6-flash", True),
         ("publishers/google/models/gemini-3.5-flash-lite-001", True),
         ("GEMINI-3.6-FLASH", True),
+        ("gemini-4-carbon", True),
         ("gemini-3.5-flash", False),
         ("gemini-3.1-flash-lite", False),
         ("gemini-3.6-flash-preview", False),
@@ -6706,7 +6709,9 @@ def test_generation_config_constructor_defaults_are_preserved() -> None:
     assert config.frequency_penalty is None
 
 
-@pytest.mark.parametrize("model", ["gemini-3.5-flash-lite", "gemini-3.6-flash"])
+@pytest.mark.parametrize(
+    "model", ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-4-carbon"]
+)
 @pytest.mark.parametrize(
     ("constructor_kwargs", "request_kwargs"),
     [
