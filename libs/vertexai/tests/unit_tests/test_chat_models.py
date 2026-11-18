@@ -496,6 +496,21 @@ def test_profile() -> None:
 
 
 @pytest.mark.parametrize(
+    "model_name", ["gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"]
+)
+def test_gemini_4_profiles(model_name: str) -> None:
+    """Gemini 4 models resolve Vertex profiles with fixed sampling."""
+    model = ChatVertexAI(
+        model=model_name, project="test-project", location="moon-dark1"
+    )
+    assert model.profile
+    assert model.profile["reasoning_output"]
+    assert model.profile["max_input_tokens"] == 1048576
+    assert model.profile["max_output_tokens"] == 65536
+    assert model.profile["temperature"] is False
+
+
+@pytest.mark.parametrize(
     ("model", "location"),
     [
         (
