@@ -3727,8 +3727,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         thinking_level = kwargs.get(
             "thinking_level", kwargs.get("reasoning_effort", self.reasoning_effort)
         )
-        if thinking_level == "xhigh" and not self._supports_xhigh_thinking_level:
+        if (
+            isinstance(thinking_level, str)
+            and thinking_level.lower() == "xhigh"
+            and not self._supports_xhigh_thinking_level
+        ):
             # Models without `xhigh` reject it, so fall back to the closest level.
+            warnings.warn(
+                f"Model '{self.model}' does not list 'xhigh' in its profile's "
+                "reasoning_effort_levels; using 'high' instead. Set a profile with "
+                "'xhigh' in reasoning_effort_levels to send it as-is.",
+                UserWarning,
+                stacklevel=2,
+            )
             thinking_level = "high"
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)

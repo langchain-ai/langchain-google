@@ -6558,9 +6558,37 @@ def test_xhigh_thinking_level_falls_back_to_high(model_name: str) -> None:
         google_api_key=SecretStr(FAKE_API_KEY),
         thinking_level="xhigh",
     )
-    request = llm._prepare_request([HumanMessage(content="test")])
+    with pytest.warns(UserWarning, match="using 'high' instead"):
+        request = llm._prepare_request([HumanMessage(content="test")])
     assert request["config"].thinking_config is not None
     assert request["config"].thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+@pytest.mark.parametrize("level", ["XHIGH", "xHigh", ThinkingLevel.XHIGH])
+def test_xhigh_thinking_level_fallback_is_case_insensitive(level: Any) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-carbon",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    with pytest.warns(UserWarning, match="using 'high' instead"):
+        request = llm._prepare_request(
+            [HumanMessage(content="test")], thinking_level=level
+        )
+    assert request["config"].thinking_config is not None
+    assert request["config"].thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_xhigh_thinking_level_supported_model_does_not_warn() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-hydrogen",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="xhigh",
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        request = llm._prepare_request([HumanMessage(content="test")])
+    assert request["config"].thinking_config is not None
+    assert request["config"].thinking_config.thinking_level == ThinkingLevel.XHIGH
 
 
 def test_xhigh_thinking_level_call_time_kwarg() -> None:
@@ -6577,9 +6605,10 @@ def test_xhigh_thinking_level_call_time_kwarg() -> None:
     hydrogen_config = hydrogen._prepare_request(messages, reasoning_effort="xhigh")[
         "config"
     ]
-    carbon_config = carbon._prepare_request(messages, reasoning_effort="xhigh")[
-        "config"
-    ]
+    with pytest.warns(UserWarning, match="using 'high' instead"):
+        carbon_config = carbon._prepare_request(messages, reasoning_effort="xhigh")[
+            "config"
+        ]
 
     assert hydrogen_config.thinking_config is not None
     assert hydrogen_config.thinking_config.thinking_level == ThinkingLevel.XHIGH
