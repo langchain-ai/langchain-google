@@ -60,3 +60,8 @@ reasoning_effort_default = "medium"
 temperature = false
 reasoning_effort_levels = ["low", "medium", "high", "xhigh"]
 reasoning_effort_default = "high"
+
+[overrides."gemini-4-neon"]
+temperature = false
+reasoning_effort_levels = ["low", "medium", "high", "xhigh"]
+reasoning_effort_default = "high"

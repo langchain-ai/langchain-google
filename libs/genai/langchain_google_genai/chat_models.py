@@ -502,6 +502,7 @@ _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
         "gemini-3.6-flash",
         "gemini-4-carbon",
         "gemini-4-hydrogen",
+        "gemini-4-neon",
     }
 )
 _CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
