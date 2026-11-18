@@ -579,6 +579,7 @@ def test_parse_history() -> None:
         "gemini-3.6-flash",
         "gemini-4-carbon",
         "gemini-4-hydrogen",
+        "gemini-4-neon",
     ],
 )
 def test_fixed_sampling_models_reject_model_prefill(model: str) -> None:
@@ -6191,6 +6192,7 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         ("GEMINI-3.6-FLASH", True),
         ("gemini-4-carbon", True),
         ("gemini-4-hydrogen", True),
+        ("gemini-4-neon", True),
         ("gemini-3.5-flash", False),
         ("gemini-3.1-flash-lite", False),
         ("gemini-3.6-flash-preview", False),
@@ -6641,6 +6643,52 @@ def test_hydrogen_request(
     assert config.thinking_config.thinking_level == reasoning_effort.upper()
 
 
+def test_neon_profile() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-neon",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.profile is not None
+    expected = {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 65536,
+        "text_inputs": True,
+        "image_inputs": True,
+        "audio_inputs": True,
+        "pdf_inputs": True,
+        "video_inputs": True,
+        "text_outputs": True,
+        "image_outputs": False,
+        "audio_outputs": False,
+        "video_outputs": False,
+        "reasoning_output": True,
+        "tool_calling": True,
+        "structured_output": True,
+        "temperature": False,
+        "image_url_inputs": True,
+        "image_tool_message": True,
+        "tool_choice": True,
+    }
+    assert {key: llm.profile.get(key) for key in expected} == expected
+
+
+@pytest.mark.parametrize("reasoning_effort", ["low", "medium", "high", "xhigh"])
+def test_neon_request(
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"],
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-neon",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+    request = llm._prepare_request([HumanMessage(content="Solve this problem")])
+    config = request["config"]
+    assert request["model"] == "gemini-4-neon"
+    assert config.temperature is None
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == reasoning_effort.upper()
+
+
 @pytest.mark.parametrize(
     "model_name",
     ["gemini-4-carbon", "gemini-3.5-flash", "models/gemini-4-carbon", "gemini-x"],
@@ -6745,6 +6793,7 @@ def test_xhigh_thinking_level_uses_profile_override() -> None:
         ("gemini-3.6-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
         ("gemini-4-carbon", ["low", "medium", "high"], "medium"),
         ("gemini-4-hydrogen", ["low", "medium", "high", "xhigh"], "high"),
+        ("gemini-4-neon", ["low", "medium", "high", "xhigh"], "high"),
         ("gemini-2.5-pro", None, None),
     ],
 )
@@ -6850,6 +6899,7 @@ def test_generation_config_constructor_defaults_are_preserved() -> None:
         "gemini-3.6-flash",
         "gemini-4-carbon",
         "gemini-4-hydrogen",
+        "gemini-4-neon",
     ],
 )
 @pytest.mark.parametrize(
