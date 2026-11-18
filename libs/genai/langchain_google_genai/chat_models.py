@@ -3256,9 +3256,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = Field(
-        default=None,
-        alias="thinking_level",
+    reasoning_effort: Literal["minimal", "low", "medium", "high", "xhigh"] | None = (
+        Field(
+            default=None,
+            alias="thinking_level",
+        )
     )
     """Indicates the thinking level.
 
@@ -3267,6 +3269,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         * `'low'`: Minimizes latency and cost.
         * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
+        * `'xhigh'`: Extra-high reasoning depth. Sent as-is only to models whose
+            profile lists `'xhigh'` in `reasoning_effort_levels`; other models fall
+            back to `'high'`.
 
     Check the model profile's `reasoning_effort_levels` and
     `reasoning_effort_default` fields for model-specific support. If those fields are
@@ -3345,9 +3350,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return "chat-google-generative-ai"
 
     @property
-    def thinking_level(self) -> Literal["minimal", "low", "medium", "high"] | None:
+    def thinking_level(
+        self,
+    ) -> Literal["minimal", "low", "medium", "high", "xhigh"] | None:
         """Alias for `reasoning_effort` (Gemini's native name for this setting)."""
         return self.reasoning_effort
+
+    @property
+    def _supports_xhigh_thinking_level(self) -> bool:
+        levels = (self.profile or {}).get("reasoning_effort_levels") or []
+        return "xhigh" in levels
 
     @property
     def _supports_code_execution(self) -> bool:
@@ -3715,6 +3727,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         thinking_level = kwargs.get(
             "thinking_level", kwargs.get("reasoning_effort", self.reasoning_effort)
         )
+        if thinking_level == "xhigh" and not self._supports_xhigh_thinking_level:
+            # Models without `xhigh` reject it, so fall back to the closest level.
+            thinking_level = "high"
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
 

@@ -6499,6 +6499,103 @@ def test_reasoning_effort_constructor_kwarg_does_not_warn() -> None:
 _ALL_REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high"]
 
 
+def test_hydrogen_profile() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-hydrogen",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert llm.profile is not None
+    expected = {
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 65536,
+        "text_inputs": True,
+        "image_inputs": True,
+        "audio_inputs": True,
+        "pdf_inputs": True,
+        "video_inputs": True,
+        "text_outputs": True,
+        "image_outputs": False,
+        "audio_outputs": False,
+        "video_outputs": False,
+        "reasoning_output": True,
+        "tool_calling": True,
+        "structured_output": True,
+        "temperature": False,
+        "image_url_inputs": True,
+        "image_tool_message": True,
+        "tool_choice": True,
+    }
+    assert {key: llm.profile.get(key) for key in expected} == expected
+
+
+@pytest.mark.parametrize("reasoning_effort", ["low", "medium", "high", "xhigh"])
+def test_hydrogen_request(
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"],
+) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-4-hydrogen",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        reasoning_effort=reasoning_effort,
+    )
+    request = llm._prepare_request([HumanMessage(content="Solve this problem")])
+    config = request["config"]
+    assert request["model"] == "gemini-4-hydrogen"
+    assert config.temperature is None
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level == reasoning_effort.upper()
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["gemini-4-carbon", "gemini-3.5-flash", "models/gemini-4-carbon", "gemini-x"],
+)
+def test_xhigh_thinking_level_falls_back_to_high(model_name: str) -> None:
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="xhigh",
+    )
+    request = llm._prepare_request([HumanMessage(content="test")])
+    assert request["config"].thinking_config is not None
+    assert request["config"].thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_xhigh_thinking_level_call_time_kwarg() -> None:
+    hydrogen = ChatGoogleGenerativeAI(
+        model="gemini-4-hydrogen",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    carbon = ChatGoogleGenerativeAI(
+        model="gemini-4-carbon",
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [HumanMessage(content="test")]
+
+    hydrogen_config = hydrogen._prepare_request(messages, reasoning_effort="xhigh")[
+        "config"
+    ]
+    carbon_config = carbon._prepare_request(messages, reasoning_effort="xhigh")[
+        "config"
+    ]
+
+    assert hydrogen_config.thinking_config is not None
+    assert hydrogen_config.thinking_config.thinking_level == ThinkingLevel.XHIGH
+    assert carbon_config.thinking_config is not None
+    assert carbon_config.thinking_config.thinking_level == ThinkingLevel.HIGH
+
+
+def test_xhigh_thinking_level_uses_profile_override() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-x",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        thinking_level="xhigh",
+        profile={"reasoning_effort_levels": ["low", "high", "xhigh"]},
+    )
+    request = llm._prepare_request([HumanMessage(content="test")])
+    assert request["config"].thinking_config is not None
+    assert request["config"].thinking_config.thinking_level == ThinkingLevel.XHIGH
+
+
 @pytest.mark.parametrize(
     ("model_name", "expected_levels", "expected_default"),
     [
@@ -6521,6 +6618,7 @@ _ALL_REASONING_EFFORT_LEVELS = ["minimal", "low", "medium", "high"]
         ("gemini-3.5-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
         ("gemini-3.5-flash-lite", _ALL_REASONING_EFFORT_LEVELS, "minimal"),
         ("gemini-3.6-flash", _ALL_REASONING_EFFORT_LEVELS, "medium"),
+        ("gemini-4-hydrogen", ["low", "medium", "high", "xhigh"], "high"),
         ("gemini-2.5-pro", None, None),
     ],
 )
