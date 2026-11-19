@@ -23,6 +23,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
@@ -48,6 +49,7 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _bytes_to_base64,
+    _finish_reason_fields,
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
@@ -2811,3 +2813,170 @@ def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> Non
 
     delta = subtract_usage(chunk2, chunk1)
     assert delta["output_token_details"] == {"reasoning": 10}
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [
+        ("STOP", "stop"),
+        ("MAX_TOKENS", "length"),
+        ("SAFETY", "refusal"),
+        ("PROHIBITED_CONTENT", "refusal"),
+        ("BLOCKLIST", "refusal"),
+        ("RECITATION", "content_filter"),
+        ("SPII", "content_filter"),
+        ("MALFORMED_FUNCTION_CALL", "error"),
+        ("OTHER", "other"),
+    ],
+)
+def test_normalized_finish_reason(finish_reason: str, expected: str) -> None:
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hi"}], "role": "model"},
+                    "finish_reason": finish_reason,
+                }
+            ]
+        }
+    )
+
+    info = llm._gemini_response_to_chat_result(response).generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == finish_reason
+    assert info["normalized_finish_reason"] == expected
+    assert "finish_state" not in info
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [
+        ("STOP", "stop"),
+        ("LANGUAGE", "content_filter"),
+        ("IMAGE_SAFETY", "content_filter"),
+        ("IMAGE_PROHIBITED_CONTENT", "content_filter"),
+        ("IMAGE_RECITATION", "content_filter"),
+        ("UNKNOWN_999", "other"),
+        ("FINISH_REASON_UNSPECIFIED", "other"),
+        ("max_tokens", "length"),
+        (None, None),
+    ],
+)
+def test_finish_reason_fields(finish_reason: str | None, expected: str | None) -> None:
+    fields = _finish_reason_fields(finish_reason, has_tool_calls=False)
+
+    assert fields.get("normalized_finish_reason") == expected
+
+
+def test_normalized_finish_reason_tool_call(clear_prediction_client_cache: Any) -> None:
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="get_weather", args={"city": "Paris"}
+                            )
+                        )
+                    ],
+                ),
+                finish_reason="STOP",
+            )
+        ]
+    )
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.generate_content.return_value = response
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        message = model.invoke("hi")
+    _get_prediction_client.cache_clear()
+
+    assert message.response_metadata["finish_reason"] == "STOP"
+    assert message.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+def test_normalized_finish_reason_stream(clear_prediction_client_cache: Any) -> None:
+    responses = [
+        GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hel")]))]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="get_weather", args={"city": "Paris"}
+                                )
+                            )
+                        ]
+                    ),
+                    finish_reason="STOP",
+                )
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        chunks = list(model.stream("hi"))
+    _get_prediction_client.cache_clear()
+
+    assert "normalized_finish_reason" not in chunks[0].response_metadata
+    assert chunks[1].response_metadata["finish_reason"] == "STOP"
+    assert chunks[1].response_metadata["normalized_finish_reason"] == "tool_call"
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+def test_normalized_finish_reason_stream_split_tool_call(
+    clear_prediction_client_cache: Any,
+) -> None:
+    responses = [
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="get_weather", args={"city": "Paris"}
+                                )
+                            )
+                        ]
+                    )
+                )
+            ]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(content=Content(parts=[Part(text="")]), finish_reason="STOP")
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        chunks = list(model.stream("hi"))
+    _get_prediction_client.cache_clear()
+
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert isinstance(full, AIMessageChunk)
+    assert full.tool_calls
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"
