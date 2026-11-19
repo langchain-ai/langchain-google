@@ -9409,3 +9409,73 @@ def test_normalized_finish_reason_stream() -> None:
         full += chunk
     assert full.response_metadata["finish_reason"] == "STOP"
     assert full.response_metadata["normalized_finish_reason"] == "stop"
+
+
+def _split_tool_call_responses() -> list[GenerateContentResponse]:
+    return [
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        role="model",
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="get_weather", args={"city": "Paris"}
+                                )
+                            )
+                        ],
+                    )
+                )
+            ]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(role="model", parts=[Part(text="")]),
+                    finish_reason=FinishReason.STOP,
+                )
+            ]
+        ),
+    ]
+
+
+def test_normalized_finish_reason_stream_split_tool_call() -> None:
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=FAKE_API_KEY)
+    assert llm.client is not None
+
+    with patch.object(
+        llm.client.models,
+        "generate_content_stream",
+        return_value=iter(_split_tool_call_responses()),
+    ):
+        chunks = list(llm.stream("hi"))
+
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert isinstance(full, AIMessageChunk)
+    assert full.tool_calls
+    assert full.response_metadata["finish_reason"] == "STOP"
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+async def test_normalized_finish_reason_astream_split_tool_call() -> None:
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=FAKE_API_KEY)
+    assert llm.async_client is not None
+
+    async def _responses() -> AsyncIterator[GenerateContentResponse]:
+        for response in _split_tool_call_responses():
+            yield response
+
+    with patch.object(
+        llm.async_client.models,
+        "generate_content_stream",
+        AsyncMock(return_value=_responses()),
+    ):
+        chunks = [chunk async for chunk in llm.astream("hi")]
+
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"

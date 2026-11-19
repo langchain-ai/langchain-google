@@ -23,6 +23,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
@@ -2937,4 +2938,45 @@ def test_normalized_finish_reason_stream(clear_prediction_client_cache: Any) -> 
     full = chunks[0]
     for chunk in chunks[1:]:
         full += chunk
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+def test_normalized_finish_reason_stream_split_tool_call(
+    clear_prediction_client_cache: Any,
+) -> None:
+    responses = [
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="get_weather", args={"city": "Paris"}
+                                )
+                            )
+                        ]
+                    )
+                )
+            ]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(content=Content(parts=[Part(text="")]), finish_reason="STOP")
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        chunks = list(model.stream("hi"))
+    _get_prediction_client.cache_clear()
+
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert isinstance(full, AIMessageChunk)
+    assert full.tool_calls
     assert full.response_metadata["normalized_finish_reason"] == "tool_call"

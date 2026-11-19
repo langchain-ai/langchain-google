@@ -2622,10 +2622,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
         total_lc_usage = None
+        saw_tool_call = False
         for response_chunk in response_iter:
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
                 response_chunk, prev_total_usage=total_lc_usage
             )
+            saw_tool_call = _mark_streamed_tool_call(chunk, saw_tool_call)
             if run_manager and isinstance(chunk.message.content, str):
                 run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
@@ -2652,10 +2654,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
         total_lc_usage = None
+        saw_tool_call = False
         async for response_chunk in await response_iter:
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
                 response_chunk, prev_total_usage=total_lc_usage
             )
+            saw_tool_call = _mark_streamed_tool_call(chunk, saw_tool_call)
             if run_manager and isinstance(chunk.message.content, str):
                 await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
@@ -3088,6 +3092,22 @@ def _finish_reason_fields(
     if normalized == "stop" and has_tool_calls:
         normalized = "tool_call"
     return {"normalized_finish_reason": normalized}
+
+
+def _mark_streamed_tool_call(gen: ChatGenerationChunk, saw_tool_call: bool) -> bool:
+    """Upgrade a final `stop` to `tool_call` when an earlier chunk had tool calls.
+
+    Gemini can send function calls and `STOP` in separate stream chunks.
+    """
+    message = gen.message
+    if isinstance(message, AIMessageChunk) and (
+        message.tool_call_chunks or message.tool_calls
+    ):
+        saw_tool_call = True
+    info = gen.generation_info
+    if saw_tool_call and info and info.get("normalized_finish_reason") == "stop":
+        info["normalized_finish_reason"] = "tool_call"
+    return saw_tool_call
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:

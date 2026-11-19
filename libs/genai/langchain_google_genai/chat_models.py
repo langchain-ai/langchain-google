@@ -2077,6 +2077,22 @@ def _finish_reason_fields(
     return {"normalized_finish_reason": normalized}
 
 
+def _mark_streamed_tool_call(gen: ChatGenerationChunk, saw_tool_call: bool) -> bool:
+    """Upgrade a final `stop` to `tool_call` when an earlier chunk had tool calls.
+
+    Gemini can send function calls and `STOP` in separate stream chunks.
+    """
+    message = gen.message
+    if isinstance(message, AIMessageChunk) and (
+        message.tool_call_chunks or message.tool_calls
+    ):
+        saw_tool_call = True
+    info = gen.generation_info
+    if saw_tool_call and info and info.get("normalized_finish_reason") == "stop":
+        info["normalized_finish_reason"] = "tool_call"
+    return saw_tool_call
+
+
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
@@ -4384,6 +4400,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         indexer = _StreamBlockIndexer()
+        saw_tool_call = False
         for chunk in _classified_stream(response, request):
             if chunk:
                 _chat_result = _response_to_result(
@@ -4394,6 +4411,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             # Populate index if missing
             indexer.assign(message)
+            saw_tool_call = _mark_streamed_tool_call(gen, saw_tool_call)
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -4442,6 +4460,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **request,
         )
 
+        saw_tool_call = False
         async for chunk in _aclassified_stream(stream, request):
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
@@ -4451,6 +4470,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
             # populate index if missing
             indexer.assign(message)
+            saw_tool_call = _mark_streamed_tool_call(gen, saw_tool_call)
 
             prev_usage_metadata = (
                 message.usage_metadata
