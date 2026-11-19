@@ -1085,6 +1085,15 @@ def _convert_to_parts(
     return parts
 
 
+def _contains_json_ref(value: Any) -> bool:
+    """Return whether a parsed JSON value has a `$ref` key at any depth."""
+    if isinstance(value, Mapping):
+        return "$ref" in value or any(_contains_json_ref(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_json_ref(item) for item in value)
+    return False
+
+
 def _convert_tool_message_to_parts(
     message: ToolMessage | FunctionMessage,
     name: str | None = None,
@@ -1115,6 +1124,15 @@ def _convert_tool_message_to_parts(
             response = json.loads(message.content)
         except json.JSONDecodeError:
             response = message.content  # leave as str representation
+    if _contains_json_ref(response):
+        # Gemini resolves `$ref` keys in a function response against the
+        # display names of its multimodal parts and rejects the request when
+        # none match, so tool output such as JSON schemas is sent as text.
+        response = (
+            message.content
+            if isinstance(message.content, str)
+            else json.dumps(response, default=str)
+        )
     part = Part(
         function_response=FunctionResponse(
             name=name,

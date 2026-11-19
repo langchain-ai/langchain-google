@@ -5443,6 +5443,33 @@ def test_convert_tool_message_to_parts_json_content() -> None:
     }
 
 
+def test_convert_tool_message_to_parts_json_ref_content_kept_as_text() -> None:
+    """Gemini rejects `$ref` keys in a function response, so JSON with one stays
+    text."""
+    schema = {
+        "$defs": {"Kind": {"enum": ["a", "b"], "type": "string"}},
+        "properties": {"kind": {"$ref": "#/$defs/Kind"}},
+    }
+    string_message = ToolMessage(
+        name="test_tool", content=json.dumps([schema]), tool_call_id="123"
+    )
+    list_message = ToolMessage(
+        name="test_tool", content=[{"type": "schema", **schema}], tool_call_id="456"
+    )
+
+    string_result = _convert_tool_message_to_parts(string_message)
+    list_result = _convert_tool_message_to_parts(list_message)
+
+    assert string_result[0].function_response is not None
+    assert string_result[0].function_response.response == {
+        "output": json.dumps([schema])
+    }
+    assert list_result[0].function_response is not None
+    assert list_result[0].function_response.response == {
+        "output": json.dumps([{"type": "schema", **schema}])
+    }
+
+
 def test_convert_tool_message_to_parts_dict_content() -> None:
     """Test `_convert_tool_message_to_parts` with `dict` content."""
     message = ToolMessage(  # type: ignore[call-overload]
