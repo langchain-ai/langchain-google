@@ -86,6 +86,7 @@ from langchain_google_genai.chat_models import (
     _ClientCleanup,
     _convert_to_parts,
     _convert_tool_message_to_parts,
+    _finish_reason_fields,
     _get_ai_message_tool_messages_parts,
     _get_default_model_profile,
     _handle_client_error,
@@ -9256,3 +9257,155 @@ def test_stream_empty_candidates_preserves_usage_metadata() -> None:
     assert chunk_msg.usage_metadata["input_tokens"] == 10
     assert chunk_msg.usage_metadata["output_tokens"] == 5
     assert chunk_msg.usage_metadata["total_tokens"] == 15
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [
+        (FinishReason.STOP, "stop"),
+        (FinishReason.MAX_TOKENS, "length"),
+        (FinishReason.SAFETY, "refusal"),
+        (FinishReason.PROHIBITED_CONTENT, "refusal"),
+        (FinishReason.BLOCKLIST, "refusal"),
+        (FinishReason.RECITATION, "content_filter"),
+        (FinishReason.SPII, "content_filter"),
+        (FinishReason.LANGUAGE, "content_filter"),
+        (FinishReason.IMAGE_SAFETY, "content_filter"),
+        (FinishReason.IMAGE_PROHIBITED_CONTENT, "content_filter"),
+        (FinishReason.IMAGE_RECITATION, "content_filter"),
+        (FinishReason.MALFORMED_FUNCTION_CALL, "other"),
+        (FinishReason.OTHER, "other"),
+        (FinishReason.FINISH_REASON_UNSPECIFIED, "other"),
+    ],
+)
+def test_normalized_finish_reason(finish_reason: FinishReason, expected: str) -> None:
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(role="model", parts=[Part(text="ok")]),
+                finish_reason=finish_reason,
+            )
+        ]
+    )
+
+    info = _response_to_result(response).generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == finish_reason.name
+    assert info["normalized_finish_reason"] == expected
+    assert "finish_state" not in info
+
+
+def test_normalized_finish_reason_lowercase_raw_value() -> None:
+    assert _finish_reason_fields("max_tokens", has_tool_calls=False) == {
+        "normalized_finish_reason": "length"
+    }
+
+
+def test_normalized_finish_reason_unknown_value() -> None:
+    mock_candidate = Mock(spec=Candidate)
+    mock_candidate.finish_reason = 999
+    mock_candidate.safety_ratings = []
+    mock_candidate.content = Content(role="model", parts=[Part(text="ok")])
+    mock_response = Mock(spec=GenerateContentResponse)
+    mock_response.candidates = [mock_candidate]
+    mock_response.model_version = MODEL_NAME
+    mock_response.usage_metadata = None
+    mock_response.prompt_feedback = None
+
+    info = _response_to_result(mock_response).generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == "UNKNOWN_999"
+    assert info["normalized_finish_reason"] == "other"
+
+
+def test_normalized_finish_reason_absent() -> None:
+    response = GenerateContentResponse(
+        candidates=[Candidate(content=Content(role="model", parts=[Part(text="ok")]))]
+    )
+
+    info = _response_to_result(response).generations[0].generation_info
+
+    assert info is not None
+    assert "finish_reason" not in info
+    assert "normalized_finish_reason" not in info
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_normalized_finish_reason_tool_call(stream: bool) -> None:
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="get_weather", args={"city": "Paris"}
+                            )
+                        )
+                    ],
+                ),
+                finish_reason=FinishReason.STOP,
+            )
+        ]
+    )
+
+    info = _response_to_result(response, stream=stream).generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == "STOP"
+    assert info["normalized_finish_reason"] == "tool_call"
+
+
+def test_normalized_finish_reason_invoke() -> None:
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=FAKE_API_KEY)
+    assert llm.client is not None
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(role="model", parts=[Part(text="ok")]),
+                finish_reason=FinishReason.MAX_TOKENS,
+            )
+        ]
+    )
+
+    with patch.object(llm.client.models, "generate_content", return_value=response):
+        message = llm.invoke("hi")
+
+    assert message.response_metadata["finish_reason"] == "MAX_TOKENS"
+    assert message.response_metadata["normalized_finish_reason"] == "length"
+
+
+def test_normalized_finish_reason_stream() -> None:
+    llm = ChatGoogleGenerativeAI(model=MODEL_NAME, google_api_key=FAKE_API_KEY)
+    assert llm.client is not None
+    responses = [
+        GenerateContentResponse(
+            candidates=[
+                Candidate(content=Content(role="model", parts=[Part(text="Hel")]))
+            ]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(role="model", parts=[Part(text="lo")]),
+                    finish_reason=FinishReason.STOP,
+                )
+            ]
+        ),
+    ]
+
+    with patch.object(
+        llm.client.models, "generate_content_stream", return_value=iter(responses)
+    ):
+        chunks = list(llm.stream("hi"))
+
+    assert "normalized_finish_reason" not in chunks[0].response_metadata
+    assert chunks[1].response_metadata["normalized_finish_reason"] == "stop"
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert full.response_metadata["finish_reason"] == "STOP"
+    assert full.response_metadata["normalized_finish_reason"] == "stop"

@@ -2971,6 +2971,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
+            info.update(
+                _finish_reason_fields(
+                    info.get("finish_reason"),
+                    has_tool_calls=bool(
+                        message.tool_calls or message.invalid_tool_calls
+                    ),
+                )
+            )
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
@@ -3024,6 +3032,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             finish_reason = generation_info.get("finish_reason")
             if finish_reason and finish_reason != "FINISH_REASON_UNSPECIFIED":
                 message.response_metadata["model_name"] = self.model_name
+                generation_info.update(
+                    _finish_reason_fields(
+                        finish_reason,
+                        has_tool_calls=bool(
+                            message.tool_calls or message.invalid_tool_calls
+                        ),
+                    )
+                )
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be merged
             generation_info.pop("is_blocked", None)
@@ -3042,6 +3058,34 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             message=message,
             generation_info=generation_info,
         ), total_lc_usage
+
+
+_FINISH_REASONS: dict[str, str] = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "refusal",
+    "PROHIBITED_CONTENT": "refusal",
+    "BLOCKLIST": "refusal",
+    "RECITATION": "content_filter",
+    "SPII": "content_filter",
+    "LANGUAGE": "content_filter",
+    "IMAGE_SAFETY": "content_filter",
+    "IMAGE_PROHIBITED_CONTENT": "content_filter",
+    "IMAGE_RECITATION": "content_filter",
+}
+
+
+def _finish_reason_fields(
+    finish_reason: str | None, *, has_tool_calls: bool
+) -> dict[str, str]:
+    """Map a Gemini `finish_reason` onto `normalized_finish_reason`."""
+    if not finish_reason:
+        return {}
+    normalized = _FINISH_REASONS.get(finish_reason.upper(), "other")
+    # Gemini reports `STOP` when it ends on function calls.
+    if normalized == "stop" and has_tool_calls:
+        normalized = "tool_call"
+    return {"normalized_finish_reason": normalized}
 
 
 def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:

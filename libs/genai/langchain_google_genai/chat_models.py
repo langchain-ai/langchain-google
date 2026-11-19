@@ -172,6 +172,20 @@ _GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
 _REFUSAL_FINISH_REASONS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"})
 """Candidate finish reasons that core translates to a refusal content block."""
 
+_FINISH_REASONS: dict[str, str] = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "refusal",
+    "PROHIBITED_CONTENT": "refusal",
+    "BLOCKLIST": "refusal",
+    "RECITATION": "content_filter",
+    "SPII": "content_filter",
+    "LANGUAGE": "content_filter",
+    "IMAGE_SAFETY": "content_filter",
+    "IMAGE_PROHIBITED_CONTENT": "content_filter",
+    "IMAGE_RECITATION": "content_filter",
+}
+
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
@@ -2048,6 +2062,19 @@ def _parse_response_candidate(
     )
 
 
+def _finish_reason_fields(
+    finish_reason: str | None, *, has_tool_calls: bool
+) -> dict[str, str]:
+    """Map a Gemini `finish_reason` onto `normalized_finish_reason`."""
+    if not finish_reason:
+        return {}
+    normalized = _FINISH_REASONS.get(finish_reason.upper(), "other")
+    # Gemini reports `STOP` when it ends on function calls.
+    if normalized == "stop" and has_tool_calls:
+        normalized = "tool_call"
+    return {"normalized_finish_reason": normalized}
+
+
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
@@ -2155,6 +2182,13 @@ def _response_to_result(
 
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
+
+        generation_info.update(
+            _finish_reason_fields(
+                generation_info.get("finish_reason"),
+                has_tool_calls=bool(message.tool_calls or message.invalid_tool_calls),
+            )
+        )
 
         if generation_info.get("finish_reason") in _REFUSAL_FINISH_REASONS:
             # `v1` content is built from the message before `generation_info` is merged.
