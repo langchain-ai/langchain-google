@@ -78,6 +78,29 @@ def _create_usage_metadata(anthropic_usage: BaseModel) -> UsageMetadata:
     )
 
 
+def _sniff_image_media_type(data: bytes) -> str | None:
+    """Best-effort detect an image media type from its leading byte signature.
+
+    Used as a fallback when an image URL has no usable file extension to derive
+    the media type from. Covers the image formats Anthropic accepts.
+
+    Args:
+        data: The raw image bytes.
+
+    Returns:
+        The detected media type, or `None` if the signature is unrecognized.
+    """
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def _format_image(image_url: str, project: str | None) -> dict:
     """Formats a message image to a dict for Anthropic API."""
     regex = r"^data:(?P<media_type>(?:image|application)/.+);base64,(?P<data>.+)$"
@@ -92,13 +115,22 @@ def _format_image(image_url: str, project: str | None) -> dict:
         loader = ImageBytesLoader(project=project)
         image_bytes = loader.load_bytes(image_url)
         path = urllib.parse.urlparse(image_url).path
-        raw_mime_type = path.split(".")[-1].lower()
-        doc_type = "application" if raw_mime_type == "pdf" else "image"
-        mime_type = (
-            f"{doc_type}/jpeg"
-            if raw_mime_type == "jpg"
-            else f"{doc_type}/{raw_mime_type}"
-        )
+        filename = path.rsplit("/", 1)[-1]
+        if "." in filename:
+            raw_mime_type = filename.rsplit(".", 1)[-1].lower()
+            doc_type = "application" if raw_mime_type == "pdf" else "image"
+            mime_type = (
+                f"{doc_type}/jpeg"
+                if raw_mime_type == "jpg"
+                else f"{doc_type}/{raw_mime_type}"
+            )
+        else:
+            # URLs without a file extension (e.g. CDN / signed URLs) would
+            # otherwise produce a malformed media type like "image//path".
+            # Fall back to detecting the type from the downloaded bytes.
+            mime_type = (
+                _sniff_image_media_type(image_bytes) or "application/octet-stream"
+            )
         return {
             "type": "base64",
             "media_type": mime_type,
