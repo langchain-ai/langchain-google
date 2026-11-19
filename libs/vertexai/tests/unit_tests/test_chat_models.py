@@ -2824,7 +2824,7 @@ def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> Non
         ("BLOCKLIST", "refusal"),
         ("RECITATION", "content_filter"),
         ("SPII", "content_filter"),
-        ("MALFORMED_FUNCTION_CALL", "other"),
+        ("MALFORMED_FUNCTION_CALL", "error"),
         ("OTHER", "other"),
     ],
 )

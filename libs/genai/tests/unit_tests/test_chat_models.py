@@ -9273,7 +9273,7 @@ def test_stream_empty_candidates_preserves_usage_metadata() -> None:
         (FinishReason.IMAGE_SAFETY, "content_filter"),
         (FinishReason.IMAGE_PROHIBITED_CONTENT, "content_filter"),
         (FinishReason.IMAGE_RECITATION, "content_filter"),
-        (FinishReason.MALFORMED_FUNCTION_CALL, "other"),
+        (FinishReason.MALFORMED_FUNCTION_CALL, "error"),
         (FinishReason.OTHER, "other"),
         (FinishReason.FINISH_REASON_UNSPECIFIED, "other"),
     ],

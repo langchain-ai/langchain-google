@@ -3072,6 +3072,8 @@ _FINISH_REASONS: dict[str, str] = {
     "IMAGE_SAFETY": "content_filter",
     "IMAGE_PROHIBITED_CONTENT": "content_filter",
     "IMAGE_RECITATION": "content_filter",
+    "MALFORMED_FUNCTION_CALL": "error",
+    "MALFORMED_RESPONSE": "error",
 }
 
 
