@@ -380,6 +380,14 @@ def _parse_chat_history_gemini(
 
         if is_data_content_block(part):
             # LangChain standard format
+            if part["type"] == "text-plain":
+                # Plain-text document block with inline text. Vertex AI has no
+                # separate plain-text document part, so send the inline text
+                # as a text part.
+                if "text" not in part:
+                    msg = "text-plain block must contain 'text' field."
+                    raise ValueError(msg)
+                return Part(text=part["text"])
             if part["type"] == "image" and "url" in part:
                 oai_content_block = convert_to_openai_image_block(part)
                 url = oai_content_block["image_url"]["url"]
