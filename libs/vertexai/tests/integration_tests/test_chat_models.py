@@ -707,9 +707,9 @@ def test_chat_model_multiple_system_message() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.parametrize("method", [None, "json_mode"])
+@pytest.mark.parametrize("method", [None, "json_mode", "json_schema"])
 def test_chat_vertexai_gemini_with_structured_output(
-    method: Literal["json_mode"] | None,
+    method: Literal["json_mode", "json_schema"] | None,
 ) -> None:
     class MyModel(BaseModel):
         name: str
@@ -766,7 +766,10 @@ def test_chat_vertexai_gemini_with_structured_output(
 
 
 @pytest.mark.release
-def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
+@pytest.mark.parametrize("method", ["json_mode", "json_schema"])
+def test_chat_vertexai_gemini_with_structured_output_nested_model(
+    method: Literal["json_mode", "json_schema"],
+) -> None:
     class Argument(BaseModel):
         description: str
 
@@ -779,12 +782,13 @@ def test_chat_vertexai_gemini_with_structured_output_nested_model() -> None:
         reasons: list[Reason]
 
     model = ChatVertexAI(model=_DEFAULT_MODEL_NAME).with_structured_output(
-        Response, method="json_mode"
+        Response, method=method
     )
 
     response = model.invoke("Why is Real Madrid better than Barcelona?")
 
     assert isinstance(response, Response)
+    assert response.reasons
 
 
 @pytest.mark.flaky(retries=6, delay=1)
