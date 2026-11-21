@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import copy
+import inspect
 import io
 import json
 import logging
 import mimetypes
 import os
 import re
+import threading
 import uuid
 import warnings
 import wave
+import weakref
 from collections.abc import (
+    AsyncGenerator,
     AsyncIterator,
     Callable,
     Container,
@@ -19,17 +25,22 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
+from contextvars import ContextVar
 from difflib import get_close_matches
+from enum import Enum
 from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    NoReturn,
     Self,
     cast,
 )
 from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
+import httpx2 as _httpx_v2
+from google.genai import errors as _genai_errors
 from google.genai.client import Client
 from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
@@ -51,6 +62,7 @@ from google.genai.types import (
     Part,
     PrebuiltVoiceConfig,
     SafetySetting,
+    ServiceTier,
     SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
@@ -70,10 +82,12 @@ from langchain_core.exceptions import (
     ContextOverflowError,
     ModelAPIError,
     ModelAuthenticationError,
+    ModelConnectionError,
     ModelInvalidRequestError,
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    ModelTimeoutError,
 )
 from langchain_core.language_models import (
     LangSmithParams,
@@ -83,6 +97,7 @@ from langchain_core.language_models import (
     is_openai_data_block,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models.llms import create_base_retry_decorator
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -154,6 +169,175 @@ from langchain_google_genai._image_utils import (
 from langchain_google_genai._version import __version__
 from langchain_google_genai.data._profiles import _PROFILES
 
+try:
+    from google.genai._gaos.lib.compat_errors import (
+        APIConnectionError as _InteractionsAPIConnectionError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        APIError as _InteractionsAPIError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        APIStatusError as _InteractionsAPIStatusError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        APITimeoutError as _InteractionsAPITimeoutError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        AuthenticationError as _InteractionsAuthenticationError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        BadRequestError as _InteractionsBadRequestError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        GeminiNextGenAPIClientError as _GeminiNextGenAPIClientError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        InternalServerError as _InteractionsInternalServerError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        NotFoundError as _InteractionsNotFoundError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        PermissionDeniedError as _InteractionsPermissionDeniedError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        RateLimitError as _InteractionsRateLimitError,
+    )
+    from google.genai._gaos.lib.compat_errors import (
+        UnprocessableEntityError as _InteractionsUnprocessableEntityError,
+    )
+    from google.genai._gaos.utils import RetryConfig as _InteractionsRetryConfig
+
+    _HAS_GAOS_SDK = True
+except ImportError:  # pragma: no cover - defensive fallback if private _gaos moves
+
+    class _UnmatchedGaosError(Exception):
+        """Placeholder exception when `google.genai._gaos` is unavailable."""
+
+    _InteractionsAPIConnectionError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsAPIError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsAPIStatusError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsAPITimeoutError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsAuthenticationError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsBadRequestError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _GeminiNextGenAPIClientError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsInternalServerError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsNotFoundError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsPermissionDeniedError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsRateLimitError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsUnprocessableEntityError = _UnmatchedGaosError  # type: ignore[assignment,misc]
+    _InteractionsRetryConfig = None  # type: ignore[assignment,misc]
+    _HAS_GAOS_SDK = False
+
+_ContinuationInterruptedError: type[BaseException] | None = getattr(
+    _genai_errors, "ContinuationInterruptedError", None
+)
+
+try:
+    import httpx as _httpx_v1
+except ImportError:  # pragma: no cover - `httpx` is optional in google-genai>=3.0
+    _httpx_v1 = None  # type: ignore[assignment]
+
+
+def _collect_httpx_types(attr_name: str) -> tuple[type[Any], ...]:
+    """Collect matching class types from `httpx2` and optional `httpx`."""
+    found: list[type[Any]] = []
+    for mod in (_httpx_v2, _httpx_v1):
+        cls = getattr(mod, attr_name, None) if mod is not None else None
+        if isinstance(cls, type) and cls not in found:
+            found.append(cls)
+    return tuple(found)
+
+
+_HTTPX_HTTP_ERRORS: tuple[type[BaseException], ...] = _collect_httpx_types("HTTPError")
+_HTTPX_TIMEOUT_ERRORS: tuple[type[BaseException], ...] = _collect_httpx_types(
+    "TimeoutException"
+)
+_HTTPX_REQUEST_ERRORS: tuple[type[BaseException], ...] = _collect_httpx_types(
+    "RequestError"
+)
+_HTTPX_UNSUPPORTED_PROTOCOL_ERRORS: tuple[type[BaseException], ...] = (
+    _collect_httpx_types("UnsupportedProtocol")
+)
+_HTTPX_TIMEOUT_TYPES: tuple[type[Any], ...] = _collect_httpx_types("Timeout")
+_HTTPX_SYNC_CLIENT_TYPES: tuple[type[Any], ...] = _collect_httpx_types("Client")
+_HTTPX_ASYNC_CLIENT_TYPES: tuple[type[Any], ...] = _collect_httpx_types("AsyncClient")
+_HTTPX_SYNC_TRANSPORT_TYPES: tuple[type[Any], ...] = _collect_httpx_types(
+    "BaseTransport"
+)
+_HTTPX_ASYNC_TRANSPORT_TYPES: tuple[type[Any], ...] = _collect_httpx_types(
+    "AsyncBaseTransport"
+)
+
+
+def _detect_httpx_pkg(obj: Any) -> str | None:
+    """Return `'httpx2'` or `'httpx'` if `obj` or an MRO base belongs to one."""
+    if obj is None:
+        return None
+    for cls in type(obj).__mro__:
+        top_pkg = cls.__module__.split(".", 1)[0]
+        if top_pkg == "httpx2":
+            return "httpx2"
+        if top_pkg == "httpx" and _httpx_v1 is not None:
+            return "httpx"
+    return None
+
+
+def _select_httpx_module(
+    client_kwargs: Mapping[str, Any] | None = None,
+    *,
+    fallback_client: Any = None,
+) -> Any:
+    """Select `httpx2` or `httpx` matching any supplied transport/timeout/client."""
+    if client_kwargs:
+        transport = client_kwargs.get("transport")
+        if transport is not None:
+            pkg = _detect_httpx_pkg(transport)
+            if pkg == "httpx" and _httpx_v1 is not None:
+                return _httpx_v1
+            if pkg == "httpx2":
+                return _httpx_v2
+        for key, val in client_kwargs.items():
+            if key == "transport" or val is None:
+                continue
+            pkg = _detect_httpx_pkg(val)
+            if pkg == "httpx" and _httpx_v1 is not None:
+                return _httpx_v1
+            if pkg == "httpx2":
+                return _httpx_v2
+    if fallback_client is not None:
+        pkg = _detect_httpx_pkg(fallback_client)
+        if pkg == "httpx" and _httpx_v1 is not None:
+            return _httpx_v1
+        if pkg == "httpx2":
+            return _httpx_v2
+    return _httpx_v2
+
+
+def _create_httpx_client(
+    client_kwargs: Mapping[str, Any],
+    *,
+    is_async: bool,
+    fallback_client: Any = None,
+) -> Any:
+    """Instantiate an `httpx2` or `httpx` sync/async client matching `client_kwargs`."""
+    http_mod = _select_httpx_module(client_kwargs, fallback_client=fallback_client)
+    kw = dict(client_kwargs)
+    timeout_val = kw.get("timeout")
+    if (
+        timeout_val is not None
+        and isinstance(timeout_val, _HTTPX_TIMEOUT_TYPES)
+        and not isinstance(timeout_val, http_mod.Timeout)
+    ):
+        kw["timeout"] = http_mod.Timeout(
+            connect=timeout_val.connect,
+            read=timeout_val.read,
+            write=timeout_val.write,
+            pool=timeout_val.pool,
+        )
+    return http_mod.AsyncClient(**kw) if is_async else http_mod.Client(**kw)
+
+
 logger = logging.getLogger(__name__)
 
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
@@ -210,6 +394,13 @@ class _ClientCleanup:
         self._client = client
         self._async_loop: asyncio.AbstractEventLoop | None = None
         self._closed = False
+        self._interactions_lock = threading.Lock()
+        self._private_sync_source: Any = None
+        self._private_sync_client_id: int | None = None
+        self._private_sync_interactions: Any = None
+        self._private_async_source: Any = None
+        self._private_async_client_id: int | None = None
+        self._private_async_interactions: Any = None
 
     def __eq__(self, other: object) -> bool:
         """Keep the internal cleanup token out of model equality semantics."""
@@ -219,6 +410,73 @@ class _ClientCleanup:
     def _consume_task_exception(task: asyncio.Task[None]) -> None:
         if not task.cancelled():
             task.exception()
+
+    @staticmethod
+    def _close_owned_sync_interactions(interactions_obj: Any) -> None:
+        """Close any `_gaos`-allocated fallback sync `httpx.Client`."""
+        seen: set[int] = set()
+        for holder in (
+            interactions_obj,
+            getattr(interactions_obj, "parent_ref", None),
+        ):
+            sdk_cfg = getattr(holder, "sdk_configuration", None)
+            if sdk_cfg is None or getattr(sdk_cfg, "client_supplied", True):
+                continue
+            http_c = getattr(sdk_cfg, "client", None)
+            if http_c is not None and id(http_c) not in seen:
+                seen.add(id(http_c))
+                close_fn = getattr(http_c, "close", None)
+                if callable(close_fn):
+                    close_fn()
+
+    @staticmethod
+    async def _aclose_owned_async_interactions(interactions_obj: Any) -> None:
+        """Close any `_gaos`-allocated fallback async `httpx.AsyncClient`."""
+        seen: set[int] = set()
+        for holder in (
+            interactions_obj,
+            getattr(interactions_obj, "parent_ref", None),
+        ):
+            sdk_cfg = getattr(holder, "sdk_configuration", None)
+            if sdk_cfg is None or getattr(sdk_cfg, "async_client_supplied", True):
+                continue
+            async_c = getattr(sdk_cfg, "async_client", None)
+            if async_c is not None and id(async_c) not in seen:
+                seen.add(id(async_c))
+                aclose_fn = getattr(async_c, "aclose", None)
+                if callable(aclose_fn):
+                    await aclose_fn()
+
+    def _close_all_sync_owned(self) -> None:
+        for ia in (
+            self._private_sync_interactions,
+            getattr(self._client, "_interactions", None),
+        ):
+            if ia is not None:
+                try:
+                    self._close_owned_sync_interactions(ia)
+                except Exception:
+                    pass
+
+    async def _aclose_all_async_transports(self) -> None:
+        first_exc: BaseException | None = None
+        for ia in (
+            self._private_async_interactions,
+            getattr(getattr(self._client, "_aio", None), "_interactions", None),
+        ):
+            if ia is not None:
+                try:
+                    await self._aclose_owned_async_interactions(ia)
+                except BaseException as exc:
+                    if first_exc is None:
+                        first_exc = exc
+        try:
+            await self._client.aio.aclose()
+        except BaseException as exc:
+            if first_exc is None:
+                first_exc = exc
+        if first_exc is not None:
+            raise first_exc
 
     def register_async_loop(self) -> None:
         """Record the event loop that owns any async transports created later."""
@@ -241,14 +499,26 @@ class _ClientCleanup:
             raise RuntimeError(msg)
 
         self._async_loop = running_loop
-        self._client.close()
-        await self._client.aio.aclose()
-        self._closed = True
+        try:
+            try:
+                self._close_all_sync_owned()
+            finally:
+                self._client.close()
+        finally:
+            try:
+                await self._aclose_all_async_transports()
+            finally:
+                self._closed = True
 
     def __del__(self) -> None:
         """Close sync and async transports without leaking cleanup exceptions."""
         if self._closed:
             return
+
+        try:
+            self._close_all_sync_owned()
+        except Exception:
+            pass
 
         try:
             self._client.close()
@@ -266,7 +536,7 @@ class _ClientCleanup:
             return
 
         try:
-            task = running_loop.create_task(self._client.aio.aclose())
+            task = running_loop.create_task(self._aclose_all_async_transports())
             task.add_done_callback(self._consume_task_exception)
         except Exception:
             pass
@@ -299,14 +569,779 @@ class GoogleAPIError(ServerError, ModelAPIError):
     """Google server error classified as a LangChain model error."""
 
 
+class GoogleInteractionsContextOverflowError(
+    GoogleContextOverflowError, ChatGoogleGenerativeAIError
+):
+    """Context-overflow error raised by the Gemini Interactions API."""
+
+
+class GoogleInteractionsAPIError(GoogleAPIError, ChatGoogleGenerativeAIError):
+    """Server or API error raised by the Gemini Interactions API."""
+
+
+class GoogleConnectionError(
+    ChatGoogleGenerativeAIError, ModelConnectionError, ModelAPIError
+):
+    """Connection error classified as a retryable LangChain model API error."""
+
+
+class GoogleTimeoutError(ChatGoogleGenerativeAIError, ModelTimeoutError, ModelAPIError):
+    """Timeout error classified as a retryable LangChain model API error."""
+
+
+_NON_RETRYABLE_INTERACTIONS_STATUSES = frozenset(
+    {
+        "CANCELLED",
+        "CANCELED",
+        "SAFETY",
+        "PROHIBITED_CONTENT",
+        "BLOCKLIST",
+        "RECITATION",
+        "SPII",
+        "IMAGE_SAFETY",
+        "AUDIO_SAFETY",
+        "VIDEO_SAFETY",
+        "JAILBREAK",
+        "CONTENT_FILTER",
+        "FAILED_PRECONDITION",
+        "OUT_OF_RANGE",
+        "UNIMPLEMENTED",
+    }
+)
+
+
+def _is_retryable_interactions_api_error(exc: object) -> bool:
+    """Return True when `exc` is a transient 5xx `GoogleInteractionsAPIError`."""
+    if not isinstance(exc, GoogleInteractionsAPIError):
+        return False
+    status = str(getattr(exc, "status", "") or "").upper()
+    if status in _NON_RETRYABLE_INTERACTIONS_STATUSES:
+        return False
+    code = getattr(exc, "code", None)
+    if code is None:
+        return True
+    return 500 <= int(code) < 600 and int(code) != 501
+
+
+class _RetryableServerErrorMeta(type):
+    def __instancecheck__(cls, instance: object) -> bool:
+        return _is_retryable_interactions_api_error(instance)
+
+
+class _RetryableInteractionsAPIError(
+    BaseException, metaclass=_RetryableServerErrorMeta
+):
+    """Dynamic `isinstance` predicate matching retryable 5xx Interactions API errors."""
+
+
+_INTERACTIONS_RETRYABLE_ERRORS: list[type[BaseException]] = [
+    _InteractionsRateLimitError,
+    _InteractionsInternalServerError,
+    _InteractionsAPIConnectionError,
+    _InteractionsAPITimeoutError,
+    GoogleTimeoutError,
+    GoogleRateLimitError,
+    GoogleConnectionError,
+    _RetryableInteractionsAPIError,
+]
+"""Exception types raised by the Interactions SDK that are safe to retry."""
+
+_INTERACTIONS_BASE_CATCHABLE_ERRORS: tuple[type[BaseException], ...] = (
+    _GeminiNextGenAPIClientError,
+    ClientError,
+    ServerError,
+    TimeoutError,
+    *_HTTPX_HTTP_ERRORS,
+)
+
+_INTERACTIONS_CATCHABLE_ERRORS: tuple[type[BaseException], ...] = (
+    (*_INTERACTIONS_BASE_CATCHABLE_ERRORS, _ContinuationInterruptedError)
+    if _ContinuationInterruptedError is not None
+    else _INTERACTIONS_BASE_CATCHABLE_ERRORS
+)
+"""SDK exception classes intercepted and classified by Interactions helpers."""
+
+_INTERACTIONS_ONLY_TOOL_TYPES = frozenset({"file_search", "mcp_server", "retrieval"})
+"""Interactions tool `type` tags that trigger automatic routing."""
+
+_INTERACTIONS_SERVER_TOOL_TYPES = frozenset(
+    {
+        "google_search",
+        "google_maps",
+        "code_execution",
+        "url_context",
+        "computer_use",
+        "file_search",
+        "mcp_server",
+        "retrieval",
+    }
+)
+"""Server-side built-in tool `type` tags accepted by the Interactions API."""
+
+_INTERACTIONS_AUTO_MODEL_PREFIXES = ("deep-research-", "antigravity-")
+"""Normalized model/agent prefixes that require the Interactions API."""
+
+_CONTEXT_OVERFLOW_PHRASES = (
+    "exceeds the maximum number of tokens allowed",
+    "token limit",
+    "maximum context length",
+    "context window",
+    "too many tokens",
+    "input token count",
+)
+
+
 _CLIENT_ERROR_TYPES: dict[int, type[ChatGoogleGenerativeAIError]] = {
     400: GoogleInvalidRequestError,
     401: GoogleAuthenticationError,
     403: GooglePermissionDeniedError,
     404: GoogleModelNotFoundError,
+    408: GoogleTimeoutError,
     429: GoogleRateLimitError,
 }
 """HTTP status codes the Google GenAI API reports, keyed to LangChain error types."""
+
+
+def _is_context_overflow_text(text: str) -> bool:
+    """Return whether an error string signals an input token/context limit overflow."""
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in _CONTEXT_OVERFLOW_PHRASES)
+
+
+def _interactions_error_response_json(
+    exc: BaseException, *, code: int, default_status: str
+) -> dict[str, Any]:
+    """Extract or synthesize a response JSON dict suitable for `ClientError`."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        return body
+    return {
+        "error": {
+            "code": code,
+            "message": str(exc),
+            "status": default_status,
+        }
+    }
+
+
+def _handle_interactions_error(
+    exc: BaseException, model_name: str = "unknown"
+) -> NoReturn:
+    """Classify and raise a LangChain model error from an Interactions API exception.
+
+    Maps `google.genai._gaos.lib.compat_errors` exceptions (and plain `ClientError` /
+    `ServerError`) onto the `ChatGoogleGenerativeAIError` + `ModelError` hierarchy so
+    upstream retry and context-compaction middleware behave identically across both
+    Google transport backends.
+
+    Args:
+        exc: Exception raised by the Interactions SDK or stream transport.
+        model_name: Name of the target model or agent for diagnostic context.
+
+    Raises:
+        GoogleInteractionsContextOverflowError: On HTTP 400 token/context limit errors.
+        GoogleInvalidRequestError: On HTTP 400 or 422 invalid-request errors.
+        GoogleAuthenticationError: On HTTP 401 authentication failures.
+        GooglePermissionDeniedError: On HTTP 403 authorization failures.
+        GoogleModelNotFoundError: On HTTP 404 unknown model/interaction errors.
+        GoogleRateLimitError: On HTTP 429 rate-limit errors.
+        GoogleTimeoutError: On client/request timeout errors.
+        GoogleConnectionError: On transport connection errors.
+        GoogleInteractionsAPIError: On HTTP 5xx or generic server/API errors.
+        ChatGoogleGenerativeAIError: On any other unclassified status errors.
+    """
+    if isinstance(
+        exc, (ChatGoogleGenerativeAIError, GoogleContextOverflowError, GoogleAPIError)
+    ):
+        raise exc
+
+    if _ContinuationInterruptedError is not None and isinstance(
+        exc, _ContinuationInterruptedError
+    ):
+        cause = exc.__cause__
+        if isinstance(
+            cause,
+            (
+                TimeoutError,
+                *_HTTPX_TIMEOUT_ERRORS,
+                _InteractionsAPITimeoutError,
+            ),
+        ):
+            msg = f"Timeout calling model '{model_name}': {exc}"
+            raise GoogleTimeoutError(msg) from exc
+        if isinstance(cause, (*_HTTPX_HTTP_ERRORS, _InteractionsAPIConnectionError)):
+            msg = f"Connection error calling model '{model_name}': {exc}"
+            raise GoogleConnectionError(msg) from exc
+        if cause is not None:
+            try:
+                _handle_interactions_error(cause, model_name=model_name)
+            except (
+                ChatGoogleGenerativeAIError,
+                GoogleContextOverflowError,
+                GoogleAPIError,
+            ) as classified_cause:
+                raise classified_cause from exc
+        raise GoogleInteractionsAPIError(
+            code=500,
+            response_json=_interactions_error_response_json(
+                exc, code=500, default_status="INTERNAL"
+            ),
+            response=None,
+        ) from exc
+
+    if isinstance(
+        exc,
+        (
+            _InteractionsAPITimeoutError,
+            TimeoutError,
+            *_HTTPX_TIMEOUT_ERRORS,
+        ),
+    ):
+        msg = f"Timeout calling model '{model_name}': {exc}"
+        raise GoogleTimeoutError(msg) from exc
+
+    if isinstance(exc, (_InteractionsAPIConnectionError, *_HTTPX_HTTP_ERRORS)):
+        msg = f"Connection error calling model '{model_name}': {exc}"
+        raise GoogleConnectionError(msg) from exc
+
+    if isinstance(exc, ClientError):
+        status_code_client = exc.code or 400
+        if status_code_client == 400 and _is_context_overflow_text(str(exc)):
+            raise GoogleInteractionsContextOverflowError(
+                code=400,
+                response_json=_interactions_error_response_json(
+                    exc, code=400, default_status=exc.status or "INVALID_ARGUMENT"
+                ),
+                response=exc.response,
+            ) from exc
+        if status_code_client == 408:
+            msg = f"Timeout calling model '{model_name}' (408): {exc}"
+            raise GoogleTimeoutError(msg) from exc
+        msg = f"Error calling model '{model_name}' ({exc.status}): {exc}"
+        if error_type := _CLIENT_ERROR_TYPES.get(status_code_client):
+            raise error_type(msg) from exc
+        if status_code_client == 422:
+            raise GoogleInvalidRequestError(msg) from exc
+        raise ChatGoogleGenerativeAIError(msg) from exc
+
+    if isinstance(exc, ServerError):
+        code_srv = exc.code or 500
+        raise GoogleInteractionsAPIError(
+            code=code_srv,
+            response_json=exc.details
+            if isinstance(exc.details, dict)
+            else _interactions_error_response_json(
+                exc, code=code_srv, default_status=exc.status or "INTERNAL"
+            ),
+            response=exc.response,
+        ) from exc
+
+    status_code: int | None = getattr(exc, "status_code", None)
+    body = getattr(exc, "body", None)
+    combined_text = f"{exc} {body}" if body is not None else str(exc)
+    response = getattr(exc, "response", None)
+
+    if (
+        isinstance(exc, _InteractionsBadRequestError) or status_code == 400
+    ) and _is_context_overflow_text(combined_text):
+        raise GoogleInteractionsContextOverflowError(
+            code=400,
+            response_json=_interactions_error_response_json(
+                exc, code=400, default_status="INVALID_ARGUMENT"
+            ),
+            response=response,
+        ) from exc
+
+    if isinstance(
+        exc, (_InteractionsBadRequestError, _InteractionsUnprocessableEntityError)
+    ) or status_code in (400, 422):
+        code_4xx = status_code if status_code is not None else 400
+        msg = f"Error calling model '{model_name}' ({code_4xx}): {exc}"
+        raise GoogleInvalidRequestError(msg) from exc
+
+    if isinstance(exc, _InteractionsAuthenticationError) or status_code == 401:
+        msg = f"Error calling model '{model_name}' (401): {exc}"
+        raise GoogleAuthenticationError(msg) from exc
+
+    if isinstance(exc, _InteractionsPermissionDeniedError) or status_code == 403:
+        msg = f"Error calling model '{model_name}' (403): {exc}"
+        raise GooglePermissionDeniedError(msg) from exc
+
+    if isinstance(exc, _InteractionsNotFoundError) or status_code == 404:
+        msg = f"Error calling model '{model_name}' (404): {exc}"
+        raise GoogleModelNotFoundError(msg) from exc
+
+    if status_code == 408:
+        msg = f"Timeout calling model '{model_name}' (408): {exc}"
+        raise GoogleTimeoutError(msg) from exc
+
+    if isinstance(exc, _InteractionsRateLimitError) or status_code == 429:
+        msg = f"Error calling model '{model_name}' (429): {exc}"
+        raise GoogleRateLimitError(msg) from exc
+
+    if isinstance(exc, _InteractionsInternalServerError) or (
+        status_code is not None and 500 <= status_code < 600
+    ):
+        code_5xx = status_code if status_code is not None else 500
+        raise GoogleInteractionsAPIError(
+            code=code_5xx,
+            response_json=_interactions_error_response_json(
+                exc, code=code_5xx, default_status="INTERNAL"
+            ),
+            response=response,
+        ) from exc
+
+    if isinstance(exc, _InteractionsAPIStatusError):
+        msg = f"Error calling model '{model_name}' ({status_code}): {exc}"
+        raise ChatGoogleGenerativeAIError(msg) from exc
+
+    if isinstance(exc, (_InteractionsAPIError, _GeminiNextGenAPIClientError)):
+        code_api = status_code if status_code is not None else 500
+        raise GoogleInteractionsAPIError(
+            code=code_api,
+            response_json=_interactions_error_response_json(
+                exc, code=code_api, default_status="INTERNAL"
+            ),
+            response=response,
+        ) from exc
+
+    msg = f"Error calling model '{model_name}': {exc}"
+    raise ChatGoogleGenerativeAIError(msg) from exc
+
+
+def _clone_sdk_config(sdk_cfg: Any, **updates: Any) -> Any:
+    """Shallow-copy `SDKConfiguration` while preserving `__dict__['_hooks']`."""
+    cloned_cfg = copy.copy(sdk_cfg)
+    for attr_k, attr_v in updates.items():
+        setattr(cloned_cfg, attr_k, attr_v)
+    return cloned_cfg
+
+
+def _disable_sdk_internal_interactions_retries(interactions_client: Any) -> None:
+    """Disable internal `_gaos` retries on a private Interactions client wrapper."""
+    if _InteractionsRetryConfig is None or not type(
+        interactions_client
+    ).__module__.startswith("google.genai."):
+        return
+    sdk_cfg = getattr(interactions_client, "sdk_configuration", None)
+    retry_cfg = getattr(sdk_cfg, "retry_config", None)
+    if (
+        sdk_cfg is not None
+        and isinstance(retry_cfg, _InteractionsRetryConfig)
+        and retry_cfg.strategy != "none"
+    ):
+        interactions_client.sdk_configuration = _clone_sdk_config(
+            sdk_cfg, retry_config=_InteractionsRetryConfig("none", None, False)
+        )
+
+
+_FALLBACK_INTERACTIONS_LOCK = threading.Lock()
+_FALLBACK_SYNC_INTERACTIONS_CACHE: weakref.WeakKeyDictionary[Any, Any] = (
+    weakref.WeakKeyDictionary()
+)
+_FALLBACK_ASYNC_INTERACTIONS_CACHE: weakref.WeakKeyDictionary[Any, Any] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _merge_ephemeral_httpx_kwargs(
+    base_client_args: Mapping[str, Any] | None,
+    override_args: Mapping[str, Any],
+    *,
+    is_async: bool,
+) -> dict[str, Any]:
+    """Merge model-level `client_args` with per-request `http_options` overrides."""
+    merged: dict[str, Any] = {}
+    if isinstance(base_client_args, Mapping):
+        for k, v in base_client_args.items():
+            if k == "transport":
+                ok_transport = (
+                    isinstance(v, _HTTPX_ASYNC_TRANSPORT_TYPES)
+                    if is_async
+                    else isinstance(v, _HTTPX_SYNC_TRANSPORT_TYPES)
+                )
+                if v is not None and not ok_transport:
+                    continue
+            merged[k] = v
+    merged.update(dict(override_args))
+    merged.setdefault("follow_redirects", True)
+    return merged
+
+
+def _build_private_interactions_resource(target_client: Any, *, is_async: bool) -> Any:
+    """Instantiate an isolated Interactions resource sharing `_api_client`'s pool."""
+    api_client = getattr(target_client, "_api_client", None)
+    if api_client is not None:
+        try:
+            if is_async:
+                from google.genai._gaos.google_genai import (
+                    AsyncGeminiNextGenInteractions,
+                )
+
+                priv_a = AsyncGeminiNextGenInteractions(api_client)
+                _disable_sdk_internal_interactions_retries(priv_a)
+                return priv_a
+            from google.genai._gaos.google_genai import GeminiNextGenInteractions
+
+            priv_s = GeminiNextGenInteractions(api_client)
+            _disable_sdk_internal_interactions_retries(priv_s)
+            return priv_s
+        except ImportError:
+            pass
+
+    if not hasattr(target_client, "interactions"):
+        msg = (
+            "The installed 'google-genai' package lacks 'client.interactions'. "
+            "Upgrade to 'google-genai>=3.2.0' to use the Gemini Interactions API."
+        )
+        raise ChatGoogleGenerativeAIError(msg)
+
+    shared = target_client.interactions
+    cloned = copy.copy(shared)
+    _disable_sdk_internal_interactions_retries(cloned)
+    return cloned
+
+
+def _get_scoped_interactions_client(
+    model_instance: Any,
+    *,
+    is_async: bool = False,
+    base_url_override: str | None = None,
+    client_args_override: Mapping[str, Any] | None = None,
+    httpx_client_override: Any = None,
+) -> tuple[Any, Any]:
+    """Return `(interactions_client, ephemeral_httpx_client)` without mutating `client`.
+
+    Preserves injected unit-test mocks (`MagicMock` / custom fakes on `_interactions`),
+    keeps a thread-safe private Interactions wrapper per `ChatGoogleGenerativeAI` keyed
+    by the active `target_client` so `model.client` reassignments invalidate stale
+    wrappers cleanly, and creates a per-request scoped clone when `http_options`
+    overrides `base_url`, `client_args`/`async_client_args`, or
+    `httpx_client`/`httpx_async_client`.
+    """
+    target_client = model_instance.async_client if is_async else model_instance.client
+    if target_client is None:
+        msg = "Client not initialized."
+        raise ValueError(msg)
+
+    injected = getattr(target_client, "_interactions", None)
+    cls_interactions = getattr(type(target_client), "interactions", None)
+    has_patched_attr = "interactions" in getattr(target_client, "__dict__", {}) or (
+        cls_interactions is not None and not isinstance(cls_interactions, property)
+    )
+    is_mock_client = (
+        has_patched_attr
+        or not type(target_client).__module__.startswith("google.genai.")
+        or (
+            injected is not None
+            and not type(injected).__module__.startswith("google.genai.")
+        )
+    )
+    if is_mock_client:
+        return (
+            target_client.interactions
+            if has_patched_attr or injected is None
+            else injected
+        ), None
+
+    cleanup = getattr(model_instance, "_client_cleanup", None)
+    if not isinstance(cleanup, _ClientCleanup):
+        priv_attrs = getattr(type(model_instance), "__private_attributes__", None)
+        root_client = getattr(model_instance, "client", None)
+        if (
+            isinstance(priv_attrs, Mapping)
+            and "_client_cleanup" in priv_attrs
+            and isinstance(root_client, Client)
+        ):
+            with _FALLBACK_INTERACTIONS_LOCK:
+                cleanup = getattr(model_instance, "_client_cleanup", None)
+                if not isinstance(cleanup, _ClientCleanup):
+                    cleanup = _ClientCleanup(root_client)
+                    object.__setattr__(model_instance, "_client_cleanup", cleanup)
+
+    target_id = id(target_client)
+    base_ia: Any = None
+    if isinstance(cleanup, _ClientCleanup):
+        if is_async:
+            cleanup.register_async_loop()
+            src_attr = "_private_async_source"
+            id_attr = "_private_async_client_id"
+            ia_attr = "_private_async_interactions"
+        else:
+            src_attr = "_private_sync_source"
+            id_attr = "_private_sync_client_id"
+            ia_attr = "_private_sync_interactions"
+
+        cached_ia = getattr(cleanup, ia_attr, None)
+        if (
+            cached_ia is not None
+            and getattr(cleanup, src_attr, None) is target_client
+            and getattr(cleanup, id_attr, None) == target_id
+        ):
+            base_ia = cached_ia
+        else:
+            stale_sync_ia: Any = None
+            with cleanup._interactions_lock:
+                cached_ia = getattr(cleanup, ia_attr, None)
+                if (
+                    cached_ia is not None
+                    and getattr(cleanup, src_attr, None) is target_client
+                    and getattr(cleanup, id_attr, None) == target_id
+                ):
+                    base_ia = cached_ia
+                else:
+                    if not is_async and cached_ia is not None:
+                        stale_sync_ia = cached_ia
+                    base_ia = _build_private_interactions_resource(
+                        target_client, is_async=is_async
+                    )
+                    setattr(cleanup, src_attr, target_client)
+                    setattr(cleanup, id_attr, target_id)
+                    setattr(cleanup, ia_attr, base_ia)
+                    if not is_async and isinstance(target_client, Client):
+                        cleanup._client = target_client
+            if stale_sync_ia is not None:
+                try:
+                    _ClientCleanup._close_owned_sync_interactions(stale_sync_ia)
+                except Exception:
+                    pass
+    else:
+        fb_cache = (
+            _FALLBACK_ASYNC_INTERACTIONS_CACHE
+            if is_async
+            else _FALLBACK_SYNC_INTERACTIONS_CACHE
+        )
+        with _FALLBACK_INTERACTIONS_LOCK:
+            try:
+                base_ia = fb_cache.get(target_client)
+            except TypeError:
+                base_ia = None
+            if base_ia is None:
+                base_ia = _build_private_interactions_resource(
+                    target_client, is_async=is_async
+                )
+                try:
+                    fb_cache[target_client] = base_ia
+                except TypeError:
+                    pass
+
+    if (
+        not base_url_override
+        and not client_args_override
+        and httpx_client_override is None
+    ):
+        return base_ia, None
+
+    sdk_cfg = getattr(base_ia, "sdk_configuration", None)
+    if sdk_cfg is None or not hasattr(sdk_cfg, "server_url"):
+        msg = (
+            "Cannot apply per-request http_options base_url/client_args override: "
+            "unsupported google-genai Interactions client configuration."
+        )
+        raise GoogleInvalidRequestError(msg)
+
+    replacements: dict[str, Any] = {}
+    ephemeral_http: Any = None
+    if base_url_override:
+        replacements["server_url"] = str(base_url_override).rstrip("/")
+    if httpx_client_override is not None:
+        if is_async:
+            replacements["async_client"] = httpx_client_override
+            replacements["async_client_supplied"] = True
+        else:
+            replacements["client"] = httpx_client_override
+            replacements["client_supplied"] = True
+    elif client_args_override:
+        merged_args = _merge_ephemeral_httpx_kwargs(
+            getattr(model_instance, "client_args", None),
+            client_args_override,
+            is_async=is_async,
+        )
+        fallback_http = (
+            getattr(sdk_cfg, "async_client", None)
+            if is_async
+            else getattr(sdk_cfg, "client", None)
+        )
+        ephemeral_http = _create_httpx_client(
+            merged_args,
+            is_async=is_async,
+            fallback_client=fallback_http,
+        )
+        if is_async:
+            replacements["async_client"] = ephemeral_http
+            replacements["async_client_supplied"] = True
+        else:
+            replacements["client"] = ephemeral_http
+            replacements["client_supplied"] = True
+
+    scoped = copy.copy(base_ia)
+    scoped.sdk_configuration = _clone_sdk_config(sdk_cfg, **replacements)
+    return scoped, ephemeral_http
+
+
+def _create_interactions_retry_decorator(
+    max_retries: int | None,
+    run_manager: AsyncCallbackManagerForLLMRun | CallbackManagerForLLMRun | None = None,
+) -> Callable[[Any], Any]:
+    """Create a retry decorator covering retryable Interactions SDK exceptions."""
+    attempts = max(1, max_retries) if max_retries is not None else 1
+    return create_base_retry_decorator(
+        error_types=_INTERACTIONS_RETRYABLE_ERRORS,
+        max_retries=attempts,
+        run_manager=run_manager,
+    )
+
+
+def _promote_retryable_status_error(exc: BaseException, model_name: str) -> None:
+    """Promote retryable HTTP 408/429/5xx status errors into classified retry types."""
+    if isinstance(
+        exc, (ChatGoogleGenerativeAIError, GoogleContextOverflowError, GoogleAPIError)
+    ):
+        return
+    code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    if code == 408:
+        msg = f"Timeout calling model '{model_name}' (408): {exc}"
+        raise GoogleTimeoutError(msg) from exc
+    if code == 429:
+        msg = f"Error calling model '{model_name}' (429): {exc}"
+        raise GoogleRateLimitError(msg) from exc
+    if isinstance(code, int) and 500 <= code < 600 and code != 501:
+        details = getattr(exc, "details", None)
+        raise GoogleInteractionsAPIError(
+            code=code,
+            response_json=details
+            if isinstance(details, dict)
+            else _interactions_error_response_json(
+                exc,
+                code=code,
+                default_status=str(getattr(exc, "status", None) or "INTERNAL"),
+            ),
+            response=getattr(exc, "response", None),
+        ) from exc
+
+
+def _call_with_interactions_retry(
+    func: Callable[..., Any],
+    *,
+    model_name: str,
+    max_retries: int | None,
+    run_manager: CallbackManagerForLLMRun | None = None,
+    **call_kwargs: Any,
+) -> Any:
+    """Invoke a sync Interactions SDK method with retry and error classification."""
+    retry_decorator = _create_interactions_retry_decorator(
+        max_retries=max_retries, run_manager=run_manager
+    )
+
+    @retry_decorator
+    def _invoke() -> Any:
+        try:
+            return func(**call_kwargs)
+        except (_InteractionsAPIStatusError, ClientError, ServerError) as status_exc:
+            _promote_retryable_status_error(status_exc, model_name)
+            raise
+
+    try:
+        return _invoke()
+    except _INTERACTIONS_CATCHABLE_ERRORS as exc:
+        _handle_interactions_error(exc, model_name=model_name)
+
+
+async def _acall_with_interactions_retry(
+    func: Callable[..., Any],
+    *,
+    model_name: str,
+    max_retries: int | None,
+    run_manager: AsyncCallbackManagerForLLMRun | None = None,
+    **call_kwargs: Any,
+) -> Any:
+    """Invoke an async Interactions SDK method with retry and error classification."""
+    retry_decorator = _create_interactions_retry_decorator(
+        max_retries=max_retries, run_manager=run_manager
+    )
+
+    @retry_decorator
+    async def _ainvoke() -> Any:
+        try:
+            return await func(**call_kwargs)
+        except (_InteractionsAPIStatusError, ClientError, ServerError) as status_exc:
+            _promote_retryable_status_error(status_exc, model_name)
+            raise
+
+    try:
+        return await _ainvoke()
+    except _INTERACTIONS_CATCHABLE_ERRORS as exc:
+        _handle_interactions_error(exc, model_name=model_name)
+
+
+def _redact_mcp_tools(tools: Any) -> Any:
+    """Return a copy of `tools` with `headers` redacted on MCP server tool configs."""
+    if not isinstance(tools, Sequence) or isinstance(tools, (str, bytes)):
+        return tools
+    changed = False
+    redacted: list[Any] = []
+    for tool_item in tools:
+        candidate: Any = (
+            tool_to_dict(tool_item)
+            if isinstance(tool_item, GoogleTool) and tool_item.mcp_servers
+            else tool_item
+        )
+        mcp_key = (
+            "mcp_servers"
+            if isinstance(candidate, Mapping)
+            and isinstance(candidate.get("mcp_servers"), list)
+            else (
+                "mcpServers"
+                if isinstance(candidate, Mapping)
+                and isinstance(candidate.get("mcpServers"), list)
+                else None
+            )
+        )
+        if (
+            isinstance(candidate, Mapping)
+            and candidate.get("type") == "mcp_server"
+            and candidate.get("headers") is not None
+        ):
+            copied = dict(candidate)
+            copied["headers"] = "**REDACTED**"
+            redacted.append(copied)
+            changed = True
+        elif isinstance(candidate, Mapping) and mcp_key is not None:
+            sub_changed = False
+            sub_list: list[Any] = []
+            for srv in candidate[mcp_key]:
+                if isinstance(srv, Mapping) and (
+                    srv.get("headers") is not None
+                    or (
+                        isinstance(srv.get("streamable_http_transport"), Mapping)
+                        and srv["streamable_http_transport"].get("headers") is not None
+                    )
+                ):
+                    srv_copy = copy.deepcopy(dict(srv))
+                    if srv_copy.get("headers") is not None:
+                        srv_copy["headers"] = "**REDACTED**"
+                    if (
+                        isinstance(srv_copy.get("streamable_http_transport"), dict)
+                        and srv_copy["streamable_http_transport"].get("headers")
+                        is not None
+                    ):
+                        srv_copy["streamable_http_transport"]["headers"] = (
+                            "**REDACTED**"
+                        )
+                    sub_list.append(srv_copy)
+                    sub_changed = True
+                else:
+                    sub_list.append(srv)
+            if sub_changed:
+                outer = dict(candidate)
+                outer[mcp_key] = sub_list
+                redacted.append(outer)
+                changed = True
+            else:
+                redacted.append(tool_item)
+        else:
+            redacted.append(tool_item)
+    return redacted if changed else tools
 
 
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
@@ -387,6 +1422,42 @@ def _classified_stream(
         _handle_server_error(e)
 
 
+_ACTIVE_ASTREAM_SINK: ContextVar[list[Any] | None] = ContextVar(
+    "_ACTIVE_ASTREAM_SINK", default=None
+)
+"""Per-invocation sink used by `astream` to await inner `aclose()` deterministically."""
+
+
+async def _aclose_async_iterator(stream: Any) -> None:
+    """Close `stream` via `contextlib.aclosing` when it provides an async `aclose`."""
+    aclose_fn = getattr(stream, "aclose", None)
+    if callable(aclose_fn):
+        if inspect.iscoroutinefunction(aclose_fn):
+            async with contextlib.aclosing(cast("AsyncGenerator[Any, None]", stream)):
+                pass
+        else:
+            maybe_coro = aclose_fn()
+            if inspect.isawaitable(maybe_coro):
+                await maybe_coro
+
+
+@contextlib.asynccontextmanager
+async def _safe_aclosing(stream: Any) -> AsyncIterator[Any]:
+    """Delegate to `contextlib.aclosing` while tolerating custom `AsyncIterator`s."""
+    if callable(getattr(stream, "aclose", None)) and inspect.iscoroutinefunction(
+        stream.aclose
+    ):
+        async with contextlib.aclosing(
+            cast("AsyncGenerator[Any, None]", stream)
+        ) as managed:
+            yield managed
+    else:
+        try:
+            yield stream
+        finally:
+            await _aclose_async_iterator(stream)
+
+
 async def _aclassified_stream(
     response: AsyncIterator[GenerateContentResponse], request: dict[str, Any]
 ) -> AsyncIterator[GenerateContentResponse]:
@@ -404,8 +1475,9 @@ async def _aclassified_stream(
         Each chunk the SDK produces.
     """
     try:
-        async for chunk in response:
-            yield chunk
+        async with _safe_aclosing(response) as managed_response:
+            async for chunk in managed_response:
+                yield chunk
     except ClientError as e:
         _handle_client_error(e, request)
     except ServerError as e:
@@ -505,6 +1577,11 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
     return merged
 
 
+# Vertex AI `generateContent` selects the service tier via this header rather than
+# the request body field (`GenerateContentConfig.service_tier`).
+_VERTEX_SERVICE_TIER_HEADER = "X-Vertex-AI-LLM-Shared-Request-Type"
+
+
 # Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
 # custom sampling parameters and disallows prefilling model turns. Per Google's
 # docs these rules apply to "these models and all future Gemini model releases",
@@ -573,6 +1650,8 @@ def _provider_resolved_uri(block: Mapping[str, Any]) -> str | None:
     if not isinstance(url, str) or not url:
         return None
     if url.startswith("gs://"):
+        return url
+    if url.startswith("files/") and not os.path.exists(url):
         return url
     host = urlparse(url).hostname or ""
     if any(host == h or host.endswith(f".{h}") for h in _PROVIDER_RESOLVED_HOSTS):
@@ -836,7 +1915,7 @@ def _convert_to_parts(
                     if thought_sig:
                         image_part.thought_signature = thought_sig
                     parts.append(image_part)
-                elif part["type"] == "media":
+                elif part["type"] in ("media", "file_data"):
                     # Handle `media` following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
                     # Inline bytes carry no type information, so a MIME type is
@@ -945,6 +2024,12 @@ def _convert_to_parts(
                         )
                     )
                 elif part["type"] == "server_tool_call":
+                    call_extras = part.get("extras")
+                    step_tag = (
+                        call_extras.get("step_type")
+                        if isinstance(call_extras, Mapping)
+                        else None
+                    )
                     if part.get("name") == _MEDIA_PROCESSING_TOOL_NAME:
                         # Media processing steps are returned by the server for
                         # observability but cannot be replayed: the GenerateContent API
@@ -960,6 +2045,34 @@ def _convert_to_parts(
                             executable_code=ExecutableCode(language=language, code=code)
                         )
                         parts.append(executable_code_part)
+                    elif (
+                        part.get("name")
+                        in {
+                            "google_search",
+                            "google_maps",
+                            "url_context",
+                            "file_search",
+                            "retrieval",
+                            "remote_mcp",
+                        }
+                        or step_tag
+                        in {
+                            "google_search_call",
+                            "google_maps_call",
+                            "url_context_call",
+                            "file_search_call",
+                            "mcp_server_tool_call",
+                            "retrieval_call",
+                            "processing_call",
+                        }
+                        or (
+                            isinstance(call_extras, Mapping)
+                            and bool(call_extras.get("server_name"))
+                        )
+                    ):
+                        # Interactions server tool calls other than code execution have
+                        # no echoed Part equivalent on GenerateContent.
+                        continue
                     else:
                         warnings.warn(
                             f"Server tool call with name '{part.get('name')}' is not "
@@ -983,13 +2096,15 @@ def _convert_to_parts(
                     parts.append(executable_code_part)
                 elif part["type"] == "server_tool_result":
                     extras = part.get("extras")
-                    if (
-                        isinstance(extras, Mapping)
-                        and extras.get("block_type") == _MEDIA_PROCESSING_TOOL_NAME
+                    if isinstance(extras, Mapping) and (
+                        extras.get("block_type") not in (None, "code_execution_result")
+                        or extras.get("step_type")
+                        not in (None, "code_execution_result")
                     ):
-                        # Paired with the media processing call skipped above.
-                        # Replaying it would also be rejected, and it must not be
-                        # misread as a code execution result.
+                        # Non-code server tool results (media_processing, MCP, Google
+                        # Search, Maps, URL context, file search, retrieval) have no
+                        # echoed Part equivalent on GenerateContent and must never be
+                        # fabricated as orphaned CodeExecutionResult parts.
                         continue
                     output = part.get("output", "")
                     status = part.get("status", "success")
@@ -999,8 +2114,8 @@ def _convert_to_parts(
                         else CodeExecutionResultOutcome.OUTCOME_FAILED
                     )
                     # Check extras for original outcome if available
-                    if "extras" in part and "outcome" in part["extras"]:
-                        outcome = part["extras"]["outcome"]
+                    if isinstance(extras, Mapping) and "outcome" in extras:
+                        outcome = extras["outcome"]
                     code_execution_result_part = Part(
                         code_execution_result=CodeExecutionResult(
                             output=str(output), outcome=outcome
@@ -1334,7 +2449,7 @@ def _content_block_file_uri(block: Any) -> Any:
     block_type = block.get("type")
     if block_type in ("file_data", "media"):
         return block.get("file_uri")
-    if block_type == "file":
+    if block_type in ("file", "video", "audio"):
         return block.get("file_id") or block.get("url")
     if block_type == "image":
         return block.get("url")
@@ -1452,7 +2567,10 @@ def _convert_ai_message_content(
     provider_kind = _classify_model_provider(
         message.response_metadata.get("model_provider")
     )
-    is_v1_content = message.response_metadata.get("output_version") == "v1"
+    is_v1_content = message.response_metadata.get("output_version") in (
+        "v1",
+        "interactions/v1",
+    )
     if is_v1_content:
         content: list[Any] = _convert_from_v1_to_generativelanguage_v1beta(
             cast("list[types.ContentBlock]", message.content),
@@ -3402,6 +4520,88 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         `cachedContents/{cachedContent}`.
     """
 
+    use_interactions_api: bool | None = None
+    """Whether to route requests through the Gemini Interactions API.
+
+    If `None` (default), `ChatGoogleGenerativeAI` checks
+    `LANGCHAIN_GOOGLE_USE_INTERACTIONS_API`, `output_version="interactions/v1"`, and
+    auto-routes when Interactions-specific options (`use_previous_interaction_id`,
+    `previous_interaction_id`, `continuation_token`, `automatic_continuation`, `agent`,
+    `agent_config`, `background`, `environment`, `webhook_config`, `deep-research-*` /
+    `antigravity-*` models, or `file_search` / `mcp_server` / `retrieval` server tools)
+    are active.
+
+    !!! warning "Beta feature"
+
+        The Gemini Interactions API is currently in public beta (`v1beta` / `v1beta1`)
+        and its wire schema and preview capabilities may evolve across releases.
+    """
+
+    use_previous_interaction_id: bool = False
+    """Whether to chain stateful multi-turn sessions via `previous_interaction_id`.
+
+    When `True`, enables server-side interaction storage (`store=True`) unless
+    explicitly overridden and sends only messages following the most recent stored
+    Google `AIMessage` alongside `previous_interaction_id`.
+
+    !!! warning "Beta feature"
+
+        Stateful session chaining relies on the Gemini Interactions API (`store=True`).
+    """
+
+    store: bool | None = None
+    """Whether the Interactions API should persist the interaction server-side.
+
+    When `None`, defaults to `True` if stateful chaining, `background=True`, or `agent`
+    execution is active, and `False` otherwise for zero data retention parity with
+    `generateContent`.
+    """
+
+    service_tier: Literal["flex", "standard", "priority"] | ServiceTier | str | None = (
+        None
+    )
+    """Request pricing and performance tier (`'flex'`, `'standard'`, or `'priority'`).
+
+    Applies to both `generateContent` (sent as `service_tier` on the Gemini Developer
+    API and as the `X-Vertex-AI-LLM-Shared-Request-Type` header on Vertex AI) and the
+    Interactions API. Can be overridden per request via invocation kwargs.
+    """
+
+    agent: str | None = None
+    """Name of a server-hosted Gemini agent (e.g. `'deep-research-preview-04-2026'`).
+
+    When specified, creates an agent interaction (`CreateAgentInteraction`) instead of a
+    standard model interaction.
+
+    !!! warning "Experimental"
+
+        Agent interactions are in preview in `google-genai` and may change in future
+        versions.
+    """
+
+    agent_config: dict[str, Any] | None = None
+    """Configuration dictionary passed to `CreateAgentInteraction`.
+
+    !!! warning "Experimental"
+
+        Agent configuration schemas are in preview and may change in future versions.
+    """
+
+    environment: str | dict[str, Any] | None = None
+    """Execution environment identifier or configuration for Interactions runs.
+
+    !!! warning "Experimental"
+
+        Interactions execution environments are in preview and may change in future
+        versions.
+    """
+
+    background: bool | None = None
+    """Whether to run the interaction asynchronously in the background."""
+
+    polling_interval: float | None = None
+    """Seconds between `interactions.get` polls for background runs (`2.0` default)."""
+
     def __init__(self, **kwargs: Any) -> None:
         """Needed for arg validation."""
         # Get all valid field names, including aliases
@@ -3529,6 +4729,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "presence_penalty must be in the range [-2.0, 2.0]"
             raise ValueError(msg)
 
+        if self.polling_interval is not None and self.polling_interval <= 0:
+            msg = "polling_interval must be positive"
+            raise ValueError(msg)
+
         additional_headers = self.additional_headers or {}
         self.default_metadata = tuple(additional_headers.items())
 
@@ -3637,6 +4841,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             self.profile = _get_default_model_profile(model_id)
         return self
 
+    def _ensure_client_cleanup(self) -> _ClientCleanup | None:
+        cleanup = getattr(self, "_client_cleanup", None)
+        if isinstance(cleanup, _ClientCleanup):
+            return cleanup
+        if isinstance(self.client, Client):
+            with _FALLBACK_INTERACTIONS_LOCK:
+                cleanup = getattr(self, "_client_cleanup", None)
+                if not isinstance(cleanup, _ClientCleanup):
+                    cleanup = _ClientCleanup(self.client)
+                    object.__setattr__(self, "_client_cleanup", cleanup)
+            return cleanup
+        return None
+
     @property
     def async_client(self) -> Any:
         """Async client for Google GenAI operations..
@@ -3651,7 +4868,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized. Initialize the model first."
             raise ValueError(msg)
-        self._client_cleanup.register_async_loop()
+        cleanup = self._ensure_client_cleanup()
+        if cleanup is not None:
+            cleanup.register_async_loop()
         return self.client.aio
 
     async def aclose(self) -> None:
@@ -3663,7 +4882,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             RuntimeError: If called from a different event loop than the one used for
                 async requests.
         """
-        await self._client_cleanup.aclose()
+        cleanup = self._ensure_client_cleanup()
+        if cleanup is not None:
+            await cleanup.aclose()
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
@@ -3685,7 +4906,105 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "thinking_level": self.reasoning_effort,
             "thinking_config": self.thinking_config,
             "image_config": self.image_config,
+            "use_interactions_api": self.use_interactions_api,
+            "use_previous_interaction_id": self.use_previous_interaction_id,
+            "store": self.store,
+            "service_tier": self.service_tier,
+            "agent": self.agent,
+            "agent_config": self.agent_config,
+            "environment": self.environment,
+            "background": self.background,
         }
+
+    def _use_interactions_api(self, kwargs: Mapping[str, Any]) -> bool:
+        """Determine whether to route a request through the Gemini Interactions API.
+
+        Args:
+            kwargs: Per-call invocation keyword arguments.
+
+        Returns:
+            `True` when the request should use `client.interactions`, `False` when it
+            should use `client.models.generate_content`.
+        """
+        kw_flag = kwargs.get("use_interactions_api")
+        if isinstance(kw_flag, bool):
+            return kw_flag
+        mk_flag = self.model_kwargs.get("use_interactions_api")
+        if isinstance(mk_flag, bool):
+            return mk_flag
+        if isinstance(self.use_interactions_api, bool):
+            return self.use_interactions_api
+
+        env_val = os.environ.get("LANGCHAIN_GOOGLE_USE_INTERACTIONS_API")
+        if env_val is not None:
+            normalized_env = env_val.strip().lower()
+            if normalized_env in {"1", "true", "yes"}:
+                return True
+            if normalized_env in {"0", "false", "no"}:
+                return False
+
+        if (
+            self.output_version == "interactions/v1"
+            or kwargs.get("output_version") == "interactions/v1"
+        ):
+            return True
+
+        if (
+            self.use_previous_interaction_id
+            or bool(kwargs.get("use_previous_interaction_id"))
+            or bool(self.model_kwargs.get("use_previous_interaction_id"))
+        ):
+            return True
+
+        if (
+            kwargs.get("previous_interaction_id") is not None
+            or self.model_kwargs.get("previous_interaction_id") is not None
+            or kwargs.get("continuation_token") is not None
+            or self.model_kwargs.get("continuation_token") is not None
+            or kwargs.get("automatic_continuation") is not None
+            or self.model_kwargs.get("automatic_continuation") is not None
+        ):
+            return True
+
+        for attr_name in (
+            "agent",
+            "agent_config",
+            "background",
+            "environment",
+        ):
+            if (
+                getattr(self, attr_name) is not None
+                or kwargs.get(attr_name) is not None
+                or self.model_kwargs.get(attr_name) is not None
+            ):
+                return True
+
+        if (
+            kwargs.get("webhook_config") is not None
+            or self.model_kwargs.get("webhook_config") is not None
+        ):
+            return True
+
+        effective_model = (
+            kwargs.get("model") or self.model_kwargs.get("model") or self.model
+        )
+        if isinstance(effective_model, str):
+            stripped_model = _normalize_gemini_model_name(effective_model)
+            if stripped_model.startswith(_INTERACTIONS_AUTO_MODEL_PREFIXES):
+                return True
+
+        for tool_source in (kwargs.get("tools"), self.model_kwargs.get("tools")):
+            if isinstance(tool_source, Sequence) and not isinstance(
+                tool_source, (str, bytes)
+            ):
+                for tool_item in tool_source:
+                    if (
+                        isinstance(tool_item, Mapping)
+                        and tool_item.get("type") in _INTERACTIONS_ONLY_TOOL_TYPES
+                    ):
+                        return True
+
+        return False
 
     def invoke(
         self,
@@ -3714,13 +5033,65 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         return super().invoke(input, config, stop=stop, **kwargs)
 
+    async def astream(
+        self,
+        input: LanguageModelInput,
+        config: RunnableConfig | None = None,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[AIMessageChunk]:
+        """Stream response chunks asynchronously, closing inner streams cleanly."""
+        active_streams: list[Any] = []
+        outer_stream = super().astream(input, config=config, stop=stop, **kwargs)
+        try:
+            async with _safe_aclosing(outer_stream) as managed_outer:
+                aiterator = managed_outer.__aiter__()
+                while True:
+                    token = _ACTIVE_ASTREAM_SINK.set(active_streams)
+                    try:
+                        chunk = await aiterator.__anext__()
+                    except StopAsyncIteration:
+                        break
+                    finally:
+                        _ACTIVE_ASTREAM_SINK.reset(token)
+                    yield chunk
+        finally:
+            for inner_stream in reversed(active_streams):
+                await _aclose_async_iterator(inner_stream)
+
+    def _get_invocation_params(
+        self, stop: list[str] | None = None, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Get invocation parameters with sensitive MCP headers redacted."""
+        params = super()._get_invocation_params(stop=stop, **kwargs)
+        params.pop("_structured_output_schema", None)
+        if "tools" in params:
+            params["tools"] = _redact_mcp_tools(params["tools"])
+        model_kw = params.get("model_kwargs")
+        if isinstance(model_kw, Mapping) and "tools" in model_kw:
+            redacted_tools = _redact_mcp_tools(model_kw["tools"])
+            if redacted_tools is not model_kw["tools"]:
+                copied_mk = dict(model_kw)
+                copied_mk["tools"] = redacted_tools
+                params["model_kwargs"] = copied_mk
+        return params
+
     def _get_ls_params(
         self, stop: list[str] | None = None, **kwargs: Any
     ) -> LangSmithParams:
         """Get standard params for tracing."""
         params = self._get_invocation_params(stop=stop, **kwargs)
         models_prefix = "models/"
-        raw_model = params.get("model") or self.model
+        raw_model: str | None
+        if self._use_interactions_api(kwargs) and (
+            active_agent := kwargs.get("agent")
+            or self.agent
+            or self.model_kwargs.get("agent")
+        ):
+            raw_model = str(active_agent)
+        else:
+            raw_model = params.get("model") or self.model
         ls_model_name = (
             raw_model[len(models_prefix) :]
             if raw_model and raw_model.startswith(models_prefix)
@@ -3988,9 +5359,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             raise ValueError(msg)
 
+        # Bridge inline latitude/longitude from Interactions-shaped google_maps tool
+        effective_tool_config = tool_config
+        if effective_tool_config is None and tools:
+            for raw_t in tools:
+                if (
+                    isinstance(raw_t, Mapping)
+                    and raw_t.get("type") == "google_maps"
+                    and raw_t.get("latitude") is not None
+                    and raw_t.get("longitude") is not None
+                ):
+                    raw_map_t = cast("Mapping[str, Any]", raw_t)
+                    effective_tool_config = {
+                        "retrieval_config": {
+                            "lat_lng": {
+                                "latitude": float(raw_map_t["latitude"]),
+                                "longitude": float(raw_map_t["longitude"]),
+                            }
+                        }
+                    }
+                    break
+
         # Process tool configuration
         formatted_tool_config = self._process_tool_config(
-            tool_choice, tool_config, formatted_tools
+            tool_choice, effective_tool_config, formatted_tools
         )
 
         # Process safety settings
@@ -4011,6 +5403,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         # Handle OpenAI-style `strict` kwarg (used by langchain.agents.create_agent)
         # Google's json_schema is inherently strict, so we just consume this.
         kwargs.pop("strict", None)
+        kwargs.pop("use_interactions_api", None)
 
         # Handle OpenAI-style `response_format` kwarg
         # Ref: https://platform.openai.com/docs/guides/structured-outputs
@@ -4038,6 +5431,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if labels is None:
             labels = self.labels
 
+        service_tier = kwargs.pop("service_tier", None)
+        if service_tier is None:
+            service_tier = self.service_tier
+        if service_tier is None:
+            service_tier = self.model_kwargs.get("service_tier")
+
         _consumed_kwargs = {
             "thinking_budget",
             "thinking_level",
@@ -4046,6 +5445,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             "response_schema",
             "response_json_schema",
             "response_mime_type",
+            "_structured_output_schema",
         }
         _consumed_kwargs.update(params.model_fields_set)
         # Filter out kwargs already consumed by _prepare_params.
@@ -4067,6 +5467,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             max_retries=max_retries,
             image_config=image_config,
             labels=labels,
+            service_tier=service_tier,
             **remaining_kwargs,
         )
 
@@ -4225,6 +5626,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         max_retries: int | None = None,
         image_config: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        service_tier: ServiceTier | str | None = None,
         **kwargs: Any,
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
@@ -4246,6 +5648,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options = HttpOptions(
                 timeout=timeout,
                 retry_options=retry_options,
+            )
+
+        # Vertex AI `generateContent` selects the billing tier via header rather than
+        # the body `service_tier` field. Merge before `per_request_http_options` so
+        # explicit caller-supplied headers still take precedence.
+        config_service_tier: Any = service_tier
+        if service_tier is not None and self._use_vertexai:  # type: ignore[attr-defined]
+            config_service_tier = None
+            tier_header_val = (
+                str(service_tier.value)
+                if isinstance(service_tier, Enum)
+                else str(service_tier)
+            ).lower()
+            http_options = _merge_http_options(
+                http_options,
+                HttpOptions(headers={_VERTEX_SERVICE_TIER_HEADER: tier_header_val}),
             )
 
         if per_request_http_options is not None:
@@ -4289,9 +5707,150 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             http_options=http_options,
             image_config=image_config_obj,
             labels=labels,
+            service_tier=config_service_tier,
             **request_params,
             **kwargs,
         )
+
+    def _generate_interactions(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        *,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | ToolConfig | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Execute a synchronous request via the Gemini Interactions API."""
+        from langchain_google_genai._interactions_response import (
+            generate_interactions,
+        )
+
+        return generate_interactions(
+            self,
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content,
+            tool_choice=tool_choice,
+            **kwargs,
+        )
+
+    async def _agenerate_interactions(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        *,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | ToolConfig | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Execute an asynchronous request via the Gemini Interactions API."""
+        from langchain_google_genai._interactions_response import (
+            agenerate_interactions,
+        )
+
+        return await agenerate_interactions(
+            self,
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content,
+            tool_choice=tool_choice,
+            **kwargs,
+        )
+
+    def _stream_interactions(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        *,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | ToolConfig | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        """Stream chunks synchronously from the Gemini Interactions API."""
+        from langchain_google_genai._interactions_stream import stream_interactions
+
+        yield from stream_interactions(
+            self,
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            tools=tools,
+            functions=functions,
+            safety_settings=safety_settings,
+            tool_config=tool_config,
+            generation_config=generation_config,
+            cached_content=cached_content,
+            tool_choice=tool_choice,
+            **kwargs,
+        )
+
+    async def _astream_interactions(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        *,
+        tools: Sequence[_ToolDict | GoogleTool] | None = None,
+        functions: Sequence[_FunctionDeclarationType] | None = None,
+        safety_settings: SafetySettingDict | None = None,
+        tool_config: dict | ToolConfig | None = None,
+        generation_config: dict[str, Any] | None = None,
+        cached_content: str | None = None,
+        tool_choice: _ToolChoiceType | bool | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        """Stream chunks asynchronously from the Gemini Interactions API."""
+        from langchain_google_genai._interactions_stream import astream_interactions
+
+        async with contextlib.aclosing(
+            astream_interactions(
+                self,
+                messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
+        ) as astream_iter:
+            async for chunk in astream_iter:
+                yield chunk
 
     def _generate(
         self,
@@ -4311,6 +5870,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        routing_kwargs = {**kwargs, "tools": tools} if tools is not None else kwargs
+        use_interactions = self._use_interactions_api(routing_kwargs)
+        kwargs.pop("use_interactions_api", None)
+        if use_interactions:
+            return self._generate_interactions(
+                messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
 
         request = self._prepare_request(
             messages,
@@ -4353,6 +5930,24 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        routing_kwargs = {**kwargs, "tools": tools} if tools is not None else kwargs
+        use_interactions = self._use_interactions_api(routing_kwargs)
+        kwargs.pop("use_interactions_api", None)
+        if use_interactions:
+            return await self._agenerate_interactions(
+                messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
 
         request = self._prepare_request(
             messages,
@@ -4397,6 +5992,25 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized."
             raise ValueError(msg)
+
+        routing_kwargs = {**kwargs, "tools": tools} if tools is not None else kwargs
+        use_interactions = self._use_interactions_api(routing_kwargs)
+        kwargs.pop("use_interactions_api", None)
+        if use_interactions:
+            yield from self._stream_interactions(
+                messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
+            return
 
         request = self._prepare_request(
             messages,
@@ -4460,6 +6074,30 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = "Client not initialized."
             raise ValueError(msg)
 
+        routing_kwargs = {**kwargs, "tools": tools} if tools is not None else kwargs
+        use_interactions = self._use_interactions_api(routing_kwargs)
+        kwargs.pop("use_interactions_api", None)
+        if use_interactions:
+            ia_stream = self._astream_interactions(
+                messages,
+                stop=stop,
+                run_manager=run_manager,
+                tools=tools,
+                functions=functions,
+                safety_settings=safety_settings,
+                tool_config=tool_config,
+                generation_config=generation_config,
+                cached_content=cached_content,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
+            if (active_sink := _ACTIVE_ASTREAM_SINK.get()) is not None:
+                active_sink.append(ia_stream)
+            async with _safe_aclosing(ia_stream) as managed_ia_stream:
+                async for ichunk in managed_ia_stream:
+                    yield ichunk
+            return
+
         request = self._prepare_request(
             messages,
             stop=stop,
@@ -4477,28 +6115,31 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         stream = await self.async_client.models.generate_content_stream(
             **request,
         )
+        gc_stream = _aclassified_stream(stream, request)
+        if (active_gc_sink := _ACTIVE_ASTREAM_SINK.get()) is not None:
+            active_gc_sink.append(gc_stream)
+        async with _safe_aclosing(gc_stream) as managed_gc_stream:
+            saw_tool_call = False
+            async for chunk in managed_gc_stream:
+                _chat_result = _response_to_result(
+                    chunk, stream=True, prev_usage=prev_usage_metadata
+                )
+                gen = cast("ChatGenerationChunk", _chat_result.generations[0])
+                message = cast("AIMessageChunk", gen.message)
 
-        saw_tool_call = False
-        async for chunk in _aclassified_stream(stream, request):
-            _chat_result = _response_to_result(
-                chunk, stream=True, prev_usage=prev_usage_metadata
-            )
-            gen = cast("ChatGenerationChunk", _chat_result.generations[0])
-            message = cast("AIMessageChunk", gen.message)
+                # populate index if missing
+                indexer.assign(message)
+                saw_tool_call = _mark_streamed_tool_call(gen, saw_tool_call)
 
-            # populate index if missing
-            indexer.assign(message)
-            saw_tool_call = _mark_streamed_tool_call(gen, saw_tool_call)
+                prev_usage_metadata = (
+                    message.usage_metadata
+                    if prev_usage_metadata is None
+                    else add_usage(prev_usage_metadata, message.usage_metadata)
+                )
 
-            prev_usage_metadata = (
-                message.usage_metadata
-                if prev_usage_metadata is None
-                else add_usage(prev_usage_metadata, message.usage_metadata)
-            )
-
-            if run_manager:
-                await run_manager.on_llm_new_token(gen.text, chunk=gen)
-            yield gen
+                if run_manager:
+                    await run_manager.on_llm_new_token(gen.text, chunk=gen)
+                yield gen
 
     def get_num_tokens(self, text: str) -> int:
         """Get the number of tokens present in the text. Uses the model's tokenizer.
@@ -4679,6 +6320,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             # Note: The Google GenAI SDK automatically handles schema transformation
             # (inlining $defs, resolving $ref) via its process_schema() function.
             # This ensures Union types and nested schemas work correctly.
+            bind_so_kwargs: dict[str, Any] = {}
+            if isinstance(schema, type) and is_basemodel_subclass(schema):
+                bind_so_kwargs["_structured_output_schema"] = schema
             llm = self.bind(
                 response_mime_type="application/json",
                 response_json_schema=schema_json,
@@ -4686,6 +6330,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                     "kwargs": {"method": method},
                     "schema": ls_schema,
                 },
+                **bind_so_kwargs,
             )
         else:
             # LangChain tool calling structured output method (discouraged)
@@ -4783,12 +6428,87 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 while also providing additional configuration like `retrieval_config`.
             **kwargs: Any additional parameters to pass to the `Runnable` constructor.
         """
-        try:
-            formatted_tools: list = [convert_to_openai_tool(tool) for tool in tools]  # type: ignore[arg-type]
-        except Exception:
-            formatted_tools = [
-                tool_to_dict(t) for t in convert_to_genai_function_declarations(tools)
-            ]
+        formatted_tools: list[Any] = []
+        for tool in tools:
+            if isinstance(tool, Mapping):
+                mcp_shorthand = tool.get("mcp_servers") or tool.get("mcpServers")
+                is_ia_mcp_shorthand = (
+                    set(tool) in ({"mcp_servers"}, {"mcpServers"})
+                    and isinstance(mcp_shorthand, list)
+                    and any(
+                        isinstance(srv, Mapping)
+                        and any(
+                            k in srv
+                            for k in (
+                                "url",
+                                "streamable_http_url",
+                                "headers",
+                                "allowed_tools",
+                            )
+                        )
+                        for srv in mcp_shorthand
+                    )
+                )
+                if (
+                    tool.get("type") in _INTERACTIONS_SERVER_TOOL_TYPES
+                    or (tool.get("type") == "function" and "name" in tool)
+                    or is_ia_mcp_shorthand
+                ):
+                    formatted_tools.append(copy.deepcopy(dict(tool)))
+                elif (
+                    "name" in tool
+                    and "input_schema" in tool
+                    and "parameters" not in tool
+                ):
+                    params_in = copy.deepcopy(dict(tool["input_schema"]))
+                    params_in.setdefault("type", "object")
+                    params_in.setdefault("properties", {})
+                    fn_obj: dict[str, Any] = {
+                        "name": str(tool["name"]),
+                        "parameters": params_in,
+                    }
+                    if tool.get("description"):
+                        fn_obj["description"] = str(tool["description"])
+                    formatted_tools.append({"type": "function", "function": fn_obj})
+                else:
+                    try:
+                        formatted_tools.append(
+                            convert_to_openai_tool(copy.deepcopy(dict(tool)))
+                        )
+                    except Exception:
+                        formatted_tools.extend(
+                            tool_to_dict(t)
+                            for t in convert_to_genai_function_declarations([tool])
+                        )
+            elif isinstance(tool, Runnable) and not isinstance(tool, BaseTool):
+                formatted_tools.append(convert_to_openai_tool(tool.as_tool()))
+            elif isinstance(tool, GoogleTool):
+                formatted_tools.append(tool_to_dict(tool))
+            elif isinstance(tool, FunctionDeclaration):
+                dumped_fd = tool.model_dump(exclude_none=True)
+                if dumped_fd.get("parameters_json_schema") is not None:
+                    fn_fd: dict[str, Any] = {
+                        "name": str(dumped_fd["name"]),
+                        "parameters": copy.deepcopy(
+                            dumped_fd["parameters_json_schema"]
+                        ),
+                    }
+                    if dumped_fd.get("description"):
+                        fn_fd["description"] = str(dumped_fd["description"])
+                    formatted_tools.append({"type": "function", "function": fn_fd})
+                else:
+                    formatted_tools.extend(
+                        tool_to_dict(t)
+                        for t in convert_to_genai_function_declarations([tool])
+                    )
+            else:
+                try:
+                    formatted_tools.append(convert_to_openai_tool(tool))
+                except Exception:
+                    formatted_tools.extend(
+                        tool_to_dict(t)
+                        for t in convert_to_genai_function_declarations([tool])
+                    )
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
         if tool_config:
