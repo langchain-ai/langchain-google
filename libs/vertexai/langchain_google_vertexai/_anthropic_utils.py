@@ -25,6 +25,7 @@ from langchain_core.messages.ai import InputTokenDetails, UsageMetadata
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
+from typing_extensions import TypeGuard
 
 from langchain_google_vertexai._image_utils import (
     ImageBytesLoader,
@@ -328,6 +329,30 @@ class AnthropicTool(TypedDict):
     name: str
     description: str
     input_schema: dict[str, Any]
+
+
+_ANTHROPIC_BUILTIN_TOOL_PREFIXES = (
+    "text_editor_",
+    "computer_",
+    "bash_",
+    "web_search_",
+    "web_fetch_",
+    "code_execution_",
+    "mcp_toolset",
+    "memory_",
+    "tool_search_",
+    "advisor_",
+)
+
+
+def _is_anthropic_builtin_tool(tool: Any) -> TypeGuard[dict[str, Any]]:
+    """Return whether a tool is an Anthropic server-side tool definition."""
+    if not isinstance(tool, dict):
+        return False
+    tool_type = tool.get("type")
+    return isinstance(tool_type, str) and tool_type.startswith(
+        _ANTHROPIC_BUILTIN_TOOL_PREFIXES
+    )
 
 
 def convert_to_anthropic_tool(
@@ -660,6 +685,7 @@ def _make_message_chunk_from_anthropic_event(
     *,
     stream_usage: bool = True,
     coerce_content_to_string: bool,
+    block_type: str | None = None,
 ) -> AIMessageChunk | None:
     """Convert Anthropic event to `AIMessageChunk`.
 
@@ -689,21 +715,29 @@ def _make_message_chunk_from_anthropic_event(
     elif (
         event.type == "content_block_start"
         and event.content_block is not None
-        and event.content_block.type == "tool_use"
+        and (
+            "tool_use" in event.content_block.type
+            or "tool_result" in event.content_block.type
+        )
     ):
         if coerce_content_to_string:
             warnings.warn("Received unexpected tool content block.")
         content_block = event.content_block.model_dump()
         content_block["index"] = event.index
-        tool_call_chunk = {
-            "index": event.index,
-            "id": event.content_block.id,
-            "name": event.content_block.name,
-            "args": "",
-        }
+        if event.content_block.type == "tool_use":
+            tool_call_chunks = [
+                {
+                    "index": event.index,
+                    "id": event.content_block.id,
+                    "name": event.content_block.name,
+                    "args": "",
+                }
+            ]
+        else:
+            tool_call_chunks = []
         message_chunk = AIMessageChunk(
             content=[content_block],
-            tool_call_chunks=[tool_call_chunk],
+            tool_call_chunks=tool_call_chunks,
         )
     elif event.type == "content_block_delta":
         if event.delta.type == "text_delta":
@@ -725,16 +759,20 @@ def _make_message_chunk_from_anthropic_event(
         elif event.delta.type == "input_json_delta":
             content_block = event.delta.model_dump()
             content_block["index"] = event.index
-            content_block["type"] = "tool_use"
-            tool_call_chunk = {
-                "index": event.index,
-                "id": None,
-                "name": None,
-                "args": event.delta.partial_json,
-            }
+            if block_type in (None, "tool_use"):
+                tool_call_chunks = [
+                    {
+                        "index": event.index,
+                        "id": None,
+                        "name": None,
+                        "args": event.delta.partial_json,
+                    }
+                ]
+            else:
+                tool_call_chunks = []
             message_chunk = AIMessageChunk(
                 content=[content_block],
-                tool_call_chunks=[tool_call_chunk],
+                tool_call_chunks=tool_call_chunks,
             )
     elif event.type == "message_delta" and stream_usage:
         # Follow official langchain_anthropic pattern - NO cache tokens for delta
