@@ -188,15 +188,18 @@ def test_api_version_forwarded_to_http_options() -> None:
     assert call_http_options.api_version == "v1"
 
 
-def test_api_version_defaults_to_none_embeddings() -> None:
-    """`api_version` is unset by default, deferring to the SDK's default."""
+def test_api_version_defaults_to_v1beta_embeddings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Gemini Developer API defaults to `v1beta`, not the SDK's `v1`."""
+    monkeypatch.delenv("GOOGLE_GENAI_API_VERSION", raising=False)
     with patch("langchain_google_genai.embeddings.Client") as mock_client:
         GoogleGenerativeAIEmbeddings(
             model=MODEL_NAME,
             google_api_key=SecretStr("test-api-key"),
         )
     call_http_options = mock_client.call_args.kwargs["http_options"]
-    assert call_http_options.api_version is None
+    assert call_http_options.api_version == "v1beta"
 
 
 def test_embed_query_default_task_type() -> None:

@@ -11,9 +11,10 @@ from collections.abc import Generator, Sequence
 from typing import Literal, cast
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 import requests
+from google.genai.errors import ServerError
 from google.genai.types import (
     FunctionCallingConfig,
     FunctionCallingConfigMode,
@@ -53,7 +54,18 @@ _IMAGE_OUTPUT_MODEL = "gemini-2.5-flash-image"
 _IMAGE_EDITING_MODEL = "gemini-3-pro-image-preview"
 _AUDIO_OUTPUT_MODEL = "gemini-2.5-flash-preview-tts"
 _THINKING_MODEL = "gemini-3.5-flash"
+_AGENTIC_VIDEO_MODEL = "gemini-3.7-flash"
 _B64_string = """iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAIAAAAC64paAAABhGlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV8/xCIVQTuIKGSoTi2IijhqFYpQIdQKrTqYXPoFTRqSFBdHwbXg4Mdi1cHFWVcHV0EQ/ABxdXFSdJES/5cUWsR4cNyPd/ced+8Af6PCVDM4DqiaZaSTCSGbWxW6XxHECPoRQ0hipj4niil4jq97+Ph6F+dZ3uf+HL1K3mSATyCeZbphEW8QT29aOud94ggrSQrxOXHMoAsSP3JddvmNc9FhP8+MGJn0PHGEWCh2sNzBrGSoxFPEUUXVKN+fdVnhvMVZrdRY6578heG8trLMdZrDSGIRSxAhQEYNZVRgIU6rRoqJNO0nPPxDjl8kl0yuMhg5FlCFCsnxg//B727NwuSEmxROAF0vtv0xCnTvAs26bX8f23bzBAg8A1da219tADOfpNfbWvQI6NsGLq7bmrwHXO4Ag0+6ZEiOFKDpLxSA9zP6phwwcAv0rLm9tfZx+gBkqKvUDXBwCIwVKXvd492hzt7+PdPq7wdzbXKn5swsVgAAA8lJREFUeJx90dtPHHUUB/Dz+81vZhb2wrDI3soUKBSRcisF21iqqCRNY01NTE0k8aHpi0k18VJfjOFvUF9M44MmGrHFQqSQiKSmFloL5c4CXW6Fhb0vO3ufvczMzweiBGI9+eW8ffI95/yQqqrwv4UxBgCfJ9w/2NfSVB+Nyn6/r+vdLo7H6FkYY6yoABR2PJujj34MSo/d/nHeVLYbydmIp/bEO0fEy/+NMcbTU4/j4Vs6Lr0ccKeYuUKWS4ABVCVHmRdszbfvTgfjR8kz5Jjs+9RREl9Zy2lbVK9wU3/kWLJLCXnqza1bfVe7b9jLbIeTMcYu13Jg/aMiPrCwVFcgtDiMhnxwJ/zXVDwSdVCVMRV7nqzl2i9e/fKrw8mqSp84e2sFj3Oj8/SrF/MaicmyYhAaXu58NPAbeAeyzY0NLecmh2+ODN3BewYBAkAY43giI3kebrnsRmvV9z2D4ciOa3EBAf31Tp9sMgdxMTFm6j74/Ogb70VCYQKAAIDCXkOAIC6pkYBWdwwnpHEdf6L9dJtJKPh95DZhzFKMEWRAGL927XpWTmMA+s8DAOBYAoR483l/iHZ/8bXoODl8b9UfyH72SXepzbyRJNvjFGHKMlhvMBze+cH9+4lEuOOlU2X1tVkFTU7Om03q080NDGXV1cflRpHwaaoiiiildB8jhDLZ7HDfz2Yidba6Vn2L4fhzFrNRKy5OZ2QOZ1U5W8VtqlVH/iUHcM933zZYWS7Wtj66zZr65bzGJQt0glHgudi9XVzEl4vKw2kUPhO020oPYI1qYc+2Xc0bRXFwTLY0VXa2VibD/lBaIXm1UChN5JSRUcQQ1Tk/47Cf3x8bY7y17Y17PVYTG1UkLPBFcqik7Zoa9JcLYoHBqHhXNgd6gS1k9EJ1TQ2l9EDy1saErmQ2kGpwGC2MLOtCM8nZEV1K0tKJtEksSm26J/rHg2zzmabKisq939nHzqUH7efzd4f/nPGW6NP8ybNFrOsWQhpoCuuhnJ4hAnPhFam01K4oQMjBg/mzBjVhuvw2O++KKT+BIVxJKzQECBDLF2qu2WTMmCovtDQ1f8iyoGkUADBCCGPsdnvTW2OtFm01VeB06msvdWlpPZU0wJRG85ns84umU3k+VyxeEcWqvYUBAGsUrbvme4be99HFeisP/pwUOIZaOqQX31ISgrKmZhLHtXNXuJq68orrr5/9mBCglCLAGGPyy81votEbcjlKLrC9E8mhH3wdHRdcyyvjidSlxjftPJpD+o25JYvRHGFoZDdks1mBQhxJu9uxvwEiXuHnHbLd1AAAAABJRU5ErkJggg=="""  # noqa: E501
+
+
+# Whether requests route through the LangSmith gateway. Mirrors the truthiness
+# used by `langchain_core`'s gateway resolution.
+_GATEWAY_ENABLED = (os.environ.get("LANGSMITH_GATEWAY") or "").lower() not in (
+    "",
+    "false",
+    "0",
+    "no",
+)
 
 
 @tool
@@ -936,6 +948,47 @@ def test_chat_google_genai_invoke_media_resolution(
     )
 
 
+@pytest.mark.flaky(retries=3, delay=1)
+def test_agentic_video_understanding_youtube(backend_config: dict) -> None:
+    """Agentic processing of a YouTube URL passed as a standard `video` block."""
+    if backend_config.get("vertexai"):
+        pytest.skip("Agentic video understanding is Gemini API only")
+
+    llm = ChatGoogleGenerativeAI(model=_AGENTIC_VIDEO_MODEL, **backend_config)
+    message = HumanMessage(
+        content=[
+            {
+                "type": "video",
+                "url": "https://www.youtube.com/watch?v=GbzEDgcuGJU",
+                "mime_type": "video/mp4",
+                "media_processing": "AGENTIC",
+            },
+            {"type": "text", "text": "What is deepagents in one sentence?"},
+        ]
+    )
+
+    result = llm.invoke([message])
+
+    assert isinstance(result, AIMessage)
+    # Exercises the server-side tool-use token accounting: agentic processing
+    # reports `tool_use_prompt_token_count`, so the parts only sum once it is
+    # folded into `input_tokens`.
+    _check_usage_metadata(result)
+    assert isinstance(result.text, str)
+    assert result.text.strip()
+
+    # The steps prove the model navigated the video rather than sampling frames.
+    assert isinstance(result.content, list)
+    step_types = [
+        block.get("type")
+        for block in result.content
+        if isinstance(block, dict)
+        and block.get("type") in ("server_tool_call", "server_tool_result")
+    ]
+    assert "server_tool_call" in step_types
+    assert "server_tool_result" in step_types
+
+
 def test_chat_google_genai_single_call_with_history(backend_config: dict) -> None:
     model = ChatGoogleGenerativeAI(model=_MODEL, **backend_config)
     text_question1, text_answer1 = "How much is 2+2?", "4"
@@ -990,6 +1043,11 @@ def test_chat_google_genai_system_message(
 
 def test_generativeai_get_num_tokens_gemini(backend_config: dict) -> None:
     """Test model tokenizer."""
+    if _GATEWAY_ENABLED and not backend_config.get("vertexai"):
+        pytest.skip(
+            "The LangSmith gateway does not proxy Gemini's countTokens action; "
+            "see test_gateway_gemini_counttokens_unsupported."
+        )
     llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL, **backend_config)
     output = llm.get_num_tokens("How are you?")
     assert output == 4
@@ -997,11 +1055,35 @@ def test_generativeai_get_num_tokens_gemini(backend_config: dict) -> None:
 
 def test_get_num_tokens_from_messages(backend_config: dict) -> None:
     """Test token counting from messages."""
+    if _GATEWAY_ENABLED and not backend_config.get("vertexai"):
+        pytest.skip(
+            "The LangSmith gateway does not proxy Gemini's countTokens action; "
+            "see test_gateway_gemini_counttokens_unsupported."
+        )
     model = ChatGoogleGenerativeAI(temperature=0.0, model=_MODEL, **backend_config)
     message = HumanMessage(content="Hello")
     token = model.get_num_tokens_from_messages(messages=[message])
     assert isinstance(token, int)
     assert token == 3
+
+
+@pytest.mark.skipif(
+    not _GATEWAY_ENABLED,
+    reason="Only meaningful when routing through the LangSmith gateway.",
+)
+def test_gateway_gemini_counttokens_unsupported() -> None:
+    """Canary for the gateway's missing Gemini ``countTokens`` support.
+
+    The gateway currently returns 501 for Gemini's ``countTokens`` action, so
+    the ``get_num_tokens*`` tests above are skipped when gateway-routed on the
+    ``google_ai`` backend. When the gateway adds support, this test will start
+    to fail (no error raised). At that point, delete this test and remove the
+    ``_GATEWAY_ENABLED`` skip guards from the token-count tests in this file and
+    in ``test_llms.py``.
+    """
+    llm = ChatGoogleGenerativeAI(temperature=0, model=_MODEL)
+    with pytest.raises(ServerError, match="countTokens"):
+        llm.get_num_tokens_from_messages([HumanMessage(content="How are you?")])
 
 
 def test_single_call_previous_blocked_response(backend_config: dict) -> None:
@@ -1095,7 +1177,7 @@ def test_timeout_non_streaming(backend_config: dict) -> None:
         timeout=0.001,  # 1ms - too short to complete
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
+    with pytest.raises((httpx2.TimeoutException, httpx2.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
@@ -1107,7 +1189,7 @@ def test_timeout_streaming(backend_config: dict) -> None:
         streaming=True,
         **backend_config,
     )
-    with pytest.raises((httpx.ReadTimeout, httpx.TimeoutException, httpx.ConnectError)):
+    with pytest.raises((httpx2.TimeoutException, httpx2.ConnectError)):
         model.invoke([HumanMessage(content="Hello")])
 
 
@@ -2016,6 +2098,10 @@ def test_code_execution_builtin(output_version: str, backend_config: dict) -> No
     assert isinstance(response, AIMessage)
 
 
+@pytest.mark.xfail(
+    reason="Computer use preview model persistently returns 503 UNAVAILABLE",
+    raises=ServerError,
+)
 def test_computer_use_tool(backend_config: dict) -> None:
     """Test computer use tool integration.
 

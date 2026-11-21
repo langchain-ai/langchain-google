@@ -11,18 +11,27 @@ import re
 import uuid
 import warnings
 import wave
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Callable,
+    Container,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from difflib import get_close_matches
 from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    Self,
     cast,
 )
+from urllib.parse import urlparse
 
 import filetype  # type: ignore[import-untyped]
 from google.genai.client import Client
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 from google.genai.types import (
     Blob,
     Candidate,
@@ -57,7 +66,15 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.exceptions import ContextOverflowError
+from langchain_core.exceptions import (
+    ContextOverflowError,
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelInvalidRequestError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+)
 from langchain_core.language_models import (
     LangSmithParams,
     LanguageModelInput,
@@ -100,21 +117,27 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PrivateAttr,
     SecretStr,
     field_validator,
     model_validator,
 )
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Self, is_typeddict
+from typing_extensions import is_typeddict
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
     SafetySettingDict,
     _BaseGoogleGenerativeAI,
+    _default_api_version,
     get_user_agent,
 )
 from langchain_google_genai._compat import (
+    _MEDIA_PROCESSING_TOOL_NAME,
+    _REASONING_BLOCK_TYPES,
+    _classify_model_provider,
     _convert_from_v1_to_generativelanguage_v1beta,
+    _is_file_uri_supported,
 )
 from langchain_google_genai._function_utils import (
     _tool_choice_to_tool_config,
@@ -138,12 +161,152 @@ _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
     "__gemini_function_call_thought_signatures__"
 )
+_GEMINI_NATIVE_NON_STANDARD_TYPES = frozenset(
+    {
+        "media",
+        "thinking",
+        "executable_code",
+        "code_execution_result",
+    }
+)
+_REFUSAL_FINISH_REASONS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"})
+"""Candidate finish reasons that core translates to a refusal content block."""
+
+_FINISH_REASONS: dict[str, str] = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "refusal",
+    "PROHIBITED_CONTENT": "refusal",
+    "BLOCKLIST": "refusal",
+    "RECITATION": "content_filter",
+    "SPII": "content_filter",
+    "LANGUAGE": "content_filter",
+    "IMAGE_SAFETY": "content_filter",
+    "IMAGE_PROHIBITED_CONTENT": "content_filter",
+    "IMAGE_RECITATION": "content_filter",
+    "MALFORMED_FUNCTION_CALL": "error",
+    "MALFORMED_RESPONSE": "error",
+}
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
 
+class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
+    """Wrapper exception class for errors associated with the `Google GenAI` API.
+
+    Raised when there are specific issues related to the Google GenAI API usage in the
+    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
+    """
+
+
 class GoogleContextOverflowError(ClientError, ContextOverflowError):
     """ClientError raised when input exceeds Google's context limit."""
+
+
+class _ClientCleanup:
+    """Close a client when the last model sharing it is collected."""
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+        self._async_loop: asyncio.AbstractEventLoop | None = None
+        self._closed = False
+
+    def __eq__(self, other: object) -> bool:
+        """Keep the internal cleanup token out of model equality semantics."""
+        return isinstance(other, _ClientCleanup)
+
+    @staticmethod
+    def _consume_task_exception(task: asyncio.Task[None]) -> None:
+        if not task.cancelled():
+            task.exception()
+
+    def register_async_loop(self) -> None:
+        """Record the event loop that owns any async transports created later."""
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        if self._async_loop is None:
+            self._async_loop = running_loop
+
+    async def aclose(self) -> None:
+        """Close all transports on the event loop that owns the async client."""
+        if self._closed:
+            return
+
+        running_loop = asyncio.get_running_loop()
+        if self._async_loop is not None and running_loop is not self._async_loop:
+            msg = "The async client must be closed on the event loop where it was used."
+            raise RuntimeError(msg)
+
+        self._async_loop = running_loop
+        self._client.close()
+        await self._client.aio.aclose()
+        self._closed = True
+
+    def __del__(self) -> None:
+        """Close sync and async transports without leaking cleanup exceptions."""
+        if self._closed:
+            return
+
+        try:
+            self._client.close()
+        except Exception:
+            pass
+
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        except Exception:
+            return
+
+        if running_loop is not self._async_loop:
+            return
+
+        try:
+            task = running_loop.create_task(self._client.aio.aclose())
+            task.add_done_callback(self._consume_task_exception)
+        except Exception:
+            pass
+
+
+# Inherit ChatGoogleGenerativeAIError for backward compatibility
+class GoogleAuthenticationError(ChatGoogleGenerativeAIError, ModelAuthenticationError):
+    """Google authentication error classified as a LangChain model error."""
+
+
+class GooglePermissionDeniedError(
+    ChatGoogleGenerativeAIError, ModelPermissionDeniedError
+):
+    """Google permission error classified as a LangChain model error."""
+
+
+class GoogleInvalidRequestError(ChatGoogleGenerativeAIError, ModelInvalidRequestError):
+    """Google invalid-request error classified as a LangChain model error."""
+
+
+class GoogleModelNotFoundError(ChatGoogleGenerativeAIError, ModelNotFoundError):
+    """Google not-found error classified as a LangChain model error."""
+
+
+class GoogleRateLimitError(ChatGoogleGenerativeAIError, ModelRateLimitError):
+    """Google rate-limit error classified as a LangChain model error."""
+
+
+class GoogleAPIError(ServerError, ModelAPIError):
+    """Google server error classified as a LangChain model error."""
+
+
+_CLIENT_ERROR_TYPES: dict[int, type[ChatGoogleGenerativeAIError]] = {
+    400: GoogleInvalidRequestError,
+    401: GoogleAuthenticationError,
+    403: GooglePermissionDeniedError,
+    404: GoogleModelNotFoundError,
+    429: GoogleRateLimitError,
+}
+"""HTTP status codes the Google GenAI API reports, keyed to LangChain error types."""
 
 
 def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
@@ -153,6 +316,11 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
     when the error indicates that the input exceeded the model's token limit,
     so that upstream middleware (e.g. `SummarizationMiddleware`) can catch it
     and fall back to context compaction.
+
+    Other recognized status codes are raised as the corresponding
+    `langchain_core.exceptions.ModelError` subclass, which tells retry middleware
+    whether another attempt could succeed. Those remain `ChatGoogleGenerativeAIError`
+    subclasses, so existing handling continues to work.
 
     Args:
         e: The `ClientError` exception to handle.
@@ -174,7 +342,74 @@ def _handle_client_error(e: ClientError, request: dict[str, Any]) -> None:
         ) from e
     model_name = request.get("model", "unknown")
     msg = f"Error calling model '{model_name}' ({e.status}): {e}"
+    if error_type := _CLIENT_ERROR_TYPES.get(e.code):
+        raise error_type(msg) from e
     raise ChatGoogleGenerativeAIError(msg) from e
+
+
+def _handle_server_error(e: ServerError) -> None:
+    """Re-raise a `ServerError` as its LangChain-classified equivalent.
+
+    Args:
+        e: The `ServerError` exception to handle.
+
+    Raises:
+        GoogleAPIError: Always, preserving the original type and message.
+    """
+    raise GoogleAPIError(
+        code=e.code,
+        response_json=e.details,
+        response=e.response,
+    ) from e
+
+
+def _classified_stream(
+    response: Iterator[GenerateContentResponse], request: dict[str, Any]
+) -> Iterator[GenerateContentResponse]:
+    """Yield stream chunks, classifying errors raised while the request runs.
+
+    `generate_content_stream` is a generator, so the request is not issued until
+    the returned iterator is advanced. Classifying at the call site would never
+    fire; the errors surface here instead.
+
+    Args:
+        response: The chunk iterator returned by the SDK.
+        request: The request dict containing model info.
+
+    Yields:
+        Each chunk the SDK produces.
+    """
+    try:
+        yield from response
+    except ClientError as e:
+        _handle_client_error(e, request)
+    except ServerError as e:
+        _handle_server_error(e)
+
+
+async def _aclassified_stream(
+    response: AsyncIterator[GenerateContentResponse], request: dict[str, Any]
+) -> AsyncIterator[GenerateContentResponse]:
+    """Yield stream chunks, classifying errors raised while the request runs.
+
+    The async counterpart to `_classified_stream`. Awaiting
+    `generate_content_stream` only builds the async generator, so the request is
+    issued once it is iterated.
+
+    Args:
+        response: The chunk iterator returned by the SDK.
+        request: The request dict containing model info.
+
+    Yields:
+        Each chunk the SDK produces.
+    """
+    try:
+        async for chunk in response:
+            yield chunk
+    except ClientError as e:
+        _handle_client_error(e, request)
+    except ServerError as e:
+        _handle_server_error(e)
 
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
@@ -188,6 +423,57 @@ def _bytes_to_base64(data: bytes) -> str:
 
 def _base64_to_bytes(input_str: str) -> bytes:
     return base64.b64decode(input_str.encode("utf-8"))
+
+
+# Gemini rejects empty parts, but a thought signature is itself a replayable payload.
+
+
+def _decode_signature(sig: Any) -> bytes | None:
+    """Decode a serialized thought signature to Gemini's byte representation.
+
+    Checkpoints store signatures as base64 strings, while the SDK accepts bytes.
+    """
+    if isinstance(sig, str):
+        return base64.b64decode(sig) or None
+    if isinstance(sig, bytes):
+        return sig or None
+    return None
+
+
+def _block_signature(block: Mapping[str, Any]) -> str | bytes | None:
+    """Read a signature from its v0, v1, or Vertex location."""
+    extras = block.get("extras")
+    return (
+        block.get("thought_signature")
+        or block.get("signature")
+        or (extras.get("signature") if isinstance(extras, Mapping) else None)
+    )
+
+
+def _is_redundant_v1beta_part(block: Any) -> bool:
+    """Check whether a projected part duplicates a call or is truly empty.
+
+    Signature-only parts are intentionally retained because Gemini requires their
+    signatures to be replayed even when they contain no text.
+    """
+    if not isinstance(block, dict):
+        return False
+    if "function_call" in block:
+        return True
+    if block.get("text"):
+        return False
+    return set(block) <= {
+        "text",
+        "thought",
+        "thought_signature",
+    } and not block.get("thought_signature")
+
+
+def _v1beta_dict_to_part(part: Mapping[str, Any]) -> Part | None:
+    """Validate a type-less projected v1beta dictionary as a Gemini part."""
+    if not set(part).intersection(Part.model_fields):
+        return None
+    return Part.model_validate(part)
 
 
 def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> HttpOptions:
@@ -219,14 +505,6 @@ def _merge_http_options(base: HttpOptions | None, override: HttpOptions) -> Http
     return merged
 
 
-class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
-    """Wrapper exception class for errors associated with the `Google GenAI` API.
-
-    Raised when there are specific issues related to the Google GenAI API usage in the
-    `ChatGoogleGenerativeAI` class, such as unsupported message types or roles.
-    """
-
-
 # Starting with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite, Google deprecated
 # custom sampling parameters and disallows prefilling model turns. Per Google's
 # docs these rules apply to "these models and all future Gemini model releases",
@@ -235,34 +513,88 @@ class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
 # affected models are tracked by an explicit allowlist. Add future GA models here
 # as they ship.
 _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
-    {"gemini-3.5-flash-lite", "gemini-3.6-flash"}
+    {
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-4-carbon",
+        "gemini-4-hydrogen",
+        "gemini-4-neon",
+    }
 )
 _CUSTOM_SAMPLING_PARAMETERS = ("temperature", "top_k", "top_p")
 
 
+def _normalize_gemini_model_name(model_name: str | None) -> str:
+    """Normalize model names by stripping resource paths and regional prefixes."""
+    if not model_name:
+        return ""
+    normalized = model_name.lower().rsplit("/", 1)[-1]
+    return re.sub(r"^[a-z]{2,}\.(?=(?:gemini|gemma)-)", "", normalized)
+
+
 def _uses_fixed_sampling_and_disallows_prefill(model_name: str) -> bool:
     """Check whether a model uses fixed sampling and rejects model prefills."""
-    if not model_name:
+    normalized_model = _normalize_gemini_model_name(model_name)
+    if not normalized_model:
         return False
-    normalized_model = model_name.lower().rsplit("/", 1)[-1]
     normalized_model = re.sub(r"-\d{3}$", "", normalized_model)
     return normalized_model in _FIXED_SAMPLING_AND_NO_PREFILL_MODELS
 
 
+_GEMINI_MAJOR_VERSION = re.compile(r"gemini-(\d+)")
+
+
 def _is_gemini_3_or_later(model_name: str) -> bool:
     """Checks if the model is Gemini 3 or later."""
-    if not model_name:
+    normalized = _normalize_gemini_model_name(model_name)
+    if not normalized:
         return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-3" in model_name
+    return any(int(major) >= 3 for major in _GEMINI_MAJOR_VERSION.findall(normalized))
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
     """Checks if the model is a Gemini 2.5 model."""
-    if not model_name:
-        return False
-    model_name = model_name.lower().replace("models/", "")
-    return "gemini-2.5" in model_name
+    return "gemini-2.5" in _normalize_gemini_model_name(model_name)
+
+
+_PROVIDER_RESOLVED_HOSTS = (
+    "youtube.com",
+    "youtu.be",
+    "generativelanguage.googleapis.com",
+)
+
+
+def _provider_resolved_uri(block: Mapping[str, Any]) -> str | None:
+    """Return a URI Gemini fetches itself, rather than one to download and inline."""
+    file_id = block.get("file_id")
+    if isinstance(file_id, str) and file_id:
+        return file_id
+    url = block.get("url")
+    if not isinstance(url, str) or not url:
+        return None
+    if url.startswith("gs://"):
+        return url
+    host = urlparse(url).hostname or ""
+    if any(host == h or host.endswith(f".{h}") for h in _PROVIDER_RESOLVED_HOSTS):
+        return url
+    return None
+
+
+def _server_tool_name(tool_type: Any) -> str:
+    """Derive a block type from a Gemini `ToolType` on a server tool part.
+
+    Agentic video responses currently omit `tool_type`, so media processing is
+    assumed when it is absent.
+
+    Args:
+        tool_type: `ToolType` enum member, raw string, or `None`.
+
+    Returns:
+        Lower-cased tool name.
+    """
+    if tool_type is None:
+        return "media_processing"
+    return str(getattr(tool_type, "value", tool_type)).lower()
 
 
 def _validate_video_metadata(video_metadata: object) -> None:
@@ -348,6 +680,8 @@ def _validate_video_metadata(video_metadata: object) -> None:
 def _convert_to_parts(
     raw_content: str | Sequence[str | dict],
     model: str | None = None,
+    *,
+    allow_v1beta_dicts: bool = False,
 ) -> list[Part]:
     """Converts LangChain message content into `generativelanguage_v1beta` parts.
 
@@ -355,6 +689,14 @@ def _convert_to_parts(
 
     Handles both legacy (pre-v1) dict-based content blocks and v1 `ContentBlock`
     objects.
+
+    Args:
+        raw_content: Message content to convert.
+        model: Model name used for version-specific conversion behavior.
+        allow_v1beta_dicts: Whether to validate type-less projected v1beta mappings.
+
+    Returns:
+        Gemini parts representing the message content.
     """
     content = [raw_content] if isinstance(raw_content, str) else raw_content
     image_loader = ImageBytesLoader()
@@ -368,33 +710,38 @@ def _convert_to_parts(
             if "type" in part:
                 if part["type"] == "text":
                     # Either old dict-style CC text block or new TextContentBlock
-                    # Check if there's a signature attached to this text block
-                    thought_sig = None
-                    if "extras" in part and isinstance(part["extras"], dict):
-                        sig = part["extras"].get("signature")
-                        if sig and isinstance(sig, str):
-                            # Decode base64-encoded signature back to bytes
-                            thought_sig = base64.b64decode(sig)
-                    if thought_sig:
-                        parts.append(
-                            Part(text=part["text"], thought_signature=thought_sig)
+                    parts.append(
+                        Part(
+                            text=part["text"],
+                            thought_signature=_decode_signature(_block_signature(part)),
                         )
-                    else:
-                        parts.append(Part(text=part["text"]))
+                    )
                 elif part.get("type") == "file" and "file_id" in part:
                     # Handle FileContentBlock with file_id (uploaded file reference)
                     mime_type = part.get("mime_type", "application/octet-stream")
-                    parts.append(
-                        Part(
-                            file_data=FileData(
-                                file_uri=part["file_id"], mime_type=mime_type
-                            )
+                    file_part_kwargs: dict[str, Any] = {
+                        "file_data": FileData(
+                            file_uri=part["file_id"], mime_type=mime_type
                         )
-                    )
+                    }
+                    if "media_processing" in part:
+                        file_part_kwargs["media_processing"] = part["media_processing"]
+                    parts.append(Part(**file_part_kwargs))
                 elif is_data_content_block(part):
                     # Handle both legacy LC blocks (with `source_type`) and blocks >= v1
 
-                    if "source_type" in part:
+                    resolved_uri = (
+                        None if "source_type" in part else _provider_resolved_uri(part)
+                    )
+                    part_kwargs: dict[str, Any] = {}
+                    if resolved_uri is not None:
+                        part_kwargs = {
+                            "file_data": FileData(
+                                file_uri=resolved_uri, mime_type=part.get("mime_type")
+                            )
+                        }
+                        bytes_ = b""
+                    elif "source_type" in part:
                         # Catch legacy v0 formats
                         # Safe since v1 content blocks don't have `source_type` key
                         if part["source_type"] == "url":
@@ -418,28 +765,29 @@ def _convert_to_parts(
                         )
                         raise ValueError(msg)
 
-                    mime_type = part.get("mime_type")
-                    if not mime_type:
-                        # Guess MIME type based on data field if not provided
-                        source = cast(
-                            "str",
-                            part.get("url") or part.get("base64") or part.get("data"),
-                        )
-                        mime_type, _ = mimetypes.guess_type(source)
+                    if resolved_uri is None:
+                        mime_type = part.get("mime_type")
                         if not mime_type:
-                            # Last resort - try to guess based on file bytes
-                            kind = filetype.guess(bytes_)
-                            if kind:
-                                mime_type = kind.mime
-                    blob_kwargs: dict[str, Any] = {
-                        "data": bytes_,
-                    }
-                    if mime_type:
-                        blob_kwargs["mime_type"] = mime_type
+                            # Guess MIME type based on data field if not provided
+                            source = cast(
+                                "str",
+                                part.get("url")
+                                or part.get("base64")
+                                or part.get("data"),
+                            )
+                            mime_type, _ = mimetypes.guess_type(source)
+                            if not mime_type:
+                                # Last resort - try to guess based on file bytes
+                                kind = filetype.guess(bytes_)
+                                if kind:
+                                    mime_type = kind.mime
+                        blob_kwargs: dict[str, Any] = {
+                            "data": bytes_,
+                        }
+                        if mime_type:
+                            blob_kwargs["mime_type"] = mime_type
 
-                    part_kwargs: dict[str, Any] = {
-                        "inline_data": Blob(**blob_kwargs),
-                    }
+                        part_kwargs = {"inline_data": Blob(**blob_kwargs)}
                     if "media_resolution" in part:
                         if model and _is_gemini_25_model(model):
                             warnings.warn(
@@ -453,6 +801,8 @@ def _convert_to_parts(
                             part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "media_processing" in part:
+                        part_kwargs["media_processing"] = part["media_processing"]
                     thought_signature = None
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
@@ -489,13 +839,16 @@ def _convert_to_parts(
                 elif part["type"] == "media":
                     # Handle `media` following pattern established in LangChain.js
                     # https://github.com/langchain-ai/langchainjs/blob/e536593e2585f1dd7b0afc187de4d07cb40689ba/libs/langchain-google-common/src/utils/gemini.ts#L93-L106
-                    if "mime_type" not in part:
-                        msg = f"Missing mime_type in media part: {part}"
-                        raise ValueError(msg)
-                    mime_type = part["mime_type"]
+                    # Inline bytes carry no type information, so a MIME type is
+                    # required. A `file_uri` is resolved server-side and the API
+                    # infers the type.
+                    mime_type = part.get("mime_type")
                     media_part_kwargs: dict[str, Any] = {}
 
                     if "data" in part:
+                        if not mime_type:
+                            msg = f"Missing mime_type in media part: {part}"
+                            raise ValueError(msg)
                         data = part["data"]
                         if isinstance(data, str):
                             clean_data = re.sub(r"\s+", "", data)
@@ -543,6 +896,8 @@ def _convert_to_parts(
                             media_part_kwargs["media_resolution"] = {
                                 "level": part["media_resolution"]
                             }
+                    if "media_processing" in part:
+                        media_part_kwargs["media_processing"] = part["media_processing"]
                     if "extras" in part and isinstance(part["extras"], dict):
                         sig = part["extras"].get("signature")
                         if isinstance(sig, str):
@@ -555,35 +910,48 @@ def _convert_to_parts(
                     parts.append(Part(**media_part_kwargs))
                 elif part["type"] == "thinking":
                     # Pre-existing thinking block format that we continue to store as
-                    thought_sig = None
-                    if "signature" in part:
-                        sig = part["signature"]
-                        if sig and isinstance(sig, str):
-                            # Decode base64-encoded signature back to bytes
-                            thought_sig = base64.b64decode(sig)
                     parts.append(
                         Part(
                             text=part["thinking"],
                             thought=True,
-                            thought_signature=thought_sig,
+                            thought_signature=_decode_signature(_block_signature(part)),
                         )
                     )
                 elif part["type"] == "reasoning":
                     # ReasoningContentBlock (when output_version = "v1")
-                    extras = part.get("extras", {}) or {}
-                    sig = extras.get("signature")
-                    thought_sig = None
-                    if sig and isinstance(sig, str):
-                        # Decode base64-encoded signature back to bytes
-                        thought_sig = base64.b64decode(sig)
+                    thought_sig = _decode_signature(_block_signature(part))
+                    reasoning_text = part.get("reasoning")
+                    if reasoning_text is None:
+                        # Foreign-provider reasoning block without a `reasoning`
+                        # key (e.g. OpenAI's `summary` shape). Extract summary
+                        # text when possible; otherwise drop the block.
+                        summary = part.get("summary")
+                        if isinstance(summary, list):
+                            summary_texts = [
+                                text.strip()
+                                for item in summary
+                                if isinstance(item, dict)
+                                and isinstance((text := item.get("text")), str)
+                                and text.strip()
+                            ]
+                            reasoning_text = " ".join(summary_texts)
+                        if not reasoning_text:
+                            continue
                     parts.append(
                         Part(
-                            text=part["reasoning"],
+                            text=reasoning_text,
                             thought=True,
                             thought_signature=thought_sig,
                         )
                     )
                 elif part["type"] == "server_tool_call":
+                    if part.get("name") == _MEDIA_PROCESSING_TOOL_NAME:
+                        # Media processing steps are returned by the server for
+                        # observability but cannot be replayed: the GenerateContent API
+                        # rejects echoed steps with "Tool type of tool_call part does
+                        # not match with tool call context". Video context is preserved
+                        # instead by keeping the original media part in history.
+                        continue
                     if part.get("name") == "code_interpreter":
                         args = part.get("args", {})
                         code = args.get("code", "")
@@ -614,6 +982,15 @@ def _convert_to_parts(
                     )
                     parts.append(executable_code_part)
                 elif part["type"] == "server_tool_result":
+                    extras = part.get("extras")
+                    if (
+                        isinstance(extras, Mapping)
+                        and extras.get("block_type") == _MEDIA_PROCESSING_TOOL_NAME
+                    ):
+                        # Paired with the media processing call skipped above.
+                        # Replaying it would also be rejected, and it must not be
+                        # misread as a code execution result.
+                        continue
                     output = part.get("output", "")
                     status = part.get("status", "success")
                     outcome = (
@@ -661,9 +1038,41 @@ def _convert_to_parts(
                         )
                     )
                     parts.append(code_execution_result_part)
+                elif part["type"] == "non_standard":
+                    value = part.get("value")
+                    if (
+                        isinstance(value, Mapping)
+                        and value.get("type") in _GEMINI_NATIVE_NON_STANDARD_TYPES
+                    ):
+                        # Core wraps Gemini-native blocks it cannot standardize.
+                        # Unwrap only known shapes; malformed native values must
+                        # still raise rather than silently changing the request.
+                        parts.extend(
+                            _convert_to_parts(
+                                [dict(value)],
+                                model=model,
+                                allow_v1beta_dicts=allow_v1beta_dicts,
+                            )
+                        )
+                    else:
+                        logger.warning(
+                            "Dropping non-standard content block that cannot be "
+                            "represented as a Gemini part (inner type: %s).",
+                            value.get("type") if isinstance(value, Mapping) else None,
+                        )
+                elif part["type"] == "refusal":
+                    # Gemini has no refusal input part.
+                    continue
                 else:
                     msg = f"Unrecognized message part type: {part['type']}."
                     raise ValueError(msg)
+            elif (
+                allow_v1beta_dicts
+                and (v1beta_part := _v1beta_dict_to_part(part)) is not None
+            ):
+                parts.append(v1beta_part)
+            elif part.keys() == {"cachePoint"}:
+                pass
             else:
                 # Yolo. The input message content doesn't have a `type` key
                 logger.warning(
@@ -674,6 +1083,15 @@ def _convert_to_parts(
             msg = "Unknown error occurred while converting LC message content to parts."
             raise ChatGoogleGenerativeAIError(msg)
     return parts
+
+
+def _contains_json_ref(value: Any) -> bool:
+    """Return whether a parsed JSON value has a `$ref` key at any depth."""
+    if isinstance(value, Mapping):
+        return "$ref" in value or any(_contains_json_ref(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_json_ref(item) for item in value)
+    return False
 
 
 def _convert_tool_message_to_parts(
@@ -706,6 +1124,15 @@ def _convert_tool_message_to_parts(
             response = json.loads(message.content)
         except json.JSONDecodeError:
             response = message.content  # leave as str representation
+    if _contains_json_ref(response):
+        # Gemini resolves `$ref` keys in a function response against the
+        # display names of its multimodal parts and rejects the request when
+        # none match, so tool output such as JSON schemas is sent as text.
+        response = (
+            message.content
+            if isinstance(message.content, str)
+            else json.dumps(response, default=str)
+        )
     part = Part(
         function_response=FunctionResponse(
             name=name,
@@ -745,34 +1172,323 @@ def _get_ai_message_tool_messages_parts(
     return parts
 
 
-# To generate the below thought signature:
+# Placeholder injected by `_parse_chat_history` when a function-call part for a
+# Gemini 3+ model lacks a thought signature (e.g. replayed history or a
+# cross-provider fallback). Carrying the documented bypass sentinel makes the
+# API skip thought-signature validation for that part; a real signature copied
+# from an unrelated response is rejected as invalid.
+#
+# https://cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
+SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 
-# from langchain_google_genai import ChatGoogleGenerativeAI
-#
-# def generate_placeholder_thoughts(value: int) -> str:
-#     """Placeholder tool."""
-#     pass
-#
-# model = ChatGoogleGenerativeAI(
-#     model="gemini-3.1-pro-preview"
-# ).bind_tools([generate_placeholder_thoughts])
-#
-# response = model.invoke("Generate a placeholder tool invocation.")
+# Kept for backwards compatibility with imports of the previous constant.
+DUMMY_THOUGHT_SIGNATURE = SKIP_THOUGHT_SIGNATURE_VALIDATOR.encode("ascii")
 
-DUMMY_THOUGHT_SIGNATURE = _base64_to_bytes(
-    "ErQCCrECAdHtim8MtxgeMCRCiNiyoyImxtYAEDzz4NXOr/HSL3rA7rPPvHWZCm+T9VSDYh/mt9lESoH4wQh"
-    "/ca1zDtWTN6XOL1+S3krYLQeqp47RV/b1eSq5jdZF28S4Lb7w4A3/EFdybc4SFb2/YhMm+CulYLmLA4Tr4V"
-    "Su0eMWgxM3HVt6u0jECf5BbXzj0qjJ32tEQYJvKvV8H1tCHvB6J+RZhsDr+TcyOCaqxDoR4WKxXYxNRZb3h"
-    "YTuCnBEDPhn1lROumVaghi9nEIgc17z002zLoyqIptlLfIVw70FXkCLsPUSL1SjPQYtGL8PVncVajeqGogR"
-    "D/eZSVZ1Zr5tshxh3DQ+JAYNcrHaRHWC4Hg0H6oftYx+JdJD9B/81NYV9jyGxP7zHKFHOELl0IUP5GEXP9I"
-    "="
-)
+
+def _convert_to_parts_lenient(
+    content: list[Any],
+    model: str | None = None,
+    *,
+    allow_v1beta_dicts: bool = False,
+) -> list[Part]:
+    """Convert foreign content one block at a time, dropping invalid blocks.
+
+    Per-block conversion preserves valid neighbors without retrying media downloads
+    that occurred before a failing block.
+
+    Args:
+        content: Message content blocks to convert.
+        model: Model name used for version-specific conversion behavior.
+        allow_v1beta_dicts: Whether to validate type-less projected v1beta mappings.
+
+    Returns:
+        Valid Gemini parts from the supplied content.
+    """
+    parts: list[Part] = []
+    for block in content:
+        try:
+            parts.extend(
+                _convert_to_parts(
+                    [block],
+                    model=model,
+                    allow_v1beta_dicts=allow_v1beta_dicts,
+                )
+            )
+        except (ValueError, ChatGoogleGenerativeAIError) as exc:
+            logger.warning(
+                "Dropping content block that cannot be represented as a Gemini "
+                "part (type: %s): %s",
+                block.get("type") if isinstance(block, Mapping) else type(block),
+                exc,
+            )
+    return parts
+
+
+def _as_gemini_media_block(block: Mapping[str, Any]) -> dict[str, Any]:
+    """Re-tag raw Gemini file data for the shared media converter."""
+    return {
+        "type": "media",
+        "file_uri": block["file_uri"],
+        "mime_type": block.get("mime_type", "application/octet-stream"),
+    }
+
+
+def _is_rebuilt_tool_call_block(block: Mapping[str, Any]) -> bool:
+    """Check whether a block is rebuilt from `message.tool_calls`."""
+    return block.get("type") in (
+        "tool_call",
+        "tool_call_chunk",
+        "invalid_tool_call",
+        "function_call_signature",
+    )
+
+
+def _function_call_signatures_from_content(
+    message: AIMessage,
+) -> dict[int, str | bytes]:
+    """Index legacy function-call signature sidecars by tool call."""
+    if _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    ) == "foreign" or not isinstance(message.content, list):
+        return {}
+    signatures: dict[int, str | bytes] = {}
+    signature_ordinal = 0
+    for block in message.content:
+        if (
+            not isinstance(block, Mapping)
+            or block.get("type") != "function_call_signature"
+        ):
+            continue
+        signature = block.get("signature")
+        if not isinstance(signature, (str, bytes)) or not signature:
+            continue
+        # Early signature sidecars did not include an index and were appended after
+        # other content. Their position in the full content list therefore does not
+        # identify the corresponding entry in `message.tool_calls`.
+        tool_call_index = block.get("index", signature_ordinal)
+        signature_ordinal += 1
+        if isinstance(tool_call_index, int):
+            signatures[tool_call_index] = signature
+    return signatures
+
+
+def _is_unsupported_foreign_server_tool(
+    block: Mapping[str, Any], code_interpreter_call_ids: Container[str]
+) -> bool:
+    """Check whether a foreign server-tool block has a Gemini equivalent.
+
+    Code-interpreter calls map to executable code; their results are retained only
+    when the corresponding call was retained.
+    """
+    block_type = block.get("type")
+    if block_type == "server_tool_call":
+        return block.get("name") != "code_interpreter"
+    if block_type == "server_tool_result":
+        return block.get("tool_call_id") not in code_interpreter_call_ids
+    return False
+
+
+def _strip_foreign_signature(block: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return a block without another provider's thought signature.
+
+    This runs before empty-block filtering so a signature-only foreign block does
+    not become an invalid empty Gemini part after its signature is removed.
+    """
+    extras = block.get("extras")
+    extras_has_signature = isinstance(extras, dict) and "signature" in extras
+    if (
+        not {"signature", "thought_signature"}.intersection(block)
+        and not extras_has_signature
+    ):
+        return block
+    stripped: dict[str, Any] = {
+        k: v for k, v in block.items() if k not in ("signature", "thought_signature")
+    }
+    if extras_has_signature:
+        stripped["extras"] = {
+            k: v for k, v in cast("dict[str, Any]", extras).items() if k != "signature"
+        }
+    return stripped
+
+
+def _is_empty_content_block(block: Mapping[str, Any]) -> bool:
+    """Check whether a text or thought block has no replayable payload."""
+    if block.get("type") not in ("text", "thinking", "reasoning"):
+        return False
+    has_text = (
+        block.get("text")
+        or block.get("thinking")
+        or block.get("reasoning")
+        or block.get("summary")
+    )
+    return not has_text and not _block_signature(block)
+
+
+def _content_block_file_uri(block: Any) -> Any:
+    """Return the URI carried by any supported file block shape."""
+    if not isinstance(block, Mapping):
+        return None
+    file_data = block.get("file_data")
+    if isinstance(file_data, Mapping):
+        return file_data.get("file_uri")
+    block_type = block.get("type")
+    if block_type in ("file_data", "media"):
+        return block.get("file_uri")
+    if block_type == "file":
+        return block.get("file_id") or block.get("url")
+    if block_type == "image":
+        return block.get("url")
+    if block_type == "image_url":
+        image_url = block.get("image_url")
+        if isinstance(image_url, Mapping):
+            return image_url.get("url")
+        return image_url
+    return None
+
+
+def _drop_unsupported_file_references(
+    content: list[Any], *, use_vertexai: bool
+) -> list[Any]:
+    """Drop file references unsupported by the target backend."""
+    filtered: list[Any] = []
+    for block in content:
+        file_uri = _content_block_file_uri(block)
+        if not _is_file_uri_supported(file_uri, use_vertexai=use_vertexai):
+            logger.warning(
+                "Dropping Google Cloud Storage file URI from chat history because "
+                "the target Gemini Developer API does not support gs:// references."
+            )
+            continue
+        filtered.append(block)
+    return filtered
+
+
+def _prepare_ai_message_content(
+    message: AIMessage, *, exclude_function_calls: bool
+) -> list[Any]:
+    """Normalize non-v1 AI content for provider-aware conversion.
+
+    Foreign messages use LangChain's standardized blocks. Native messages retain
+    their raw blocks because core may wrap valid Gemini media as `non_standard`.
+    """
+    model_provider = message.response_metadata.get("model_provider")
+    provider_kind = _classify_model_provider(model_provider)
+    is_foreign = provider_kind == "foreign"
+    # Core standardizes foreign blocks, but can wrap native Gemini blocks as
+    # `non_standard`, so native and unstamped messages use their raw content.
+    content = message.content_blocks if is_foreign else message.content
+
+    if not isinstance(content, list):
+        return [content] if content else []
+
+    code_interpreter_call_ids: set[str] = set()
+    if is_foreign:
+        code_interpreter_call_ids = {
+            call_id
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "server_tool_call"
+            and block.get("name") == "code_interpreter"
+            and isinstance(call_id := block.get("id"), str)
+        }
+
+    filtered: list[Any] = []
+    for block in content:
+        if not isinstance(block, dict):
+            if isinstance(block, str) and not block:
+                continue
+            filtered.append(block)
+            continue
+
+        if exclude_function_calls and _is_rebuilt_tool_call_block(block):
+            continue
+        block_type = block.get("type")
+        if is_foreign and block_type == "non_standard":
+            value = block.get("value")
+            logger.warning(
+                "Dropping non-standard content block that cannot be represented "
+                "as a Gemini part (inner type: %s).",
+                value.get("type") if isinstance(value, Mapping) else None,
+            )
+            continue
+        if exclude_function_calls and block_type == "function_call":
+            continue
+        if block_type == "file_data" and "file_uri" in block:
+            filtered.append(_as_gemini_media_block(block))
+            continue
+        candidate: Mapping[str, Any] = block
+        if is_foreign:
+            if block_type in _REASONING_BLOCK_TYPES:
+                # Mirrors the v1 conversion in `_compat.py`: stripping the foreign
+                # signature is not enough, because the reasoning text itself is
+                # another provider's chain-of-thought and is not a Gemini thought.
+                logger.warning(
+                    "Dropping reasoning block from provider %r; foreign reasoning "
+                    "is not replayed as a Gemini thought part.",
+                    model_provider,
+                )
+                continue
+            if _is_unsupported_foreign_server_tool(block, code_interpreter_call_ids):
+                continue
+            candidate = _strip_foreign_signature(block)
+        if _is_empty_content_block(candidate):
+            continue
+        filtered.append(candidate)
+    return filtered
+
+
+def _convert_ai_message_content(
+    message: AIMessage,
+    model: str | None,
+    *,
+    exclude_function_calls: bool,
+    use_vertexai: bool,
+) -> list[Part]:
+    """Convert AI content while treating `message.tool_calls` as authoritative.
+
+    Native content is validated strictly; foreign and provider-less content is
+    converted leniently so unsupported provider-specific blocks do not abort replay.
+    """
+    provider_kind = _classify_model_provider(
+        message.response_metadata.get("model_provider")
+    )
+    is_v1_content = message.response_metadata.get("output_version") == "v1"
+    if is_v1_content:
+        content: list[Any] = _convert_from_v1_to_generativelanguage_v1beta(
+            cast("list[types.ContentBlock]", message.content),
+            message.response_metadata.get("model_provider"),
+            use_vertexai=use_vertexai,
+        )
+        if exclude_function_calls:
+            content = [
+                block for block in content if not _is_redundant_v1beta_part(block)
+            ]
+    elif exclude_function_calls or provider_kind == "foreign":
+        content = _prepare_ai_message_content(
+            message, exclude_function_calls=exclude_function_calls
+        )
+    else:
+        content = (
+            [message.content] if isinstance(message.content, str) else message.content
+        )
+
+    content = _drop_unsupported_file_references(content, use_vertexai=use_vertexai)
+    convert = (
+        _convert_to_parts if provider_kind == "native" else _convert_to_parts_lenient
+    )
+    return convert(
+        content,
+        model=model,
+        allow_v1beta_dicts=is_v1_content,
+    )
 
 
 def _parse_chat_history(
     input_messages: Sequence[BaseMessage],
     convert_system_message_to_human: bool = False,
     model: str | None = None,
+    *,
+    use_vertexai: bool = False,
 ) -> tuple[Content | None, list[Content]]:
     """Parses sequence of `BaseMessage` into system instruction and formatted messages.
 
@@ -782,6 +1498,7 @@ def _parse_chat_history(
 
             Whether to convert the first system message into a `HumanMessage`.
         model: The model name, used for version-specific logic.
+        use_vertexai: Whether the target is the Vertex AI backend.
 
     Returns:
         A tuple containing:
@@ -798,27 +1515,6 @@ def _parse_chat_history(
             DeprecationWarning,
             stacklevel=2,
         )
-    input_messages = list(input_messages)  # Make a mutable copy
-
-    # Case where content was serialized to v1 format
-    for idx, message in enumerate(input_messages):
-        if (
-            isinstance(message, AIMessage)
-            and message.response_metadata.get("output_version") == "v1"
-        ):
-            # Unpack known v1 content to v1beta format for the request
-            #
-            # Old content types and any previously serialized messages passed back in to
-            # history will skip this, but hit and processed in `_convert_to_parts`
-            input_messages[idx] = message.model_copy(
-                update={
-                    "content": _convert_from_v1_to_generativelanguage_v1beta(
-                        cast("list[types.ContentBlock]", message.content),
-                        message.response_metadata.get("model_provider"),
-                    )
-                }
-            )
-
     formatted_messages: list[Content] = []
 
     system_instruction: Content | None = None
@@ -844,61 +1540,40 @@ def _parse_chat_history(
         if isinstance(message, AIMessage):
             role = "model"
             if message.tool_calls:
-                ai_message_parts = []
-
-                # First, include thinking blocks from content if present.
+                # First, convert all non-function-call content (text, thinking,
+                # reasoning, media, etc.) through the unified conversion path.
                 # When include_thoughts=True, thinking blocks need to be preserved
                 # when passing messages back to the API.
-                if isinstance(message.content, list):
-                    for content_block in message.content:
-                        if isinstance(content_block, dict):
-                            block_type = content_block.get("type")
-                            if block_type == "thinking":
-                                # v0 output_format thinking block
-                                thought_sig = None
-                                if "signature" in content_block:
-                                    sig = content_block["signature"]
-                                    if sig and isinstance(sig, str):
-                                        thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["thinking"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
-                                    )
-                                )
-                            elif block_type == "reasoning":
-                                # v1 output_format reasoning block
-                                # (Stored in extras, and different type key)
-                                extras = content_block.get("extras", {}) or {}
-                                sig = extras.get("signature")
-                                thought_sig = None
-                                if sig and isinstance(sig, str):
-                                    thought_sig = base64.b64decode(sig)
-                                ai_message_parts.append(
-                                    Part(
-                                        text=content_block["reasoning"],
-                                        thought=True,
-                                        thought_signature=thought_sig,
-                                    )
-                                )
+                ai_message_parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=True,
+                    use_vertexai=use_vertexai,
+                )
 
                 # Then, add function call parts
-                function_call_sigs: dict[Any, str] = message.additional_kwargs.get(
-                    _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                function_call_sigs: dict[Any, str | bytes] = (
+                    message.additional_kwargs.get(
+                        _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY, {}
+                    )
                 )
-                for tool_call_idx, tool_call in enumerate(message.tool_calls):
+                indexed_function_call_sigs = _function_call_signatures_from_content(
+                    message
+                )
+                for tool_call_index, tool_call in enumerate(message.tool_calls):
                     function_call = FunctionCall(
                         name=tool_call["name"],
                         args=tool_call["args"],
                     )
                     # Check if there's a signature for this function call
-                    sig = function_call_sigs.get(tool_call.get("id"))
+                    sig = function_call_sigs.get(
+                        tool_call.get("id")
+                    ) or indexed_function_call_sigs.get(tool_call_index)
                     if sig:
                         ai_message_parts.append(
                             Part(
                                 function_call=function_call,
-                                thought_signature=_base64_to_bytes(sig),
+                                thought_signature=_decode_signature(sig),
                             )
                         )
                     else:
@@ -924,11 +1599,19 @@ def _parse_chat_history(
                 )
                 parts = [Part(function_call=function_call)]
             elif message.response_metadata.get("output_version") == "v1":
-                # Already converted to v1beta format above
-                parts = message.content  # type: ignore[assignment]
+                parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=False,
+                    use_vertexai=use_vertexai,
+                )
             else:
-                # Prepare request content parts from message.content field
-                parts = _convert_to_parts(message.content, model=model)
+                parts = _convert_ai_message_content(
+                    message,
+                    model,
+                    exclude_function_calls=False,
+                    use_vertexai=use_vertexai,
+                )
         elif isinstance(message, HumanMessage):
             role = "user"
             parts = _convert_to_parts(message.content, model=model)
@@ -945,6 +1628,21 @@ def _parse_chat_history(
         # Final step; assemble the Content object to pass to the API
         # If version = "v1", the parts are already in v1beta format and will be
         # automatically converted using protobuf's auto-conversion
+        if role == "model" and not parts:
+            if isinstance(message.content, list) and message.content:
+                logger.warning(
+                    "AI message at index %d converted to no Gemini parts after all "
+                    "%d content block(s) were dropped; using an empty text part.",
+                    i,
+                    len(message.content),
+                )
+            else:
+                logger.warning(
+                    "AI message at index %d converted to no Gemini parts; using an "
+                    "empty text part.",
+                    i,
+                )
+            parts = [Part(text="")]
         formatted_messages.append(Content(role=role, parts=parts))
 
     # Enforce thought signatures for new Gemini models
@@ -976,8 +1674,8 @@ def _parse_chat_history(
 
         # 2. Patch Missing Signatures:
         # Iterate through the active loop. If a model message contains a function call
-        # but lacks a thought signature, inject a dummy value. This satisfies the
-        # API's schema validation without requiring the original internal thought data.
+        # but lacks a thought signature, inject the bypass sentinel. This satisfies
+        # the API's validation without requiring the original internal thought data.
         start_idx = active_loop_start_idx + 1 if active_loop_start_idx != -1 else 0
         for i in range(start_idx, len(formatted_messages)):
             content_msg = formatted_messages[i]
@@ -987,7 +1685,24 @@ def _parse_chat_history(
                     if part.function_call:
                         if not first_fc_seen:
                             if not part.thought_signature:
-                                part.thought_signature = DUMMY_THOUGHT_SIGNATURE
+                                # Assign the str sentinel post-construction so
+                                # pydantic never coerces it to bytes: the SDK's
+                                # request encoder base64-encodes bytes values,
+                                # which would hide the bypass string from the
+                                # API. Part is not validate_assignment, so the
+                                # string survives serialization as-is.
+                                try:
+                                    part.thought_signature = cast(
+                                        "bytes",
+                                        SKIP_THOUGHT_SIGNATURE_VALIDATOR,
+                                    )
+                                except ValueError:
+                                    # A future SDK/pydantic version could turn
+                                    # on validate_assignment, which coerces the
+                                    # str to base64-decoded bytes. Send those
+                                    # bytes rather than dropping the signature
+                                    # entirely and failing schema validation.
+                                    part.thought_signature = DUMMY_THOUGHT_SIGNATURE
                             first_fc_seen = True
 
     return system_instruction, formatted_messages
@@ -1011,6 +1726,56 @@ def _append_to_content(
     # but it catches any unexpected types that might slip through.
     msg = f"Unexpected content type: {type(current_content)}"
     raise TypeError(msg)
+
+
+#: Block types that arrive as incremental deltas and must keep a stable index so
+#: successive chunks merge into one block. Every other block Gemini emits is
+#: complete on arrival and needs an index of its own.
+_MERGEABLE_BLOCK_TYPES = frozenset({"text", "thinking"})
+
+
+class _StreamBlockIndexer:
+    """Allocates streaming `index` values for content blocks."""
+
+    def __init__(self) -> None:
+        self._next_index = 0
+        self._open_type: str | None = None
+        self._open_index = -1
+
+    def _allocate(self, block_type: str | None) -> int:
+        index = self._next_index
+        self._next_index += 1
+        self._open_type = block_type
+        self._open_index = index
+        return index
+
+    def assign(self, message: AIMessageChunk) -> None:
+        """Populate any missing ``index`` fields on ``message``, in place.
+
+        Args:
+            message: The chunk whose content blocks and tool call chunks should
+                be indexed. Existing ``index`` values are left untouched.
+        """
+        if isinstance(message.content, list):
+            for block in message.content:
+                if not isinstance(block, dict) or "type" not in block:
+                    continue
+                block_type = block["type"]
+                if (
+                    block_type == self._open_type
+                    and block_type in _MERGEABLE_BLOCK_TYPES
+                ):
+                    index = self._open_index
+                else:
+                    index = self._allocate(block_type)
+                if "index" not in block:
+                    block["index"] = index
+
+        for tool_call_chunk_ in message.tool_call_chunks:
+            # Gemini emits each function call complete in a single part, so every
+            # chunk without a provider-supplied index is a distinct tool call.
+            if tool_call_chunk_.get("index") is None:
+                tool_call_chunk_["index"] = self._allocate(None)
 
 
 def _convert_integer_like_floats(obj: Any) -> Any:
@@ -1064,7 +1829,7 @@ def _parse_response_candidate(
         the content format. This is why `model_name` and `model_name_for_content` are
         separate parameters.
     """
-    content: None | str | list[str | dict] = None
+    content: str | list[str | dict] | None = None
     additional_kwargs: dict[str, Any] = {}
     response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
     if model_name:
@@ -1164,6 +1929,34 @@ def _parse_response_candidate(
                 "tool_call_id": "",  # Linked via block translator
             }
             content = _append_to_content(content, execution_result)
+
+        # Server-side media processing steps (e.g., agentic video understanding).
+        media_call = getattr(part, "tool_call", None)
+        if media_call is not None:
+            media_call_block: dict[str, Any] = {
+                "type": "server_tool_call",
+                "name": _server_tool_name(media_call.tool_type),
+                "id": media_call.id or str(uuid.uuid4()),
+                "args": dict(media_call.args or {}),
+            }
+            if thought_sig:
+                media_call_block["extras"] = {"signature": thought_sig}
+            content = _append_to_content(content, media_call_block)
+
+        media_result = getattr(part, "tool_response", None)
+        if media_result is not None:
+            media_result_block: dict[str, Any] = {
+                "type": "server_tool_result",
+                "tool_call_id": media_result.id or "",
+                "status": "success",
+                "output": dict(media_result.response or {}),
+                # `ServerToolResult` has no `name`, so the originating tool is
+                # recorded here, mirroring how code execution results are tagged.
+                "extras": {"block_type": _server_tool_name(media_result.tool_type)},
+            }
+            if thought_sig:
+                media_result_block["extras"]["signature"] = thought_sig
+            content = _append_to_content(content, media_result_block)
 
         if part.inline_data and part.inline_data.data and part.inline_data.mime_type:
             if part.inline_data.mime_type.startswith("audio/"):
@@ -1289,6 +2082,35 @@ def _parse_response_candidate(
     )
 
 
+def _finish_reason_fields(
+    finish_reason: str | None, *, has_tool_calls: bool
+) -> dict[str, str]:
+    """Map a Gemini `finish_reason` onto `normalized_finish_reason`."""
+    if not finish_reason:
+        return {}
+    normalized = _FINISH_REASONS.get(finish_reason.upper(), "other")
+    # Gemini reports `STOP` when it ends on function calls.
+    if normalized == "stop" and has_tool_calls:
+        normalized = "tool_call"
+    return {"normalized_finish_reason": normalized}
+
+
+def _mark_streamed_tool_call(gen: ChatGenerationChunk, saw_tool_call: bool) -> bool:
+    """Upgrade a final `stop` to `tool_call` when an earlier chunk had tool calls.
+
+    Gemini can send function calls and `STOP` in separate stream chunks.
+    """
+    message = gen.message
+    if isinstance(message, AIMessageChunk) and (
+        message.tool_call_chunks or message.tool_calls
+    ):
+        saw_tool_call = True
+    info = gen.generation_info
+    if saw_tool_call and info and info.get("normalized_finish_reason") == "stop":
+        info["normalized_finish_reason"] = "tool_call"
+    return saw_tool_call
+
+
 def _response_to_result(
     response: GenerateContentResponse,
     stream: bool = False,
@@ -1306,13 +2128,25 @@ def _response_to_result(
         if response.usage_metadata is None:
             msg = "Usage metadata is None"
             raise AttributeError(msg)
-        input_tokens = response.usage_metadata.prompt_token_count or 0
+        # Server-side tool use (for example agentic video processing) reports its
+        # prompt tokens separately; they are input tokens and are included in
+        # `total_token_count`, so fold them in to keep the parts summing.
+        input_tokens = (response.usage_metadata.prompt_token_count or 0) + (
+            response.usage_metadata.tool_use_prompt_token_count or 0
+        )
         thought_tokens = response.usage_metadata.thoughts_token_count or 0
         output_tokens = (
             response.usage_metadata.candidates_token_count or 0
         ) + thought_tokens
         total_tokens = response.usage_metadata.total_token_count or 0
+        # Cached tokens are a subset of `prompt_token_count`. With grounding (for
+        # example `google_search`), Gemini can report a cached count well above
+        # the prompt. That count can't be trusted, and clamping it would report a
+        # full cache hit, so drop it instead.
+        prompt_tokens = response.usage_metadata.prompt_token_count or 0
         cache_read_tokens = response.usage_metadata.cached_content_token_count or 0
+        if cache_read_tokens > prompt_tokens:
+            cache_read_tokens = 0
         if input_tokens + output_tokens + cache_read_tokens + total_tokens > 0:
             if thought_tokens > 0:
                 cumulative_usage = UsageMetadata(
@@ -1385,6 +2219,21 @@ def _response_to_result(
         if not hasattr(message, "response_metadata"):
             message.response_metadata = {}
 
+        generation_info.update(
+            _finish_reason_fields(
+                generation_info.get("finish_reason"),
+                has_tool_calls=bool(message.tool_calls or message.invalid_tool_calls),
+            )
+        )
+
+        if generation_info.get("finish_reason") in _REFUSAL_FINISH_REASONS:
+            # `v1` content is built from the message before `generation_info` is merged.
+            message.response_metadata["finish_reason"] = generation_info[
+                "finish_reason"
+            ]
+            if candidate.finish_message:
+                message.response_metadata["finish_message"] = candidate.finish_message
+
         try:
             if candidate.grounding_metadata:
                 grounding_metadata = candidate.grounding_metadata.model_dump()
@@ -1436,23 +2285,27 @@ def _response_to_result(
             "Gemini produced an empty response. Continuing with empty message\n"
             f"Feedback: {response.prompt_feedback}"
         )
+        response_metadata: dict[str, Any] = {"model_provider": "google_genai"}
+        if response.prompt_feedback:
+            response_metadata["prompt_feedback"] = response.prompt_feedback.model_dump()
         if stream:
-            response_metadata = (
-                {"prompt_feedback": response.prompt_feedback.model_dump()}
-                if response.prompt_feedback
-                else {}
-            )
             generations = [
                 ChatGenerationChunk(
                     message=AIMessageChunk(
                         content="",
                         response_metadata=response_metadata,
+                        usage_metadata=lc_usage,
                     ),
                     generation_info={},
                 )
             ]
         else:
-            generations = [ChatGeneration(message=AIMessage(""), generation_info={})]
+            generations = [
+                ChatGeneration(
+                    message=AIMessage("", response_metadata=response_metadata),
+                    generation_info={},
+                )
+            ]
     return ChatResult(generations=generations, llm_output=llm_output)
 
 
@@ -1961,16 +2814,89 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         message = HumanMessage(
             content=[
-                {"type": "text", "text": "Summarize the video in 3 sentences."},
                 {
                     "type": "media",
                     "file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                    "mime_type": "video/mp4",
                 },
+                {"type": "text", "text": "Summarize the video in 3 sentences."},
             ]
         )
         response = model.invoke([message])
         print(response.text)
+        ```
+
+        Video inputs default to static processing, sampling frames at a fixed rate.
+        On Gemini 3 and later, setting `media_processing` to `"AGENTIC"` instead
+        lets the model navigate the timeline itself and load only the frames it
+        needs, which is more token-efficient on long-form content. Note that
+        `mime_type` is required whenever `media_processing` is set:
+
+        ```python
+        model = ChatGoogleGenerativeAI(model="gemini-3.7-flash")
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "video",
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "mime_type": "video/mp4",
+                    "media_processing": "AGENTIC",
+                },
+                {"type": "text", "text": "Summarize the video in 3 sentences."},
+            ]
+        )
+        response = model.invoke([message])
+        ```
+
+        Videos uploaded through the Files API use `file_id`, and each video sets
+        its own mode, so modes can be mixed in one request:
+
+        ```python
+        from google import genai
+
+        client = genai.Client()
+        lecture = client.files.upload(file="lecture.mp4")
+        experiment = client.files.upload(file="experiment.mp4")
+        # Wait for `client.files.get(name=...).state` to reach `ACTIVE` first.
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "video",
+                    "file_id": lecture.uri,
+                    "mime_type": lecture.mime_type,
+                    "media_processing": "AGENTIC",
+                },
+                {
+                    "type": "video",
+                    "file_id": experiment.uri,
+                    "mime_type": experiment.mime_type,
+                    "media_processing": "STATIC",
+                },
+                {"type": "text", "text": "Compare the lecture with the experiment."},
+            ]
+        )
+        response = model.invoke([message])
+        ```
+
+        Inline base64 also works, subject to the usual request size limit:
+
+        ```python
+        import base64
+        from pathlib import Path
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "video",
+                    "base64": base64.b64encode(Path("clip.mp4").read_bytes()).decode(),
+                    "mime_type": "video/mp4",
+                    "media_processing": "AGENTIC",
+                },
+                {"type": "text", "text": "What happens at 00:11?"},
+            ]
+        )
+        response = model.invoke([message])
         ```
 
     ???+ example "Image generation"
@@ -2366,6 +3292,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     error.
     """
 
+    _client_cleanup: _ClientCleanup = PrivateAttr()
+
     stop: list[str] | None = Field(default=None, alias="stop_sequences")
     """Stop sequences for the model."""
 
@@ -2411,9 +3339,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     for more details on supported JSON Schema features.
     """
 
-    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = Field(
-        default=None,
-        alias="thinking_level",
+    reasoning_effort: Literal["minimal", "low", "medium", "high", "xhigh"] | None = (
+        Field(
+            default=None,
+            alias="thinking_level",
+        )
     )
     """Indicates the thinking level.
 
@@ -2422,6 +3352,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         * `'low'`: Minimizes latency and cost.
         * `'medium'`: Balances latency/cost with reasoning depth.
         * `'high'`: Maximizes reasoning depth.
+        * `'xhigh'`: Extra-high reasoning depth. Sent as-is only to models whose
+            profile lists `'xhigh'` in `reasoning_effort_levels`; other models fall
+            back to `'high'`.
 
     Check the model profile's `reasoning_effort_levels` and
     `reasoning_effort_default` fields for model-specific support. If those fields are
@@ -2500,9 +3433,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return "chat-google-generative-ai"
 
     @property
-    def thinking_level(self) -> Literal["minimal", "low", "medium", "high"] | None:
+    def thinking_level(
+        self,
+    ) -> Literal["minimal", "low", "medium", "high", "xhigh"] | None:
         """Alias for `reasoning_effort` (Gemini's native name for this setting)."""
         return self.reasoning_effort
+
+    @property
+    def _supports_xhigh_thinking_level(self) -> bool:
+        levels = (self.profile or {}).get("reasoning_effort_levels") or []
+        return "xhigh" in levels
 
     @property
     def _supports_code_execution(self) -> bool:
@@ -2512,7 +3452,17 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """
         # TODO: Refactor to use `capabilities` property when supported upstream
         # (or done via augmentation)
-        return "gemini-2" in self.model or "gemini-3" in self.model
+        model = _normalize_gemini_model_name(self.model)
+        return model.startswith(
+            (
+                "gemini-2-",
+                "gemini-2.",
+                "gemini-3-",
+                "gemini-3.",
+                "gemini-4-",
+                "gemini-4.",
+            )
+        )
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -2621,7 +3571,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
 
         http_options = HttpOptions(
             base_url=cast("str", base_url),
-            api_version=self.api_version,
+            api_version=_default_api_version(
+                self.api_version,
+                vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+            ),
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
@@ -2673,57 +3626,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
             self.client = Client(api_key=google_api_key, http_options=http_options)
+        self._client_cleanup = _ClientCleanup(self.client)
         return self
 
     @model_validator(mode="after")
     def _set_model_profile(self) -> Self:
         """Set model profile if not overridden."""
         if self.profile is None:
-            model_id = re.sub(r"-\d{3}$", "", self.model.replace("models/", ""))
+            model_id = re.sub(r"-\d{3}$", "", _normalize_gemini_model_name(self.model))
             self.profile = _get_default_model_profile(model_id)
         return self
-
-    def __del__(self) -> None:
-        """Clean up the client on deletion."""
-        if not hasattr(self, "client") or self.client is None:
-            return
-
-        try:
-            # Close the sync client
-            self.client.close()
-
-            # Attempt to close the async client
-            # Note: The SDK's close() doesn't close the async client automatically
-            if hasattr(self.client, "aio") and self.client.aio is not None:
-                try:
-                    # Check if there's a running event loop
-                    loop = asyncio.get_running_loop()
-                    if not loop.is_closed():
-                        # Schedule the close
-                        # Wrap in ensure_future to avoid "coroutine never awaited"
-                        task = asyncio.ensure_future(
-                            self.client.aio.aclose(), loop=loop
-                        )
-                        # Add a done callback to suppress any exceptions
-                        task.add_done_callback(
-                            lambda t: t.exception() if not t.cancelled() else None
-                        )
-                except RuntimeError:
-                    # No running loop - create a new one for cleanup
-                    try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            loop.run_until_complete(self.client.aio.aclose())
-                        finally:
-                            loop.close()
-                            asyncio.set_event_loop(None)
-                    except Exception:
-                        # Suppress errors during shutdown
-                        pass
-        except Exception:
-            # Suppress all errors during cleanup
-            pass
 
     @property
     def async_client(self) -> Any:
@@ -2739,7 +3651,19 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if self.client is None:
             msg = "Client not initialized. Initialize the model first."
             raise ValueError(msg)
+        self._client_cleanup.register_async_loop()
         return self.client.aio
+
+    async def aclose(self) -> None:
+        """Close the sync and async clients on the async client's event loop.
+
+        Call this method before the event loop used for async requests exits.
+
+        Raises:
+            RuntimeError: If called from a different event loop than the one used for
+                async requests.
+        """
+        await self._client_cleanup.aclose()
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
@@ -2776,7 +3700,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         if code_execution is not None:
             if not self._supports_code_execution:
                 msg = (
-                    "Code execution is only supported on Gemini 2.0, and 2.5 models. "
+                    "Code execution is only supported on Gemini 2, 3, and 4 models. "
                     f"Current model: {self.model}"
                 )
                 raise ValueError(msg)
@@ -2896,6 +3820,20 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         thinking_level = kwargs.get(
             "thinking_level", kwargs.get("reasoning_effort", self.reasoning_effort)
         )
+        if (
+            isinstance(thinking_level, str)
+            and thinking_level.lower() == "xhigh"
+            and not self._supports_xhigh_thinking_level
+        ):
+            # Models without `xhigh` reject it, so fall back to the closest level.
+            warnings.warn(
+                f"Model '{self.model}' does not list 'xhigh' in its profile's "
+                "reasoning_effort_levels; using 'high' instead. Set a profile with "
+                "'xhigh' in reasoning_effort_levels to send it as-is.",
+                UserWarning,
+                stacklevel=2,
+            )
+            thinking_level = "high"
         thinking_budget = kwargs.get("thinking_budget", self.thinking_budget)
         include_thoughts = kwargs.get("include_thoughts", self.include_thoughts)
 
@@ -3037,6 +3975,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             filtered_messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
             model=self.model,
+            use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
         )
         if (
             _uses_fixed_sampling_and_disallows_prefill(self.model)
@@ -3150,12 +4089,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return None
 
     def _filter_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
-        """Filter out messages with empty content."""
-        filtered_messages = []
+        """Normalize messages with empty content."""
+        filtered_messages: list[BaseMessage] = []
         for message in messages:
             if isinstance(message, HumanMessage) and not message.content:
                 warnings.warn(
                     "HumanMessage with empty content was removed to prevent API error"
+                )
+            elif (
+                self._use_vertexai  # type: ignore[attr-defined]
+                and isinstance(message, AIMessage)
+                and message.content == []
+            ):
+                filtered_messages.append(
+                    message.model_copy(
+                        update={"content": [{"type": "text", "text": ""}]}
+                    )
                 )
             else:
                 filtered_messages.append(message)
@@ -3381,6 +4330,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         return _response_to_result(response)
 
@@ -3417,12 +4368,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         try:
             response: GenerateContentResponse = (
-                await self.client.aio.models.generate_content(
+                await self.async_client.models.generate_content(
                     **request,
                 )
             )
         except ClientError as e:
             _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         return _response_to_result(response)
 
@@ -3457,19 +4410,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        try:
-            response: Iterator[GenerateContentResponse] = (
-                self.client.models.generate_content_stream(
-                    **request,
-                )
+        response: Iterator[GenerateContentResponse] = (
+            self.client.models.generate_content_stream(
+                **request,
             )
-        except ClientError as e:
-            _handle_client_error(e, request)
+        )
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
-        index = -1
-        index_type = ""
-        for chunk in response:
+        indexer = _StreamBlockIndexer()
+        saw_tool_call = False
+        for chunk in _classified_stream(response, request):
             if chunk:
                 _chat_result = _response_to_result(
                     chunk, stream=True, prev_usage=prev_usage_metadata
@@ -3478,14 +4428,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 message = cast("AIMessageChunk", gen.message)
 
             # Populate index if missing
-            if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+            indexer.assign(message)
+            saw_tool_call = _mark_streamed_tool_call(gen, saw_tool_call)
 
             prev_usage_metadata = (
                 message.usage_metadata
@@ -3529,16 +4473,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             **kwargs,
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
-        index = -1
-        index_type = ""
-        try:
-            stream = await self.client.aio.models.generate_content_stream(
-                **request,
-            )
-        except ClientError as e:
-            _handle_client_error(e, request)
+        indexer = _StreamBlockIndexer()
+        stream = await self.async_client.models.generate_content_stream(
+            **request,
+        )
 
-        async for chunk in stream:
+        saw_tool_call = False
+        async for chunk in _aclassified_stream(stream, request):
             _chat_result = _response_to_result(
                 chunk, stream=True, prev_usage=prev_usage_metadata
             )
@@ -3546,14 +4487,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             message = cast("AIMessageChunk", gen.message)
 
             # populate index if missing
-            if isinstance(message.content, list):
-                for block in message.content:
-                    if isinstance(block, dict) and "type" in block:
-                        if block["type"] != index_type:
-                            index_type = block["type"]
-                            index = index + 1
-                        if "index" not in block:
-                            block["index"] = index
+            indexer.assign(message)
+            saw_tool_call = _mark_streamed_tool_call(gen, saw_tool_call)
 
             prev_usage_metadata = (
                 message.usage_metadata
