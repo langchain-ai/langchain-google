@@ -501,6 +501,13 @@ class VertexModelGardenLlama(_BaseVertexMaasModelGarden, BaseChatModel):
         tools: Sequence[dict[str, Any] | type | Callable | BaseTool],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
-        """Bind tool-like objects to this chat model."""
+        """Bind tool-like objects to this chat model.
+
+        Tools are rendered in the system message. The `any` tool choice used by
+        `with_structured_output` is omitted because Vertex does not accept it.
+        This prompt-based integration does not force the model to call a tool.
+        """
         formatted_tools = [convert_to_openai_function(tool) for tool in tools]
+        if kwargs.get("tool_choice") == "any":
+            kwargs.pop("tool_choice")
         return super().bind(tools=formatted_tools, **kwargs)
