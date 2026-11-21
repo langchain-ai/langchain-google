@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 
 from langchain_core.messages import BaseMessage
+from vertexai.generative_models import ToolConfig
 from vertexai.preview import caching
 
 from langchain_google_vertexai._image_utils import ImageBytesLoader
@@ -59,7 +60,11 @@ def create_context_cache(
     )
 
     if tool_config:
-        tool_config = _format_tool_config(tool_config)
+        # `CachedContent.create` requires the SDK's `ToolConfig` wrapper, not the
+        # raw GAPIC type that `_format_tool_config` returns.
+        tool_config = ToolConfig._from_gapic(  # type: ignore[assignment]
+            cast("Any", _format_tool_config(tool_config))
+        )
 
     if tools is not None:
         tools = [_format_to_gapic_tool(tools)]
@@ -73,7 +78,7 @@ def create_context_cache(
         contents=cast("list[Any] | None", contents),
         ttl=time_to_live,
         expire_time=expire_time,
-        tool_config=tool_config,
+        tool_config=cast("Any", tool_config),
         tools=cast("list[Any] | None", tools),
     )
 
