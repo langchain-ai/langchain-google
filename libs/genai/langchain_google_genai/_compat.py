@@ -265,24 +265,30 @@ def _convert_from_v1_to_generativelanguage_v1beta(
 
         # ImageContentBlock
         elif block_dict["type"] == "image":
+            image_block: dict[str, Any] | None = None
             # SDK validation decodes base64 strings; do not pre-encode them.
             if b64_data := block_dict.get("base64"):
-                new_block = {
+                image_block = {
                     "inline_data": {
                         "mime_type": block_dict.get("mime_type", "image/jpeg"),
                         "data": b64_data,
                     }
                 }
-                new_content.append(new_block)
             elif (url := block_dict.get("url")) and provider_kind != "foreign":
                 # Google file service
-                file_data_block = _file_data_block(
+                image_block = _file_data_block(
                     url,
                     block_dict.get("mime_type", "image/jpeg"),
                     use_vertexai=use_vertexai,
                 )
-                if file_data_block is not None:
-                    new_content.append(file_data_block)
+            if image_block is not None:
+                extras = block_dict.get("extras")
+                thought_signature = block_dict.get("thought_signature") or (
+                    extras.get("signature") if isinstance(extras, dict) else None
+                )
+                if thought_signature and provider_kind != "foreign":
+                    image_block["thought_signature"] = thought_signature
+                new_content.append(image_block)
 
         # TODO: AudioContentBlock -> audio once models support passing back in
 
