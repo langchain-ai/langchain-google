@@ -181,10 +181,8 @@ def _format_message_anthropic(
                     raise ValueError(msg)
 
                 # Drop OpenAI Responses blocks written by another provider; the
-                # tool call itself is sent from `message.tool_calls`. A missing
-                # `model_provider` keeps the block, since `ChatAnthropicVertex`
-                # does not set it and its own v1 "reasoning" blocks must still
-                # become "thinking" blocks below.
+                # tool call is sent from `message.tool_calls`. A missing
+                # `model_provider` is kept: `ChatAnthropicVertex` does not set it.
                 if (
                     block["type"] in ("reasoning", "function_call")
                     and isinstance(message, AIMessage)
