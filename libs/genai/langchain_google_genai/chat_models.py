@@ -3569,6 +3569,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
                 raise ValueError(msg)
 
+        # Include retry_options at the client level so retries apply to all
+        # code paths, including streaming. The SDK's async_request_streamed
+        # does not forward per-request http_options to _async_request, so
+        # without this the client-level default is stop_after_attempt(1)
+        # (zero retries). See: https://github.com/langchain-ai/langchain-google/issues/1652
+        retry_options = (
+            HttpRetryOptions(attempts=self.max_retries) if self.max_retries else None
+        )
         http_options = HttpOptions(
             base_url=cast("str", base_url),
             api_version=_default_api_version(
@@ -3576,6 +3584,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 vertexai=self._use_vertexai,  # type: ignore[attr-defined]
             ),
             headers=headers,
+            retry_options=retry_options,
             client_args=self.client_args,
             async_client_args=self.client_args,
         )
