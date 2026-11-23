@@ -4410,11 +4410,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             tool_choice=tool_choice,
             **kwargs,
         )
-        response: Iterator[GenerateContentResponse] = (
-            self.client.models.generate_content_stream(
-                **request,
+        try:
+            response: Iterator[GenerateContentResponse] = (
+                self.client.models.generate_content_stream(
+                    **request,
+                )
             )
-        )
+        except ClientError as e:
+            _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         indexer = _StreamBlockIndexer()
@@ -4474,9 +4479,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         )
         prev_usage_metadata: UsageMetadata | None = None  # Cumulative usage
         indexer = _StreamBlockIndexer()
-        stream = await self.async_client.models.generate_content_stream(
-            **request,
-        )
+        try:
+            stream = await self.async_client.models.generate_content_stream(
+                **request,
+            )
+        except ClientError as e:
+            _handle_client_error(e, request)
+        except ServerError as e:
+            _handle_server_error(e)
 
         saw_tool_call = False
         async for chunk in _aclassified_stream(stream, request):
