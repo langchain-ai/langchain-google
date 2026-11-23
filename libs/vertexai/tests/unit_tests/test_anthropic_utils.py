@@ -1,6 +1,7 @@
 """Unit tests for _anthropic_utils.py."""
 
 import base64
+import copy
 from typing import Any
 from unittest.mock import patch
 
@@ -15,6 +16,7 @@ from langchain_core.messages import (
     AIMessageChunk,
     HumanMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.messages.content import create_image_block, create_text_block
@@ -1859,3 +1861,156 @@ def test_format_messages_anthropic_preserves_trailing_thinking_block() -> None:
     ]
     _, formatted = _format_messages_anthropic(messages, project="test-project")
     assert formatted[-1]["content"][0]["thinking"] == "considering...  "
+
+
+def _openai_responses_message(
+    content: list[str | dict[str, Any]], tool_calls: list[ToolCall] | None = None
+) -> AIMessage:
+    """Build an `AIMessage` as `ChatOpenAI` with the Responses API stores it."""
+    return AIMessage(
+        content=content,
+        tool_calls=tool_calls or [],
+        response_metadata={"model_provider": "openai", "model_name": "gpt-5"},
+    )
+
+
+def _openai_tool_call_message() -> AIMessage:
+    """A Responses tool call: a `function_call` block plus the same `tool_calls`."""
+    return _openai_responses_message(
+        content=[
+            {
+                "type": "function_call",
+                "name": "get_weather",
+                "arguments": '{"city": "Seoul"}',
+                "call_id": "call_abc123",
+                "id": "fc_abc123",
+                "status": "completed",
+            }
+        ],
+        tool_calls=[
+            create_tool_call(
+                name="get_weather", args={"city": "Seoul"}, id="call_abc123"
+            )
+        ],
+    )
+
+
+def _openai_reasoning_message() -> AIMessage:
+    """A Responses `reasoning` item followed by a text answer."""
+    return _openai_responses_message(
+        content=[
+            {
+                "type": "reasoning",
+                "id": "rs_abc123",
+                "summary": [
+                    {"type": "summary_text", "text": "Check the weather first."}
+                ],
+            },
+            {"type": "text", "text": "It's sunny in Seoul."},
+        ]
+    )
+
+
+def test_format_messages_drops_openai_function_call_block() -> None:
+    """A Responses `function_call` block is dropped; `tool_calls` carry the call."""
+    messages = [
+        HumanMessage(content="What's the weather in Seoul?"),
+        _openai_tool_call_message(),
+        ToolMessage(content="Sunny, 21°C", tool_call_id="call_abc123"),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    assert formatted[1] == {
+        "role": "assistant",
+        "content": [
+            {
+                "type": "tool_use",
+                "name": "get_weather",
+                "input": {"city": "Seoul"},
+                "id": "call_abc123",
+            }
+        ],
+    }
+    assert formatted[2] == {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "content": "Sunny, 21°C",
+                "tool_use_id": "call_abc123",
+            }
+        ],
+    }
+
+
+def test_format_messages_drops_openai_reasoning_block() -> None:
+    """A Responses `reasoning` block is dropped and the text is kept."""
+    messages = [
+        HumanMessage(content="What's the weather in Seoul?"),
+        _openai_reasoning_message(),
+        HumanMessage(content="Thanks!"),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    assert formatted[1] == {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "It's sunny in Seoul."}],
+    }
+
+
+@pytest.mark.parametrize(
+    "response_metadata",
+    [{}, {"model_provider": "anthropic"}],
+    ids=["no_model_provider", "anthropic"],
+)
+def test_format_messages_converts_own_reasoning_block_to_thinking(
+    response_metadata: dict[str, Any],
+) -> None:
+    """A v1 `reasoning` block from Claude still becomes a signed `thinking` block.
+
+    `ChatAnthropicVertex` does not set `model_provider`, so a missing value must
+    not be treated as another provider.
+    """
+    messages = [
+        HumanMessage(content="What's the weather in Seoul?"),
+        AIMessage(
+            content=[
+                {
+                    "type": "reasoning",
+                    "reasoning": "Check the weather first.",
+                    "extras": {"signature": "sig_abc123"},
+                },
+                {"type": "text", "text": "It's sunny in Seoul."},
+            ],
+            response_metadata=response_metadata,
+        ),
+        HumanMessage(content="Thanks!"),
+    ]
+
+    _, formatted = _format_messages_anthropic(messages, project="test-project")
+
+    assert formatted[1]["content"] == [
+        {
+            "type": "thinking",
+            "thinking": "Check the weather first.",
+            "signature": "sig_abc123",
+        },
+        {"type": "text", "text": "It's sunny in Seoul."},
+    ]
+
+
+def test_format_messages_does_not_mutate_openai_messages() -> None:
+    """Dropping foreign blocks leaves the caller's messages unchanged."""
+    messages = [
+        HumanMessage(content="What's the weather in Seoul?"),
+        _openai_tool_call_message(),
+        ToolMessage(content="Sunny, 21°C", tool_call_id="call_abc123"),
+        _openai_reasoning_message(),
+    ]
+    original_contents = copy.deepcopy([message.content for message in messages])
+
+    _format_messages_anthropic(messages, project="test-project")
+
+    assert [message.content for message in messages] == original_contents
