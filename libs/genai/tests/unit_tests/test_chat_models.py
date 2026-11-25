@@ -9662,3 +9662,24 @@ def test_cached_content_function_calling_parses_tool_call() -> None:
         result = structured.invoke("Tell me a joke")
 
     assert result == _CachedJoke(setup="Why?")
+
+
+def test_cached_content_function_calling_include_raw_reports_parsing_error() -> None:
+    """With `include_raw=True`, a missing tool call lands in `parsing_error`.
+
+    The `include_raw` contract reports parsing failures without raising, so the
+    raw message must still be returned.
+    """
+    chat, _ = _mock_chat(cached_content="cachedContents/test-cache-123")
+
+    with pytest.warns(UserWarning, match="cached_content"):
+        structured = chat.with_structured_output(
+            _CachedJoke, method="function_calling", include_raw=True
+        )
+        result = structured.invoke("Tell me a joke")
+
+    assert isinstance(result, dict)
+    assert isinstance(result["raw"], AIMessage)
+    assert result["raw"].content == "test response"
+    assert result["parsed"] is None
+    assert isinstance(result["parsing_error"], OutputParserException)

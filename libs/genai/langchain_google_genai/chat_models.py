@@ -98,14 +98,18 @@ from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
-from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
     PydanticToolsParser,
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
+from langchain_core.runnables import (
+    Runnable,
+    RunnableConfig,
+    RunnableLambda,
+    RunnablePassthrough,
+)
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
 from langchain_core.utils.function_calling import (
@@ -4702,7 +4706,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = f"Received unsupported arguments {kwargs}"
             raise ValueError(msg)
 
-        parser: OutputParserLike
+        parser: Runnable[AIMessage, Any]
         llm: Runnable[LanguageModelInput, AIMessage]
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
@@ -4767,7 +4771,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             except Exception:
                 llm = self.bind_tools([schema], tool_choice=tool_choice)
             if self.cached_content:
-                llm = self._require_tool_call_with_cached_content(llm)
+                # Check on the parser side so that, with `include_raw=True`, the
+                # error lands in `parsing_error` instead of losing the raw message.
+                parser = self._require_tool_call_with_cached_content() | parser
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -4779,18 +4785,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return llm | parser
 
     def _require_tool_call_with_cached_content(
-        self, llm: Runnable[LanguageModelInput, AIMessage]
-    ) -> Runnable[LanguageModelInput, AIMessage]:
+        self,
+    ) -> Runnable[AIMessage, AIMessage]:
         """Raise instead of parsing `None` when a cached request makes no tool call.
 
         `cached_content` keeps the schema tool and forced `tool_choice` out of the
         request, so the model can answer in text without calling the tool.
 
-        Args:
-            llm: The tool-bound model used for structured output.
-
         Returns:
-            `llm` followed by a check that the response contains a tool call.
+            A check to run before the parser that raises if the response has no
+            tool call.
         """
         admonition = (
             "`cached_content` is set, so structured output via "
@@ -4809,7 +4813,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 raise OutputParserException(admonition)
             return message
 
-        return llm | _raise_if_no_tool_calls
+        return RunnableLambda(_raise_if_no_tool_calls)
 
     def bind_tools(
         self,
