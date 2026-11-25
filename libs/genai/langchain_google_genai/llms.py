@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from difflib import get_close_matches
-from typing import Any
+from typing import Any, Self
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -13,12 +13,15 @@ from langchain_core.language_models.llms import BaseLLM
 from langchain_core.messages import HumanMessage
 from langchain_core.outputs import Generation, GenerationChunk, LLMResult
 from pydantic import ConfigDict, model_validator
-from typing_extensions import Self
 
 from langchain_google_genai._common import (
     _BaseGoogleGenerativeAI,
 )
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
+from langchain_google_genai._version import __version__
+from langchain_google_genai.chat_models import (
+    ChatGoogleGenerativeAI,
+    _is_gemini_3_or_later,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +34,12 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         ```python
         from langchain_google_genai import GoogleGenerativeAI
 
-        llm = GoogleGenerativeAI(model="gemini-2.5-pro")
+        llm = GoogleGenerativeAI(model="gemini-3.1-pro-preview")
         ```
     """
 
     client: Any = None
+    temperature: float | None = None
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -64,8 +68,18 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
         super().__init__(**kwargs)
 
     @model_validator(mode="after")
+    def _set_langchain_google_genai_version(self) -> Self:
+        """Set package version in metadata."""
+        self._add_version("langchain-google-genai", __version__)
+        return self
+
+    @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and passes them to google-generativeai package."""
+        if "temperature" not in self.model_fields_set and not _is_gemini_3_or_later(
+            self.model
+        ):
+            self.temperature = 0.7
         if not any(self.model.startswith(prefix) for prefix in ("models/",)):
             self.model = f"models/{self.model}"
 
@@ -76,8 +90,11 @@ class GoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseLLM):
             project=self.project,
             location=self.location,
             temperature=self.temperature,
+            frequency_penalty=self.frequency_penalty,
+            presence_penalty=self.presence_penalty,
             top_p=self.top_p,
             top_k=self.top_k,
+            n=self.n,
             max_tokens=self.max_output_tokens,
             max_retries=self.max_retries,
             timeout=self.timeout,

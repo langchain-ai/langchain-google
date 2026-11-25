@@ -34,4 +34,4 @@ class TestGemini_AIStandard(ChatModelUnitTests):
 
     @property
     def chat_model_params(self) -> dict:
-        return {"model_name": "gemini-2.5-pro", "project": "test-proj"}
+        return {"model_name": "gemini-3.1-pro-preview", "project": "test-proj"}

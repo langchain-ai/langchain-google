@@ -1,7 +1,7 @@
 import os
 import re
 import string
-from typing import Any
+from typing import Any, Self
 
 from google.genai.client import Client
 from google.genai.errors import ClientError
@@ -9,10 +9,10 @@ from google.genai.types import EmbedContentConfig, HttpOptions
 from langchain_core.embeddings import Embeddings
 from langchain_core.utils import from_env, secret_from_env
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
-from typing_extensions import Self
 
 from langchain_google_genai._common import (
     GoogleGenerativeAIError,
+    _default_api_version,
     get_user_agent,
 )
 
@@ -192,6 +192,16 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
     Applied to both sync and async clients.
     """
 
+    api_version: str | None = Field(default=None)
+    """Override the API version path segment in request URLs.
+
+    Defaults to `v1beta` for the Gemini Developer API, where preview models and
+    context caching are served, unless `GOOGLE_GENAI_API_VERSION` is set. Vertex AI
+    uses the `google-genai` SDK default (`v1beta1`). Set this when
+    targeting a proxy or gateway that expects a different API version segment
+    (e.g. `'v1'`).
+    """
+
     request_options: dict | None = Field(
         default=None,
     )
@@ -252,6 +262,10 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
 
         http_options = HttpOptions(
             base_url=self.base_url,
+            api_version=_default_api_version(
+                self.api_version,
+                vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+            ),
             headers=headers,
             client_args=self.client_args,
             async_client_args=self.client_args,
@@ -438,7 +452,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             try:
                 result = self.client.models.embed_content(
                     model=self.model,
-                    contents=batch,
+                    contents=[{"parts": [{"text": text}]} for text in batch],
                     config=config,
                 )
             except ClientError as e:
@@ -556,7 +570,7 @@ class GoogleGenerativeAIEmbeddings(BaseModel, Embeddings):
             try:
                 result = await self.client.aio.models.embed_content(
                     model=self.model,
-                    contents=batch,
+                    contents=[{"parts": [{"text": text}]} for text in batch],
                     config=config,
                 )
             except ClientError as e:

@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Python ${{ inputs.python-version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ inputs.python-version }} + uv
         uses: "./.github/actions/uv_setup"
@@ -33,18 +33,13 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libqpdf-dev
-
       - name: Install dependencies
         shell: bash
         run: uv sync --group test --group test_integration
 
       - name: 'Authenticate to Google Cloud'
         id: 'auth'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
 

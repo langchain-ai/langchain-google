@@ -6,6 +6,7 @@ from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    cast,
 )
 
 from google.auth.credentials import Credentials
@@ -13,7 +14,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import LanguageModelInput, ModelProfile
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     agenerate_from_stream,
@@ -55,8 +56,13 @@ from langchain_google_vertexai._anthropic_utils import (
     _tools_in_params,
     convert_to_anthropic_tool,
 )
-from langchain_google_vertexai._base import _BaseVertexAIModelGarden, _VertexAICommon
+from langchain_google_vertexai._base import (
+    _add_langchain_google_vertexai_version,
+    _BaseVertexAIModelGarden,
+    _VertexAICommon,
+)
 from langchain_google_vertexai._retry import create_base_retry_decorator
+from langchain_google_vertexai.data._profiles import _PROFILES as _VERTEX_PROFILES
 
 
 def _create_retry_decorator(
@@ -97,6 +103,12 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @model_validator(mode="after")
+    def _set_langchain_google_vertexai_version(self) -> Self:
+        """Set package version in metadata."""
+        _add_langchain_google_vertexai_version(self)
+        return self
 
     def _generate(
         self,
@@ -154,10 +166,58 @@ class VertexAIModelGarden(_BaseVertexAIModelGarden, BaseLLM):
         return self._parse_response(response)
 
 
+_FALLBACK_MAX_OUTPUT_TOKENS: int = 4096
+"""Fallback max output tokens when the model has no profile entry."""
+
+
+def _get_anthropic_profile(model_name: str | None) -> ModelProfile | None:
+    """Look up the profile for an Anthropic model.
+
+    Vertex profile keys are `@`-versioned (e.g. `claude-sonnet-4-6@default`),
+    but callers may pass a bare base name (`claude-sonnet-4-6`). When the exact
+    key misses, resolve a unique `{model_name}@...` entry so bare names get the
+    same profile. Bare bases are unique across the registry, so at most one
+    entry can match.
+
+    Returns:
+        A copy of the profile, or `None` when `model_name` is missing or has no
+            profile entry.
+    """
+    if not model_name:
+        return None
+    profile = _VERTEX_PROFILES.get(model_name)
+    if profile is None:
+        matches = [k for k in _VERTEX_PROFILES if k.startswith(f"{model_name}@")]
+        if len(matches) == 1:
+            profile = _VERTEX_PROFILES[matches[0]]
+    return cast("ModelProfile", dict(profile)) if profile else None
+
+
+def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
+    """Look up the max output tokens for an Anthropic model from its profile.
+
+    Returns the profile's `max_output_tokens` when known. Falls back to
+    `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, has no profile
+    entry, or whose profile lacks a `max_output_tokens` key.
+    """
+    profile = _get_anthropic_profile(model_name) or {}
+    return profile.get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
+
+
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     async_client: Any = Field(default=None, exclude=True)
 
-    max_output_tokens: int = Field(default=1024, alias="max_tokens")
+    max_output_tokens: int = Field(
+        default=_FALLBACK_MAX_OUTPUT_TOKENS, alias="max_tokens"
+    )
+    """Denotes the number of tokens to predict per generation.
+
+    If not explicitly set, this is set dynamically using the model's
+    `max_output_tokens` from its
+    [model profile](https://docs.langchain.com/oss/python/langchain/models#model-profiles).
+    Falls back to 4096 when no profile entry exists for the model or when the
+    profile is missing `max_output_tokens`.
+    """
 
     access_token: str | None = None
 
@@ -195,6 +255,18 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     # Needed so that mypy doesn't flag missing aliased init args.
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_default_max_tokens(cls, values: dict[str, Any]) -> Any:
+        """Set default `max_output_tokens` from model profile with fallback."""
+        max_tokens_keys = ("max_output_tokens", "max_tokens")
+        if not any(values.get(k) is not None for k in max_tokens_keys):
+            model = values.get("model_name") or values.get("model")
+            values["max_output_tokens"] = _get_anthropic_profile_max_output_tokens(
+                model
+            )
+        return values
 
     @model_validator(mode="before")
     @classmethod
@@ -358,9 +430,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
-            has_betas = True if params.get("betas") else False
-            if has_betas:
+            if params.get("betas"):
                 return self.client.beta.messages.create(**params)
+            params.pop("betas", None)
             return self.client.messages.create(**params)
 
         data = _completion_with_retry_inner(**params)
@@ -388,9 +460,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
-            has_betas = True if params.get("betas") else False
-            if has_betas:
+            if params.get("betas"):
                 return await self.async_client.beta.messages.create(**params)
+            params.pop("betas", None)
             return await self.async_client.messages.create(**params)
 
         data = await _acompletion_with_retry_inner(**params)
@@ -400,6 +472,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return "anthropic-chat-vertexai"
+
+    def _resolve_model_profile(self) -> ModelProfile | None:
+        return _get_anthropic_profile(self.model_name)
 
     def _stream(
         self,
@@ -422,9 +497,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = True if params.get("betas") else False
-            if has_betas:
+            if params.get("betas"):
                 return self.client.beta.messages.create(**params, stream=True)
+            params.pop("betas", None)
             return self.client.messages.create(**params, stream=True)
 
         stream = _stream_with_retry(**params)
@@ -466,11 +541,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = True if params.get("betas") else False
-            if has_betas:
+            if params.get("betas"):
                 return await self.async_client.beta.messages.create(
                     stream=True, **params
                 )
+            params.pop("betas", None)
             return await self.async_client.messages.create(**params, stream=True)
 
         stream = await _astream_with_retry(**params)

@@ -21,8 +21,63 @@ locals {
     { _LIB = var.library },
     { _PYTHON_VERSION = var.python_version },
   )
-  #TODO: multiline
-  cloudbuild_config = "python -m pip install -q uv --verbose && cd libs/$${_LIB} && uv sync --group test --group test_integration --all-extras && uv run pytest --retries 3 --retry-delay 1 --extended --release tests/integration_tests/"
+  cloudbuild_config = <<-EOT
+    set -euo pipefail
+
+    python -m pip install -q uv --verbose
+    cd libs/$${_LIB}
+    uv sync --group test --group test_integration --all-extras
+
+    common_pytest_args="--retries 3 --retry-delay 1 --maxfail=1 --timeout=120 --timeout-method=thread --extended --release"
+
+    case "$${_LIB}" in
+      vertexai)
+        uv run pytest $common_pytest_args \
+          tests/integration_tests/test_chat_models.py::test_vertexai_single_call \
+          tests/integration_tests/test_chat_models.py::test_vertexai_stream \
+          tests/integration_tests/test_chat_models.py::test_chat_vertexai_gemini_function_calling
+
+        uv run pytest $common_pytest_args \
+          tests/integration_tests/test_anthropic_cache.py \
+          tests/integration_tests/test_anthropic_files.py \
+          tests/integration_tests/test_anthropic_long_context.py \
+          tests/integration_tests/test_maas.py \
+          tests/integration_tests/test_model_garden.py
+
+        uv run pytest $common_pytest_args \
+          tests/integration_tests/test_callbacks.py \
+          tests/integration_tests/test_chains.py \
+          tests/integration_tests/test_chat_models.py \
+          tests/integration_tests/test_llms.py \
+          tests/integration_tests/test_llms_safety.py \
+          tests/integration_tests/test_standard.py
+
+        uv run pytest $common_pytest_args tests/integration_tests/ \
+          --ignore=tests/integration_tests/test_anthropic_cache.py \
+          --ignore=tests/integration_tests/test_anthropic_files.py \
+          --ignore=tests/integration_tests/test_anthropic_long_context.py \
+          --ignore=tests/integration_tests/test_callbacks.py \
+          --ignore=tests/integration_tests/test_chains.py \
+          --ignore=tests/integration_tests/test_chat_models.py \
+          --ignore=tests/integration_tests/test_llms.py \
+          --ignore=tests/integration_tests/test_llms_safety.py \
+          --ignore=tests/integration_tests/test_maas.py \
+          --ignore=tests/integration_tests/test_model_garden.py \
+          --ignore=tests/integration_tests/test_standard.py
+        ;;
+      genai)
+        uv run pytest $common_pytest_args \
+          tests/integration_tests/test_chat_models.py::test_chat_google_genai_invoke \
+          tests/integration_tests/test_chat_models.py::test_basic_streaming \
+          tests/integration_tests/test_chat_models.py::test_chat_google_genai_with_structured_output
+
+        uv run pytest $common_pytest_args tests/integration_tests/
+        ;;
+      *)
+        uv run pytest $common_pytest_args tests/integration_tests/
+        ;;
+    esac
+  EOT
 }
 
 resource "google_project_service" "model_armor_service" {
@@ -37,14 +92,10 @@ resource "google_cloudbuild_trigger" "cloudbuild_trigger" {
   location        = var.region
   service_account = google_service_account.cloudbuild_service_account.id
 
-  included_files = ["libs/${var.library}/**"]
-
-  repository_event_config {
+  source_to_build {
     repository = var.cloudbuildv2_repository_id
-    pull_request {
-      branch = "^main$"
-      #comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY" #Configure builds to run whether a repository owner or collaborator need to comment /gcbrun
-    }
+    ref        = "refs/heads/main"
+    repo_type  = "GITHUB"
   }
 
   substitutions = local.cloudbuild_env_vars

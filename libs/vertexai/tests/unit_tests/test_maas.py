@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import tool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
+from langchain_google_vertexai import __version__
 from langchain_google_vertexai.model_garden_maas import get_vertex_maas_model
 from langchain_google_vertexai.model_garden_maas.llama import (
     _parse_response_candidate_llama,
@@ -26,6 +27,7 @@ def test_llama_init(mock_auth: Any) -> None:
     )
     assert llm._llm_type == "vertexai_model_garden_maas_llama"
     assert llm.model_name == _MODEL_NAME
+    assert llm.metadata["lc_versions"]["langchain-google-vertexai"] == __version__
 
     assert (
         llm.get_url()

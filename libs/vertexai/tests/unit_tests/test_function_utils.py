@@ -848,3 +848,71 @@ def test_union_nullable_types() -> None:
     assert "required_field" in gapic_schema.required
     assert "optional_primitive" not in gapic_schema.required
     assert "optional_complex" not in gapic_schema.required
+
+
+def test_multi_type_optional_union() -> None:
+    """Optional unions with 2+ non-null members keep `anyOf` and drop the null."""
+
+    class Config(BaseModel):
+        name: str | int | None = None
+
+    schema = Config.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    name_property = result["properties"]["name"]
+    assert "anyOf" in name_property
+    assert {c["type"] for c in name_property["anyOf"]} == {"STRING", "INTEGER"}
+    assert all(c["type"] != "NULL" for c in name_property["anyOf"])
+    assert "name" not in result.get("required", [])
+
+    gapic_schema = gapic.Schema.from_json(json.dumps(result))
+    assert "name" not in gapic_schema.required
+    assert len(gapic_schema.properties["name"].any_of) == 2
+
+
+def test_multi_type_optional_union_three_members() -> None:
+    """Three non-null members survive the null filter."""
+
+    class Config(BaseModel):
+        value: str | int | float | None = None
+
+    schema = Config.model_json_schema()
+    dereferenced_schema = dereference_refs(schema)
+    result = _format_json_schema_to_gapic(dereferenced_schema)
+
+    value_property = result["properties"]["value"]
+    assert "anyOf" in value_property
+    assert len(value_property["anyOf"]) == 3
+    assert all(c["type"] != "NULL" for c in value_property["anyOf"])
+    assert "value" not in result.get("required", [])
+
+
+def test_anyof_only_null_drops_property() -> None:
+    """Degenerate `anyOf: [{type: null}]` drops the property and clears `required`."""
+
+    schema = {
+        "type": "object",
+        "properties": {"only_null": {"anyOf": [{"type": "null"}]}},
+        "required": ["only_null"],
+    }
+    result = _format_json_schema_to_gapic(schema)
+
+    assert result["properties"]["only_null"] == {}
+    assert "only_null" not in result.get("required", [])
+
+
+def test_format_json_schema_to_gapic_v1_filters_null() -> None:
+    """V1 path also filters null branches out of `anyOf`."""
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "name": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        },
+    }
+    result = _format_json_schema_to_gapic_v1(schema)
+
+    name_any_of = result["properties"]["name"]["anyOf"]
+    assert all(c.get("type") != "NULL" for c in name_any_of)
+    assert {c["type"] for c in name_any_of} == {"STRING"}
