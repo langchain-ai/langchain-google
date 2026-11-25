@@ -47,6 +47,7 @@ from langchain_core.exceptions import (
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    OutputParserException,
 )
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -9608,3 +9609,56 @@ def test_cached_content_with_bound_tools_invoke() -> None:
     assert config.tools is None
     assert config.tool_config is None
     assert config.system_instruction is None
+
+
+class _CachedJoke(BaseModel):
+    """A joke."""
+
+    setup: str
+
+
+def test_cached_content_function_calling_raises_without_tool_call() -> None:
+    """Structured output raises, not returns `None`, when a cached call skips the tool.
+
+    The schema tool and forced `tool_choice` are not sent with `cached_content`,
+    so a text reply must surface as an error rather than a silent `None`.
+    """
+    chat, _ = _mock_chat(cached_content="cachedContents/test-cache-123")
+
+    with pytest.warns(UserWarning, match="function_calling") as record:
+        structured = chat.with_structured_output(_CachedJoke, method="function_calling")
+    assert record[0].filename == __file__
+
+    with (
+        pytest.warns(UserWarning, match="cached_content"),
+        pytest.raises(OutputParserException, match="cached_content"),
+    ):
+        structured.invoke("Tell me a joke")
+
+
+def test_cached_content_function_calling_parses_tool_call() -> None:
+    """A tool call from a cache that holds the schema tool still parses."""
+    chat, mock_generate_content = _mock_chat(
+        cached_content="cachedContents/test-cache-123"
+    )
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="_CachedJoke", args={"setup": "Why?"}
+                            )
+                        )
+                    ]
+                )
+            )
+        ],
+    )
+
+    with pytest.warns(UserWarning, match="cached_content"):
+        structured = chat.with_structured_output(_CachedJoke, method="function_calling")
+        result = structured.invoke("Tell me a joke")
+
+    assert result == _CachedJoke(setup="Why?")

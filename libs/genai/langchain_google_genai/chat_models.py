@@ -74,6 +74,7 @@ from langchain_core.exceptions import (
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    OutputParserException,
 )
 from langchain_core.language_models import (
     LangSmithParams,
@@ -3442,7 +3443,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         When set, tools, tool config, and the system instruction are not sent
         with the request, because Gemini requires them to be stored in the cache
         instead. Create the cache with everything the request needs, and pass
-        only the messages that come after the cached content.
+        only the messages that come after the cached content. Bind the same tools,
+        with the same names, as the cache holds, so that tool calls the model
+        makes can be routed to them.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -4763,6 +4766,8 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
             except Exception:
                 llm = self.bind_tools([schema], tool_choice=tool_choice)
+            if self.cached_content:
+                llm = self._require_tool_call_with_cached_content(llm)
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -4772,6 +4777,39 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             return {"raw": llm} | parser_with_fallback
         return llm | parser
+
+    def _require_tool_call_with_cached_content(
+        self, llm: Runnable[LanguageModelInput, AIMessage]
+    ) -> Runnable[LanguageModelInput, AIMessage]:
+        """Raise instead of parsing `None` when a cached request makes no tool call.
+
+        `cached_content` keeps the schema tool and forced `tool_choice` out of the
+        request, so the model can answer in text without calling the tool.
+
+        Args:
+            llm: The tool-bound model used for structured output.
+
+        Returns:
+            `llm` followed by a check that the response contains a tool call.
+        """
+        admonition = (
+            "`cached_content` is set, so structured output via "
+            "`method='function_calling'` cannot send its tool or force the model "
+            "to call it. Create the cache with this tool and a `tool_config` that "
+            "forces it, or use `method='json_schema'`. This raises an "
+            "`OutputParserException` if the model does not call the tool."
+        )
+        warnings.warn(admonition, UserWarning, stacklevel=3)
+
+        def _raise_if_no_tool_calls(message: AIMessage) -> AIMessage:
+            refused = (
+                message.response_metadata.get("normalized_finish_reason") == "refusal"
+            )
+            if not message.tool_calls and not refused:
+                raise OutputParserException(admonition)
+            return message
+
+        return llm | _raise_if_no_tool_calls
 
     def bind_tools(
         self,
