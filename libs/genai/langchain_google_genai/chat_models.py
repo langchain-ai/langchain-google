@@ -156,6 +156,42 @@ from langchain_google_genai.data._profiles import _PROFILES
 
 logger = logging.getLogger(__name__)
 
+
+def _warn_dropped_for_cached_content(
+    *,
+    tools: list | None,
+    tool_config: ToolConfig | None,
+    system_instruction: Content | None,
+) -> None:
+    """Warn when request fields are dropped because `cached_content` is set.
+
+    Gemini rejects these fields alongside `cached_content`, so they are left out
+    of the request. Warn so a cache that is missing them doesn't fail silently.
+
+    Args:
+        tools: Formatted tools that would have been sent.
+        tool_config: Formatted tool config that would have been sent.
+        system_instruction: System instruction that would have been sent.
+    """
+    dropped = [
+        name
+        for name, value in (
+            ("tools", tools),
+            ("tool_config", tool_config),
+            ("system_instruction", system_instruction),
+        )
+        if value
+    ]
+    if not dropped:
+        return
+    msg = (
+        f"`cached_content` is set, so {', '.join(dropped)} will not be sent with "
+        "the request. Gemini requires them to be stored in the cache instead; "
+        "make sure the cache was created with them."
+    )
+    warnings.warn(msg, UserWarning, stacklevel=2)
+
+
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
 _FUNCTION_CALL_THOUGHT_SIGNATURES_MAP_KEY = (
@@ -3400,6 +3436,13 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Only used in explicit caching, where users can have control over caching (e.g.
         what content to cache) and enjoy guaranteed cost savings. Format:
         `cachedContents/{cachedContent}`.
+
+    !!! warning
+
+        When set, tools, tool config, and the system instruction are not sent
+        with the request, because Gemini requires them to be stored in the cache
+        instead. Create the cache with everything the request needs, and pass
+        only the messages that come after the cached content.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -4229,9 +4272,14 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
 
-        # When cached_content is set, omit tools/tool_config/system_instruction from
-        # the request; they are already stored in the cache (issue GH-1618).
+        # Gemini rejects requests that set `cached_content` alongside tools,
+        # tool config or a system instruction; those must live in the cache.
         if cached_content:
+            _warn_dropped_for_cached_content(
+                tools=formatted_tools,
+                tool_config=formatted_tool_config,
+                system_instruction=system_instruction,
+            )
             formatted_tools = None
             formatted_tool_config = None
             system_instruction = None

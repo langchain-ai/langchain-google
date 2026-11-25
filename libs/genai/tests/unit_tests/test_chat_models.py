@@ -9531,11 +9531,12 @@ def test_cached_content_strips_tools_tool_config_system_instruction() -> None:
         SystemMessage(content="You are a helpful assistant."),
         HumanMessage(content="Hello"),
     ]
-    request = llm._prepare_request(
-        messages,
-        tools=cast("Sequence[Any]", [_dummy_tool_for_cached_content_test]),
-        cached_content="cachedContents/test-cache-123",
-    )
+    with pytest.warns(UserWarning, match="tools, system_instruction"):
+        request = llm._prepare_request(
+            messages,
+            tools=cast("Sequence[Any]", [_dummy_tool_for_cached_content_test]),
+            cached_content="cachedContents/test-cache-123",
+        )
     config = request["config"]
 
     assert config.cached_content == "cachedContents/test-cache-123"
@@ -9565,3 +9566,45 @@ def test_cached_content_not_set_preserves_tools_and_system_instruction() -> None
     assert config.tools is not None
     assert len(config.tools) >= 1
     assert config.system_instruction is not None
+
+
+def test_cached_content_without_dropped_fields_does_not_warn() -> None:
+    """No warning when `cached_content` is set but nothing has to be dropped."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        request = llm._prepare_request(
+            [HumanMessage(content="Hello")],
+            cached_content="cachedContents/test-cache-123",
+        )
+
+    assert request["config"].cached_content == "cachedContents/test-cache-123"
+
+
+def test_cached_content_with_bound_tools_invoke() -> None:
+    """Model-level `cached_content` plus `bind_tools`, as `create_agent` uses it.
+
+    Agents always bind tools and usually send a system message, so the request
+    reaching the API must still omit them when a cache is configured.
+    """
+    chat, mock_generate_content = _mock_chat(
+        cached_content="cachedContents/test-cache-123"
+    )
+    bound = chat.bind_tools([_dummy_tool_for_cached_content_test])
+
+    with pytest.warns(UserWarning, match="cached_content"):
+        bound.invoke(
+            [
+                SystemMessage(content="You are a helpful assistant."),
+                HumanMessage(content="Hello"),
+            ]
+        )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.cached_content == "cachedContents/test-cache-123"
+    assert config.tools is None
+    assert config.tool_config is None
+    assert config.system_instruction is None
