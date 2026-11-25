@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import datetime
 import json
 import logging
 import os
@@ -89,6 +90,7 @@ from langchain_google_genai.chat_models import (
     _convert_to_parts,
     _convert_tool_message_to_parts,
     _finish_reason_fields,
+    _gemini_25_routing_target,
     _get_ai_message_tool_messages_parts,
     _get_default_model_profile,
     _handle_client_error,
@@ -581,6 +583,8 @@ def test_parse_history() -> None:
     [
         "gemini-3.5-flash-lite",
         "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
         "gemini-4-carbon",
         "gemini-4-hydrogen",
         "gemini-4-neon",
@@ -616,6 +620,143 @@ def test_fixed_sampling_model_accepts_tool_response_as_final_turn() -> None:
 
     assert request["contents"][-1].role == "user"
     assert request["contents"][-1].parts[0].function_response is not None
+
+
+@pytest.fixture
+def before_gemini_25_routing() -> Iterator[None]:
+    with patch(
+        "langchain_google_genai.chat_models._utc_today",
+        return_value=datetime.date(2026, 11, 30),
+    ):
+        yield
+
+
+@pytest.fixture
+def after_gemini_25_routing() -> Iterator[None]:
+    with patch(
+        "langchain_google_genai.chat_models._utc_today",
+        return_value=datetime.date(2026, 12, 1),
+    ):
+        yield
+
+
+@pytest.mark.parametrize(
+    ("model", "use_vertexai", "expected"),
+    [
+        ("gemini-2.5-flash", False, "gemini-3.5-flash-lite"),
+        ("models/gemini-2.5-flash", False, "gemini-3.5-flash-lite"),
+        ("gemini-2.5-pro", False, "gemini-3.8-flash"),
+        ("GEMINI-2.5-PRO", False, "gemini-3.8-flash"),
+        ("gemini-2.5-flash", True, None),
+        ("gemini-2.5-pro", True, None),
+        ("gemini-2.5-flash-lite", False, None),
+        ("gemini-2.5-flash-image", False, None),
+        ("gemini-3.8-flash", False, None),
+    ],
+)
+def test_gemini_25_routing_target(
+    model: str, *, use_vertexai: bool, expected: str | None
+) -> None:
+    assert _gemini_25_routing_target(model, use_vertexai=use_vertexai) == expected
+
+
+@pytest.mark.parametrize("model", ["gemini-2.5-flash", "gemini-2.5-pro"])
+def test_gemini_25_models_warn_about_routing(model: str) -> None:
+    with pytest.warns(UserWarning, match="Starting December 1, 2026"):
+        ChatGoogleGenerativeAI(model=model, google_api_key=SecretStr(FAKE_API_KEY))
+
+
+def test_gemini_25_models_on_vertex_do_not_warn_about_routing() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            api_key=FAKE_API_KEY,
+            project="test-project",
+            vertexai=True,
+        )
+
+    assert not [w for w in caught if "Starting December 1, 2026" in str(w.message)]
+
+
+@pytest.mark.usefixtures("after_gemini_25_routing")
+@pytest.mark.parametrize(
+    ("model", "target"),
+    [
+        ("gemini-2.5-flash", "gemini-3.5-flash-lite"),
+        ("gemini-2.5-pro", "gemini-3.8-flash"),
+    ],
+)
+def test_routed_gemini_25_models_use_target_request_rules(
+    model: str, target: str
+) -> None:
+    llm = ChatGoogleGenerativeAI(model=model, google_api_key=SecretStr(FAKE_API_KEY))
+
+    assert llm.temperature is None
+    assert llm.profile == _get_default_model_profile(target)
+    with pytest.raises(ValueError, match="does not support model prefilling"):
+        llm._prepare_request(
+            [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+        )
+
+    request = llm._prepare_request(
+        [
+            HumanMessage(content="Look this up"),
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+            ),
+            ToolMessage(content="result", tool_call_id="call-1"),
+        ]
+    )
+    function_call_part = request["contents"][1].parts[0]
+    assert function_call_part.function_call is not None
+    assert function_call_part.thought_signature
+    assert request["model"] == model
+
+
+@pytest.mark.usefixtures("after_gemini_25_routing")
+def test_routed_gemini_25_flash_omits_custom_sampling_parameters() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=SecretStr(FAKE_API_KEY),
+        temperature=0.2,
+    )
+
+    with pytest.warns(UserWarning, match="will be ignored"):
+        request = llm._prepare_request([HumanMessage(content="test")])
+
+    assert "temperature" not in request["config"].model_dump(exclude_unset=True)
+
+
+@pytest.mark.usefixtures("before_gemini_25_routing")
+@pytest.mark.parametrize("model", ["gemini-2.5-flash", "gemini-2.5-pro"])
+def test_gemini_25_models_keep_their_request_rules_before_routing(model: str) -> None:
+    llm = ChatGoogleGenerativeAI(model=model, google_api_key=SecretStr(FAKE_API_KEY))
+
+    request = llm._prepare_request(
+        [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+    )
+
+    assert llm.temperature == 0.7
+    assert request["contents"][-1].role == "model"
+
+
+@pytest.mark.usefixtures("after_gemini_25_routing")
+def test_gemini_25_models_on_vertex_keep_their_request_rules() -> None:
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        api_key=FAKE_API_KEY,
+        project="test-project",
+        vertexai=True,
+    )
+
+    request = llm._prepare_request(
+        [HumanMessage(content="Complete this"), AIMessage(content="Once upon")]
+    )
+
+    assert llm.temperature == 0.7
+    assert request["contents"][-1].role == "model"
 
 
 def test_other_models_preserve_model_prefill() -> None:
@@ -1656,6 +1797,7 @@ def test_temperature_range_model_validation() -> None:
         ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=-0.5)
 
 
+@pytest.mark.usefixtures("before_gemini_25_routing")
 def test_temperature_default_by_model_version() -> None:
     """Test that legacy models get 0.7 temperature by default.
 
@@ -6221,6 +6363,7 @@ def test_thinking_budget_and_include_thoughts_with_structured_output() -> None:
         ("models/gemini-3.6-flash", True),
         ("publishers/google/models/gemini-3.5-flash-lite-001", True),
         ("GEMINI-3.6-FLASH", True),
+        ("gemini-3.8-flash", True),
         ("gemini-4-carbon", True),
         ("gemini-4-hydrogen", True),
         ("gemini-4-neon", True),
@@ -6928,6 +7071,8 @@ def test_generation_config_constructor_defaults_are_preserved() -> None:
     [
         "gemini-3.5-flash-lite",
         "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
         "gemini-4-carbon",
         "gemini-4-hydrogen",
         "gemini-4-neon",
