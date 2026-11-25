@@ -7,7 +7,7 @@ import logging
 import os
 import warnings
 import weakref
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal, cast
 from unittest.mock import ANY, AsyncMock, Mock, patch
@@ -47,6 +47,7 @@ from langchain_core.exceptions import (
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    OutputParserException,
 )
 from langchain_core.load import dumps, loads
 from langchain_core.messages import (
@@ -65,6 +66,7 @@ from langchain_core.messages.block_translators.google_genai import (
 )
 from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.tools import tool
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_core._pydantic_core import ValidationError
 
@@ -9506,3 +9508,178 @@ async def test_normalized_finish_reason_astream_split_tool_call() -> None:
     for chunk in chunks[1:]:
         full += chunk
     assert full.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+# --- Issue #1618: cached_content must strip tools, tool_config, system_instruction ---
+
+
+@tool
+def _dummy_tool_for_cached_content_test(x: str) -> str:
+    """A dummy tool for testing cached_content stripping."""
+    return x
+
+
+def test_cached_content_strips_tools_tool_config_system_instruction() -> None:
+    """With cached_content set, config must omit tools, tool_config, system_instruction.
+
+    See: https://github.com/langchain-ai/langchain-google/issues/1618
+    """
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="Hello"),
+    ]
+    with pytest.warns(UserWarning, match="tools, system_instruction"):
+        request = llm._prepare_request(
+            messages,
+            tools=cast("Sequence[Any]", [_dummy_tool_for_cached_content_test]),
+            cached_content="cachedContents/test-cache-123",
+        )
+    config = request["config"]
+
+    assert config.cached_content == "cachedContents/test-cache-123"
+    assert config.tools is None
+    assert config.tool_config is None
+    assert config.system_instruction is None
+
+
+def test_cached_content_not_set_preserves_tools_and_system_instruction() -> None:
+    """When cached_content is not set, tools and system_instruction remain in config."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    messages: list[BaseMessage] = [
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="Hello"),
+    ]
+    request = llm._prepare_request(
+        messages,
+        tools=cast("Sequence[Any]", [_dummy_tool_for_cached_content_test]),
+        cached_content=None,
+    )
+    config = request["config"]
+
+    assert config.cached_content is None
+    assert config.tools is not None
+    assert len(config.tools) >= 1
+    assert config.system_instruction is not None
+
+
+def test_cached_content_without_dropped_fields_does_not_warn() -> None:
+    """No warning when `cached_content` is set but nothing has to be dropped."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME,
+        google_api_key=SecretStr(FAKE_API_KEY),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        request = llm._prepare_request(
+            [HumanMessage(content="Hello")],
+            cached_content="cachedContents/test-cache-123",
+        )
+
+    assert request["config"].cached_content == "cachedContents/test-cache-123"
+
+
+def test_cached_content_with_bound_tools_invoke() -> None:
+    """Model-level `cached_content` plus `bind_tools`, as `create_agent` uses it.
+
+    Agents always bind tools and usually send a system message, so the request
+    reaching the API must still omit them when a cache is configured.
+    """
+    chat, mock_generate_content = _mock_chat(
+        cached_content="cachedContents/test-cache-123"
+    )
+    bound = chat.bind_tools([_dummy_tool_for_cached_content_test])
+
+    with pytest.warns(UserWarning, match="cached_content"):
+        bound.invoke(
+            [
+                SystemMessage(content="You are a helpful assistant."),
+                HumanMessage(content="Hello"),
+            ]
+        )
+
+    config = mock_generate_content.call_args.kwargs["config"]
+    assert config.cached_content == "cachedContents/test-cache-123"
+    assert config.tools is None
+    assert config.tool_config is None
+    assert config.system_instruction is None
+
+
+class _CachedJoke(BaseModel):
+    """A joke."""
+
+    setup: str
+
+
+def test_cached_content_function_calling_raises_without_tool_call() -> None:
+    """Structured output raises, not returns `None`, when a cached call skips the tool.
+
+    The schema tool and forced `tool_choice` are not sent with `cached_content`,
+    so a text reply must surface as an error rather than a silent `None`.
+    """
+    chat, _ = _mock_chat(cached_content="cachedContents/test-cache-123")
+
+    with pytest.warns(UserWarning, match="function_calling") as record:
+        structured = chat.with_structured_output(_CachedJoke, method="function_calling")
+    assert record[0].filename == __file__
+
+    with (
+        pytest.warns(UserWarning, match="cached_content"),
+        pytest.raises(OutputParserException, match="cached_content"),
+    ):
+        structured.invoke("Tell me a joke")
+
+
+def test_cached_content_function_calling_parses_tool_call() -> None:
+    """A tool call from a cache that holds the schema tool still parses."""
+    chat, mock_generate_content = _mock_chat(
+        cached_content="cachedContents/test-cache-123"
+    )
+    mock_generate_content.return_value = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="_CachedJoke", args={"setup": "Why?"}
+                            )
+                        )
+                    ]
+                )
+            )
+        ],
+    )
+
+    with pytest.warns(UserWarning, match="cached_content"):
+        structured = chat.with_structured_output(_CachedJoke, method="function_calling")
+        result = structured.invoke("Tell me a joke")
+
+    assert result == _CachedJoke(setup="Why?")
+
+
+def test_cached_content_function_calling_include_raw_reports_parsing_error() -> None:
+    """With `include_raw=True`, a missing tool call lands in `parsing_error`.
+
+    The `include_raw` contract reports parsing failures without raising, so the
+    raw message must still be returned.
+    """
+    chat, _ = _mock_chat(cached_content="cachedContents/test-cache-123")
+
+    with pytest.warns(UserWarning, match="cached_content"):
+        structured = chat.with_structured_output(
+            _CachedJoke, method="function_calling", include_raw=True
+        )
+        result = structured.invoke("Tell me a joke")
+
+    assert isinstance(result, dict)
+    assert isinstance(result["raw"], AIMessage)
+    assert result["raw"].content == "test response"
+    assert result["parsed"] is None
+    assert isinstance(result["parsing_error"], OutputParserException)

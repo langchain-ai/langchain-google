@@ -74,6 +74,7 @@ from langchain_core.exceptions import (
     ModelNotFoundError,
     ModelPermissionDeniedError,
     ModelRateLimitError,
+    OutputParserException,
 )
 from langchain_core.language_models import (
     LangSmithParams,
@@ -97,14 +98,18 @@ from langchain_core.messages import content as types
 from langchain_core.messages.ai import UsageMetadata, add_usage, subtract_usage
 from langchain_core.messages.tool import invalid_tool_call, tool_call, tool_call_chunk
 from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
-from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
     PydanticToolsParser,
     parse_tool_calls,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import Runnable, RunnableConfig, RunnablePassthrough
+from langchain_core.runnables import (
+    Runnable,
+    RunnableConfig,
+    RunnableLambda,
+    RunnablePassthrough,
+)
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_pydantic_field_names
 from langchain_core.utils.function_calling import (
@@ -155,6 +160,42 @@ from langchain_google_genai._version import __version__
 from langchain_google_genai.data._profiles import _PROFILES
 
 logger = logging.getLogger(__name__)
+
+
+def _warn_dropped_for_cached_content(
+    *,
+    tools: list | None,
+    tool_config: ToolConfig | None,
+    system_instruction: Content | None,
+) -> None:
+    """Warn when request fields are dropped because `cached_content` is set.
+
+    Gemini rejects these fields alongside `cached_content`, so they are left out
+    of the request. Warn so a cache that is missing them doesn't fail silently.
+
+    Args:
+        tools: Formatted tools that would have been sent.
+        tool_config: Formatted tool config that would have been sent.
+        system_instruction: System instruction that would have been sent.
+    """
+    dropped = [
+        name
+        for name, value in (
+            ("tools", tools),
+            ("tool_config", tool_config),
+            ("system_instruction", system_instruction),
+        )
+        if value
+    ]
+    if not dropped:
+        return
+    msg = (
+        f"`cached_content` is set, so {', '.join(dropped)} will not be sent with "
+        "the request. Gemini requires them to be stored in the cache instead; "
+        "make sure the cache was created with them."
+    )
+    warnings.warn(msg, UserWarning, stacklevel=2)
+
 
 _FunctionDeclarationType = FunctionDeclaration | dict[str, Any] | Callable[..., Any]
 
@@ -3400,6 +3441,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         Only used in explicit caching, where users can have control over caching (e.g.
         what content to cache) and enjoy guaranteed cost savings. Format:
         `cachedContents/{cachedContent}`.
+
+    !!! warning
+
+        When set, tools, tool config, and the system instruction are not sent
+        with the request, because Gemini requires them to be stored in the cache
+        instead. Create the cache with everything the request needs, and pass
+        only the messages that come after the cached content. Bind the same tools,
+        with the same names, as the cache holds, so that tool calls the model
+        makes can be routed to them.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -4229,6 +4279,18 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     ) -> GenerateContentConfig:
         """Build the final request configuration."""
 
+        # Gemini rejects requests that set `cached_content` alongside tools,
+        # tool config or a system instruction; those must live in the cache.
+        if cached_content:
+            _warn_dropped_for_cached_content(
+                tools=formatted_tools,
+                tool_config=formatted_tool_config,
+                system_instruction=system_instruction,
+            )
+            formatted_tools = None
+            formatted_tool_config = None
+            system_instruction = None
+
         # Pop any per-request `http_options` so it can be merged with the
         # internally-derived timeout/retry options below. Passing it through to
         # `GenerateContentConfig` directly would collide with the explicit
@@ -4644,7 +4706,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             msg = f"Received unsupported arguments {kwargs}"
             raise ValueError(msg)
 
-        parser: OutputParserLike
+        parser: Runnable[AIMessage, Any]
         llm: Runnable[LanguageModelInput, AIMessage]
 
         # `json_mode` kept for backwards compatibility; shouldn't be used in new code
@@ -4708,6 +4770,10 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
             except Exception:
                 llm = self.bind_tools([schema], tool_choice=tool_choice)
+            if self.cached_content:
+                # Check on the parser side so that, with `include_raw=True`, the
+                # error lands in `parsing_error` instead of losing the raw message.
+                parser = self._require_tool_call_with_cached_content() | parser
         if include_raw:
             parser_with_fallback = RunnablePassthrough.assign(
                 parsed=itemgetter("raw") | parser, parsing_error=lambda _: None
@@ -4717,6 +4783,37 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             )
             return {"raw": llm} | parser_with_fallback
         return llm | parser
+
+    def _require_tool_call_with_cached_content(
+        self,
+    ) -> Runnable[AIMessage, AIMessage]:
+        """Raise instead of parsing `None` when a cached request makes no tool call.
+
+        `cached_content` keeps the schema tool and forced `tool_choice` out of the
+        request, so the model can answer in text without calling the tool.
+
+        Returns:
+            A check to run before the parser that raises if the response has no
+            tool call.
+        """
+        admonition = (
+            "`cached_content` is set, so structured output via "
+            "`method='function_calling'` cannot send its tool or force the model "
+            "to call it. Create the cache with this tool and a `tool_config` that "
+            "forces it, or use `method='json_schema'`. This raises an "
+            "`OutputParserException` if the model does not call the tool."
+        )
+        warnings.warn(admonition, UserWarning, stacklevel=3)
+
+        def _raise_if_no_tool_calls(message: AIMessage) -> AIMessage:
+            refused = (
+                message.response_metadata.get("normalized_finish_reason") == "refusal"
+            )
+            if not message.tool_calls and not refused:
+                raise OutputParserException(admonition)
+            return message
+
+        return RunnableLambda(_raise_if_no_tool_calls)
 
     def bind_tools(
         self,
