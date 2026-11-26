@@ -1018,6 +1018,60 @@ def test_array_with_empty_items_schema() -> None:
     assert filter_values.items.type == Type.STRING
 
 
+def test_tool_array_items_keep_object_with_typeless_anyof() -> None:
+    """Keep an item's declared type and properties when alternatives omit type."""
+    tool_def = {
+        "type": "function",
+        "function": {
+            "name": "edit",
+            "description": "Apply edit operations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "op": {"type": "string", "enum": ["replace", "delete"]},
+                                "old_str": {"type": "string"},
+                                "new_str": {"type": "string"},
+                            },
+                            "required": ["op"],
+                            "anyOf": [
+                                {
+                                    "properties": {"op": {"enum": ["replace"]}},
+                                    "required": ["op", "old_str", "new_str"],
+                                },
+                                {
+                                    "properties": {"op": {"enum": ["delete"]}},
+                                    "required": ["op", "old_str"],
+                                },
+                            ],
+                        },
+                    }
+                },
+                "required": ["operations"],
+            },
+        },
+    }
+
+    tools = convert_to_genai_function_declarations([tool_def])
+    declarations = tools[0].function_declarations
+    assert declarations is not None
+    parameters = declarations[0].parameters
+    assert parameters is not None
+    assert parameters.properties is not None
+    items = parameters.properties["operations"].items
+    assert items is not None
+    assert items.type == Type.OBJECT
+    assert items.nullable is None
+    assert items.required == ["op"]
+    assert items.properties is not None
+    assert set(items.properties) == {"op", "old_str", "new_str"}
+    assert items.properties["op"].enum == ["replace", "delete"]
+
+
 def test_nested_array_with_empty_inner_items_schema() -> None:
     """A doubly-nested array whose innermost items schema is an empty dict
     (`'items': {}`) must still produce an `items` field at every level.
