@@ -6,6 +6,7 @@ from operator import itemgetter
 from typing import (
     Any,
     Literal,
+    cast,
 )
 
 from google.auth.credentials import Credentials
@@ -13,7 +14,7 @@ from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import LanguageModelInput, ModelProfile
 from langchain_core.language_models.chat_models import (
     BaseChatModel,
     agenerate_from_stream,
@@ -61,19 +62,7 @@ from langchain_google_vertexai._base import (
     _VertexAICommon,
 )
 from langchain_google_vertexai._retry import create_base_retry_decorator
-from langchain_google_vertexai.data.anthropic._profiles import (
-    _PROFILES as _ANTHROPIC_PROFILES,
-)
-
-
-def _move_betas_to_extra_body(params: dict[str, Any]) -> bool:
-    betas = params.pop("betas", None)
-    if not betas:
-        return False
-
-    extra_body = params.get("extra_body") or {}
-    params["extra_body"] = {**extra_body, "anthropic_beta": betas}
-    return True
+from langchain_google_vertexai.data._profiles import _PROFILES as _VERTEX_PROFILES
 
 
 def _create_retry_decorator(
@@ -181,6 +170,29 @@ _FALLBACK_MAX_OUTPUT_TOKENS: int = 4096
 """Fallback max output tokens when the model has no profile entry."""
 
 
+def _get_anthropic_profile(model_name: str | None) -> ModelProfile | None:
+    """Look up the profile for an Anthropic model.
+
+    Vertex profile keys are `@`-versioned (e.g. `claude-sonnet-4-6@default`),
+    but callers may pass a bare base name (`claude-sonnet-4-6`). When the exact
+    key misses, resolve a unique `{model_name}@...` entry so bare names get the
+    same profile. Bare bases are unique across the registry, so at most one
+    entry can match.
+
+    Returns:
+        A copy of the profile, or `None` when `model_name` is missing or has no
+            profile entry.
+    """
+    if not model_name:
+        return None
+    profile = _VERTEX_PROFILES.get(model_name)
+    if profile is None:
+        matches = [k for k in _VERTEX_PROFILES if k.startswith(f"{model_name}@")]
+        if len(matches) == 1:
+            profile = _VERTEX_PROFILES[matches[0]]
+    return cast("ModelProfile", dict(profile)) if profile else None
+
+
 def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
     """Look up the max output tokens for an Anthropic model from its profile.
 
@@ -188,8 +200,8 @@ def _get_anthropic_profile_max_output_tokens(model_name: str | None) -> int:
     `_FALLBACK_MAX_OUTPUT_TOKENS` when `model_name` is missing, has no profile
     entry, or whose profile lacks a `max_output_tokens` key.
     """
-    profile = _ANTHROPIC_PROFILES.get(model_name) if model_name else None
-    return (profile or {}).get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
+    profile = _get_anthropic_profile(model_name) or {}
+    return profile.get("max_output_tokens", _FALLBACK_MAX_OUTPUT_TOKENS)
 
 
 class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
@@ -418,9 +430,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         def _completion_with_retry_inner(**params: Any) -> Any:
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return self.client.beta.messages.create(**params)
+            params.pop("betas", None)
             return self.client.messages.create(**params)
 
         data = _completion_with_retry_inner(**params)
@@ -448,9 +460,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
 
         @retry_decorator
         async def _acompletion_with_retry_inner(**params: Any) -> Any:
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return await self.async_client.beta.messages.create(**params)
+            params.pop("betas", None)
             return await self.async_client.messages.create(**params)
 
         data = await _acompletion_with_retry_inner(**params)
@@ -460,6 +472,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return "anthropic-chat-vertexai"
+
+    def _resolve_model_profile(self) -> ModelProfile | None:
+        return _get_anthropic_profile(self.model_name)
 
     def _stream(
         self,
@@ -482,9 +497,9 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         def _stream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return self.client.beta.messages.create(**params, stream=True)
+            params.pop("betas", None)
             return self.client.messages.create(**params, stream=True)
 
         stream = _stream_with_retry(**params)
@@ -526,11 +541,11 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         @retry_decorator
         async def _astream_with_retry(**params: Any) -> Any:
             params.pop("stream", None)
-            has_betas = _move_betas_to_extra_body(params)
-            if has_betas:
+            if params.get("betas"):
                 return await self.async_client.beta.messages.create(
                     stream=True, **params
                 )
+            params.pop("betas", None)
             return await self.async_client.messages.create(**params, stream=True)
 
         stream = await _astream_with_retry(**params)

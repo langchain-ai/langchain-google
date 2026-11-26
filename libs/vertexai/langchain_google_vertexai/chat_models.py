@@ -55,7 +55,7 @@ from langchain_core.messages import (
     is_data_content_block,
 )
 from langchain_core.messages import content as lc_content
-from langchain_core.messages.ai import UsageMetadata
+from langchain_core.messages.ai import UsageMetadata, subtract_usage
 from langchain_core.messages.tool import (
     tool_call_chunk,
     tool_call as create_tool_call,
@@ -2420,6 +2420,11 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
                 logger.warning(message)
 
+        if (
+            cached_content.startswith("projects/")
+            or "/cachedContents/" in cached_content
+        ):
+            return cached_content
         return (
             f"projects/{self.project}/locations/{self.location}/"
             f"cachedContents/{cached_content}"
@@ -2642,10 +2647,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
         total_lc_usage = None
+        saw_tool_call = False
         for response_chunk in response_iter:
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
                 response_chunk, prev_total_usage=total_lc_usage
             )
+            saw_tool_call = _mark_streamed_tool_call(chunk, saw_tool_call)
             if run_manager and isinstance(chunk.message.content, str):
                 run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
@@ -2672,10 +2679,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             **kwargs,
         )
         total_lc_usage = None
+        saw_tool_call = False
         async for response_chunk in await response_iter:
             chunk, total_lc_usage = self._gemini_chunk_to_generation_chunk(
                 response_chunk, prev_total_usage=total_lc_usage
             )
+            saw_tool_call = _mark_streamed_tool_call(chunk, saw_tool_call)
             if run_manager and isinstance(chunk.message.content, str):
                 await run_manager.on_llm_new_token(chunk.message.content, chunk=chunk)
             yield chunk
@@ -2991,6 +3000,14 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
                 )
             if isinstance(message, AIMessage):
                 message.usage_metadata = lc_usage
+            info.update(
+                _finish_reason_fields(
+                    info.get("finish_reason"),
+                    has_tool_calls=bool(
+                        message.tool_calls or message.invalid_tool_calls
+                    ),
+                )
+            )
             generations.append(ChatGeneration(message=message, generation_info=info))
         if not response.candidates:
             message = AIMessage(content="")
@@ -3021,13 +3038,8 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         # cumulative sums of token counts.
         total_lc_usage = _get_usage_metadata_gemini(usage_metadata)
         if total_lc_usage and prev_total_usage:
-            lc_usage: UsageMetadata | None = UsageMetadata(
-                input_tokens=total_lc_usage["input_tokens"]
-                - prev_total_usage["input_tokens"],
-                output_tokens=total_lc_usage["output_tokens"]
-                - prev_total_usage["output_tokens"],
-                total_tokens=total_lc_usage["total_tokens"]
-                - prev_total_usage["total_tokens"],
+            lc_usage: UsageMetadata | None = subtract_usage(
+                total_lc_usage, prev_total_usage
             )
         else:
             lc_usage = total_lc_usage
@@ -3049,9 +3061,25 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
             finish_reason = generation_info.get("finish_reason")
             if finish_reason and finish_reason != "FINISH_REASON_UNSPECIFIED":
                 message.response_metadata["model_name"] = self.model_name
+                generation_info.update(
+                    _finish_reason_fields(
+                        finish_reason,
+                        has_tool_calls=bool(
+                            message.tool_calls or message.invalid_tool_calls
+                        ),
+                    )
+                )
             # is_blocked is part of "safety_ratings" list
             # but if it's True/False then chunks can't be merged
             generation_info.pop("is_blocked", None)
+            if (
+                self.output_version == "v1"
+                and not message.content
+                and generation_info.get("grounding_metadata", {}).get(
+                    "grounding_supports"
+                )
+            ):
+                message.content = [{"type": "text", "text": ""}]
 
         message.response_metadata["model_provider"] = "google_vertexai"
 
@@ -3061,16 +3089,68 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         ), total_lc_usage
 
 
+_FINISH_REASONS: dict[str, str] = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "refusal",
+    "PROHIBITED_CONTENT": "refusal",
+    "BLOCKLIST": "refusal",
+    "RECITATION": "content_filter",
+    "SPII": "content_filter",
+    "LANGUAGE": "content_filter",
+    "IMAGE_SAFETY": "content_filter",
+    "IMAGE_PROHIBITED_CONTENT": "content_filter",
+    "IMAGE_RECITATION": "content_filter",
+    "MALFORMED_FUNCTION_CALL": "error",
+    "MALFORMED_RESPONSE": "error",
+}
+
+
+def _finish_reason_fields(
+    finish_reason: str | None, *, has_tool_calls: bool
+) -> dict[str, str]:
+    """Map a Gemini `finish_reason` onto `normalized_finish_reason`."""
+    if not finish_reason:
+        return {}
+    normalized = _FINISH_REASONS.get(finish_reason.upper(), "other")
+    # Gemini reports `STOP` when it ends on function calls.
+    if normalized == "stop" and has_tool_calls:
+        normalized = "tool_call"
+    return {"normalized_finish_reason": normalized}
+
+
+def _mark_streamed_tool_call(gen: ChatGenerationChunk, saw_tool_call: bool) -> bool:
+    """Upgrade a final `stop` to `tool_call` when an earlier chunk had tool calls.
+
+    Gemini can send function calls and `STOP` in separate stream chunks.
+    """
+    message = gen.message
+    if isinstance(message, AIMessageChunk) and (
+        message.tool_call_chunks or message.tool_calls
+    ):
+        saw_tool_call = True
+    info = gen.generation_info
+    if saw_tool_call and info and info.get("normalized_finish_reason") == "stop":
+        info["normalized_finish_reason"] = "tool_call"
+    return saw_tool_call
+
+
 def _get_usage_metadata_gemini(raw_metadata: dict) -> UsageMetadata | None:
     """Get `UsageMetadata` from raw response metadata."""
     input_tokens = raw_metadata.get("prompt_token_count", 0)
+    thought_tokens = raw_metadata.get("thoughts_token_count", 0)
     output_tokens = raw_metadata.get("candidates_token_count", 0)
     total_tokens = raw_metadata.get("total_token_count", 0)
-    thought_tokens = raw_metadata.get("thoughts_token_count", 0)
     cache_read_tokens = raw_metadata.get("cached_content_token_count", 0)
     if all(
         count == 0
-        for count in [input_tokens, output_tokens, total_tokens, cache_read_tokens]
+        for count in [
+            input_tokens,
+            output_tokens,
+            total_tokens,
+            cache_read_tokens,
+            thought_tokens,
+        ]
     ):
         return None
     if thought_tokens > 0:

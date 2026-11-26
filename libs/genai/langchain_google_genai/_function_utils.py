@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from typing import (
     Any,
     Literal,
+    NotRequired,
     TypedDict,
     cast,
 )
@@ -21,7 +22,6 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.json_schema import dereference_refs
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import NotRequired
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,12 @@ _GoogleMapsLike = types.GoogleMaps | dict[str, Any]
 _CodeExecutionLike = types.ToolCodeExecution | dict[str, Any]
 _UrlContextLike = types.UrlContext | dict[str, Any]
 _ComputerUseLike = types.ComputerUse | dict[str, Any]
+_EnterpriseWebSearchLike = types.EnterpriseWebSearch | dict[str, Any]
+_FileSearchLike = types.FileSearch | dict[str, Any]
+_RetrievalLike = types.Retrieval | dict[str, Any]
+_ParallelAiSearchLike = types.ToolParallelAiSearch | dict[str, Any]
+_ExaAiSearchLike = types.ToolExaAiSearch | dict[str, Any]
+_McpServerLike = types.McpServer | dict[str, Any]
 
 
 class _ToolDict(TypedDict):
@@ -83,6 +89,12 @@ class _ToolDict(TypedDict):
     code_execution: NotRequired[_CodeExecutionLike]
     url_context: NotRequired[_UrlContextLike]
     computer_use: NotRequired[_ComputerUseLike]
+    enterprise_web_search: NotRequired[_EnterpriseWebSearchLike]
+    file_search: NotRequired[_FileSearchLike]
+    retrieval: NotRequired[_RetrievalLike]
+    parallel_ai_search: NotRequired[_ParallelAiSearchLike]
+    exa_ai_search: NotRequired[_ExaAiSearchLike]
+    mcp_servers: NotRequired[Sequence[_McpServerLike]]
 
 
 # Info: This means one tool=Sequence of FunctionDeclaration
@@ -242,6 +254,12 @@ def convert_to_genai_function_declarations(
         "code_execution",
         "url_context",
         "computer_use",
+        "enterprise_web_search",
+        "file_search",
+        "retrieval",
+        "parallel_ai_search",
+        "exa_ai_search",
+        "mcp_servers",
     ]
 
     for tool in tools:
@@ -270,9 +288,15 @@ def convert_to_genai_function_declarations(
 
                 if special_key == "google_search_retrieval":
                     if isinstance(tool["google_search_retrieval"], dict):
+                        retrieval_config = dict(tool["google_search_retrieval"])
+                        dynamic = retrieval_config.get("dynamic_retrieval_config")
+                        if isinstance(dynamic, dict):
+                            retrieval_config["dynamic_retrieval_config"] = (
+                                _unwrap_enums(dynamic, "mode")
+                            )
                         tool_obj = types.Tool(
                             google_search_retrieval=types.GoogleSearchRetrieval(
-                                **tool["google_search_retrieval"]
+                                **retrieval_config
                             )
                         )
                     else:
@@ -282,14 +306,20 @@ def convert_to_genai_function_declarations(
                 elif special_key == "google_search":
                     if isinstance(tool["google_search"], dict):
                         tool_obj = types.Tool(
-                            google_search=types.GoogleSearch(**tool["google_search"])
+                            google_search=types.GoogleSearch(
+                                **_unwrap_enums(
+                                    tool["google_search"], "blocking_confidence"
+                                )
+                            )
                         )
                     else:
                         tool_obj = types.Tool(google_search=tool["google_search"])
                 elif special_key == "google_maps":
                     if isinstance(tool["google_maps"], dict):
                         tool_obj = types.Tool(
-                            google_maps=types.GoogleMaps(**tool["google_maps"])
+                            google_maps=types.GoogleMaps(
+                                **_unwrap_auth_config_enums(tool["google_maps"])
+                            )
                         )
                     else:
                         tool_obj = types.Tool(google_maps=tool["google_maps"])
@@ -309,21 +339,78 @@ def convert_to_genai_function_declarations(
                         )
                     else:
                         tool_obj = types.Tool(url_context=tool["url_context"])
+                elif special_key == "enterprise_web_search":
+                    if isinstance(tool["enterprise_web_search"], dict):
+                        tool_obj = types.Tool(
+                            enterprise_web_search=types.EnterpriseWebSearch(
+                                **_unwrap_enums(
+                                    tool["enterprise_web_search"], "blocking_confidence"
+                                )
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            enterprise_web_search=tool["enterprise_web_search"]
+                        )
+                elif special_key == "file_search":
+                    if isinstance(tool["file_search"], dict):
+                        tool_obj = types.Tool(
+                            file_search=types.FileSearch(**tool["file_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(file_search=tool["file_search"])
+                elif special_key == "retrieval":
+                    if isinstance(tool["retrieval"], dict):
+                        retrieval_config = dict(tool["retrieval"])
+                        external_api = retrieval_config.get("external_api")
+                        if isinstance(external_api, dict):
+                            retrieval_config["external_api"] = (
+                                _unwrap_auth_config_enums(
+                                    _unwrap_enums(external_api, "api_spec")
+                                )
+                            )
+                        tool_obj = types.Tool(
+                            retrieval=types.Retrieval(**retrieval_config)
+                        )
+                    else:
+                        tool_obj = types.Tool(retrieval=tool["retrieval"])
+                elif special_key == "parallel_ai_search":
+                    if isinstance(tool["parallel_ai_search"], dict):
+                        tool_obj = types.Tool(
+                            parallel_ai_search=types.ToolParallelAiSearch(
+                                **tool["parallel_ai_search"]
+                            )
+                        )
+                    else:
+                        tool_obj = types.Tool(
+                            parallel_ai_search=tool["parallel_ai_search"]
+                        )
+                elif special_key == "exa_ai_search":
+                    if isinstance(tool["exa_ai_search"], dict):
+                        tool_obj = types.Tool(
+                            exa_ai_search=types.ToolExaAiSearch(**tool["exa_ai_search"])
+                        )
+                    else:
+                        tool_obj = types.Tool(exa_ai_search=tool["exa_ai_search"])
+                elif special_key == "mcp_servers":
+                    tool_obj = types.Tool(
+                        mcp_servers=[
+                            types.McpServer(**server)
+                            if isinstance(server, dict)
+                            else server
+                            for server in tool["mcp_servers"]
+                        ]
+                    )
                 elif special_key == "computer_use":
                     if isinstance(tool["computer_use"], dict):
-                        # Handle enum conversion - extract string values from
-                        # Environment enums
-                        computer_use_config = dict(tool["computer_use"])
-                        if "environment" in computer_use_config:
-                            env = computer_use_config["environment"]
-                            # Handle serialized enum (dict with _value_ key)
-                            if isinstance(env, dict) and "_value_" in env:
-                                computer_use_config["environment"] = env["_value_"]
-                            # Handle enum instance
-                            elif hasattr(env, "value"):
-                                computer_use_config["environment"] = env.value
                         tool_obj = types.Tool(
-                            computer_use=types.ComputerUse(**computer_use_config)
+                            computer_use=types.ComputerUse(
+                                **_unwrap_enums(
+                                    tool["computer_use"],
+                                    "environment",
+                                    "disabled_safety_policies",
+                                )
+                            )
                         )
                     else:
                         tool_obj = types.Tool(computer_use=tool["computer_use"])
@@ -377,6 +464,44 @@ def convert_to_genai_function_declarations(
         raise ValueError(msg)
 
     return result_tools
+
+
+def _unwrap_enums(config: dict[str, Any], *fields: str) -> dict[str, Any]:
+    """Return a copy of `config` with the named enum fields turned back into values.
+
+    `tool_to_dict` walks enum members via `__dict__`, so an enum such as
+    `PhishBlockThreshold.BLOCK_LOW_AND_ABOVE` is stored as a dict of enum internals
+    (`{"_value_": ..., ...}`) rather than a string, which pydantic then rejects when
+    the tool is rebuilt.
+    """
+
+    def unwrap(value: Any) -> Any:
+        if isinstance(value, dict) and "_value_" in value:
+            return value["_value_"]
+        return value
+
+    config = dict(config)
+    for field in fields:
+        if field in config:
+            value = config[field]
+            config[field] = (
+                [unwrap(v) for v in value] if isinstance(value, list) else unwrap(value)
+            )
+    return config
+
+
+def _unwrap_auth_config_enums(config: dict[str, Any]) -> dict[str, Any]:
+    """Unwrap the enum fields of the `auth_config` in a tool config."""
+    auth_config = config.get("auth_config")
+    if not isinstance(auth_config, dict):
+        return config
+    auth_config = _unwrap_enums(auth_config, "auth_type")
+    api_key_config = auth_config.get("api_key_config")
+    if isinstance(api_key_config, dict):
+        auth_config["api_key_config"] = _unwrap_enums(
+            api_key_config, "http_element_location"
+        )
+    return {**config, "auth_config": auth_config}
 
 
 def tool_to_dict(tool: types.Tool) -> _ToolDict:

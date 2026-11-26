@@ -1,10 +1,5 @@
 import sys
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    # for python 3.10 and below, which doesnt have stdlib tomllib
-    import tomli as tomllib
+import tomllib
 
 from packaging.version import parse as parse_version
 import re

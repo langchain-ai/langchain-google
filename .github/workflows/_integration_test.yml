@@ -12,6 +12,11 @@ on:
         type: string
         default: "3.14"
         description: "Python version to use"
+      pytest-args:
+        required: false
+        type: string
+        default: ""
+        description: "Extra pytest arguments, e.g. `--extended -k caching`"
 
 permissions:
   contents: read
@@ -33,11 +38,6 @@ jobs:
           working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libqpdf-dev
-
       - name: Install dependencies
         shell: bash
         run: uv sync --group test --group test_integration
@@ -56,6 +56,9 @@ jobs:
           GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
           GOOGLE_VERTEX_AI_WEB_CREDENTIALS: ${{ secrets.GOOGLE_VERTEX_AI_WEB_CREDENTIALS }}
           LANGCHAIN_TESTS_USER_AGENT: ${{ secrets.LANGCHAIN_TESTS_USER_AGENT }}
+          # Passed as an env var instead of `${{ }}` in the script; Make picks it
+          # up as `$(EXTRA_PYTEST_ARGS)`. Only users with write access can dispatch.
+          EXTRA_PYTEST_ARGS: ${{ inputs.pytest-args }}
         run: |
           make integration_tests
 

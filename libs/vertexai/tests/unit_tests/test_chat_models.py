@@ -24,6 +24,7 @@ from google.cloud.aiplatform_v1beta1.types import (
 )
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     FunctionMessage,
     HumanMessage,
@@ -49,6 +50,7 @@ from langchain_google_vertexai._image_utils import ImageBytesLoader
 from langchain_google_vertexai.chat_models import (
     ChatVertexAI,
     _bytes_to_base64,
+    _finish_reason_fields,
     _parse_chat_history_gemini,
     _parse_examples,
     _parse_response_candidate,
@@ -365,15 +367,18 @@ def test_init_client_with_custom_model_kwargs() -> None:
 @pytest.mark.parametrize(
     ("model_name", "expected_max_tokens"),
     [
+        ("claude-sonnet-4-5@20250929", 64000),
+        ("claude-opus-4-1@20250805", 32000),
+        ("claude-opus-4-5@20251101", 64000),
+        ("claude-opus-4-6@default", 128000),
+        ("claude-sonnet-4-6@default", 128000),
+        ("claude-opus-4-8@default", 128000),
+        ("claude-haiku-4-5@20251001", 64000),
+        # Bare base names resolve to the unique `@`-versioned profile.
         ("claude-sonnet-4-5", 64000),
-        ("claude-sonnet-4-5-20250929", 64000),
-        ("claude-opus-4-0", 32000),
-        ("claude-opus-4-5", 64000),
-        ("claude-opus-4-6", 128000),
-        ("claude-3-5-sonnet-20241022", 8192),
-        ("claude-3-7-sonnet-20250219", 64000),
+        ("claude-sonnet-4-6", 128000),
+        ("claude-opus-4-8", 128000),
         ("claude-haiku-4-5", 64000),
-        ("claude-3-opus-20240229", 4096),
     ],
 )
 def test_anthropic_vertex_model_aware_max_tokens(
@@ -387,6 +392,9 @@ def test_anthropic_vertex_model_aware_max_tokens(
     )
     assert llm.max_output_tokens == expected_max_tokens
     assert llm._default_params["max_tokens"] == expected_max_tokens
+    assert llm.profile is not None
+    assert llm.profile["max_output_tokens"] == expected_max_tokens
+    assert llm.profile["max_input_tokens"]
 
 
 def test_anthropic_vertex_unknown_model_fallback() -> None:
@@ -397,12 +405,13 @@ def test_anthropic_vertex_unknown_model_fallback() -> None:
         location="test-location",
     )
     assert llm.max_output_tokens == 4096
+    assert llm.profile is None
 
 
 def test_anthropic_vertex_explicit_max_tokens_override() -> None:
     """Test that explicitly set max_output_tokens is not overridden."""
     llm = ChatAnthropicVertex(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
         max_output_tokens=2048,
@@ -413,7 +422,7 @@ def test_anthropic_vertex_explicit_max_tokens_override() -> None:
 def test_anthropic_vertex_explicit_max_tokens_alias_override() -> None:
     """Test that max_tokens alias also prevents override."""
     llm = ChatAnthropicVertex(
-        model_name="claude-sonnet-4-5",
+        model_name="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
         max_tokens=512,
@@ -433,19 +442,21 @@ def test_anthropic_vertex_no_model_falls_back() -> None:
 def test_anthropic_vertex_model_alias_resolves_profile() -> None:
     """`model=` alias should resolve the same profile as `model_name=`."""
     llm = ChatAnthropicVertex(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-5@20250929",
         project="test-project",
         location="test-location",
     )
     assert llm.max_output_tokens == 64000
 
 
-def test_anthropic_profiles_smoke() -> None:
-    """Auto-generated `_PROFILES` is importable, non-empty, and well-shaped."""
-    from langchain_google_vertexai.data.anthropic._profiles import _PROFILES
+def test_anthropic_vertex_profiles_smoke() -> None:
+    """Auto-generated Vertex `_PROFILES` includes Anthropic model metadata."""
+    from langchain_google_vertexai.data._profiles import _PROFILES
 
     assert _PROFILES
-    sample = next(iter(_PROFILES.values()))
+    claude_profiles = [v for k, v in _PROFILES.items() if k.startswith("claude-")]
+    assert claude_profiles
+    sample = claude_profiles[0]
     assert "max_output_tokens" in sample
 
 
@@ -456,7 +467,7 @@ def test_anthropic_vertex_profile_missing_max_output_tokens(
     from langchain_google_vertexai import model_garden
 
     monkeypatch.setitem(
-        model_garden._ANTHROPIC_PROFILES,  # noqa: SLF001
+        model_garden._VERTEX_PROFILES,  # noqa: SLF001
         "claude-test-no-output-key",
         {"name": "Test"},
     )
@@ -485,6 +496,21 @@ def test_profile() -> None:
 
     model = ChatVertexAI(model="foo", project="test-project", location="moon-dark1")
     assert model.profile == {}
+
+
+@pytest.mark.parametrize(
+    "model_name", ["gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"]
+)
+def test_gemini_4_profiles(model_name: str) -> None:
+    """Gemini 4 models resolve Vertex profiles with fixed sampling."""
+    model = ChatVertexAI(
+        model=model_name, project="test-project", location="moon-dark1"
+    )
+    assert model.profile
+    assert model.profile["reasoning_output"]
+    assert model.profile["max_input_tokens"] == 1048576
+    assert model.profile["max_output_tokens"] == 65536
+    assert model.profile["temperature"] is False
 
 
 @pytest.mark.parametrize(
@@ -572,6 +598,72 @@ def test_default_params_gemini() -> None:
         assert mock_generate_content.call_args.kwargs["request"].tools == []
         assert not mock_generate_content.call_args.kwargs["request"].tool_config
         assert not mock_generate_content.call_args.kwargs["request"].safety_settings
+
+
+@pytest.mark.parametrize("output_version", ["v0", "v1"])
+@pytest.mark.parametrize("metadata_only", [False, True])
+@pytest.mark.parametrize("with_supports", [False, True])
+def test_search_streaming_citations(
+    output_version: str,
+    metadata_only: bool,
+    with_supports: bool,
+    clear_prediction_client_cache: Any,
+) -> None:
+    grounding_metadata = {
+        "web_search_queries": ["news"],
+        "grounding_chunks": [
+            {"web": {"uri": "https://example.com/news", "title": "News"}}
+        ],
+        "grounding_supports": [
+            {
+                "segment": {"start_index": 0, "end_index": 4, "text": "News"},
+                "grounding_chunk_indices": [0],
+            }
+        ],
+    }
+    if not with_supports:
+        grounding_metadata["grounding_supports"] = []
+    responses = [
+        GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="News")]))]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(parts=[] if metadata_only else [Part(text="!")]),
+                    grounding_metadata=grounding_metadata,
+                    finish_reason="STOP",
+                )
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(
+            model=_DEFAULT_GEMINI_MODEL,
+            project="test-project",
+            output_version=output_version,
+        )
+        chunks = list(model.stream("News?"))
+    _get_prediction_client.cache_clear()
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    text_blocks = [b for b in full.content_blocks if b["type"] == "text"]
+    assert len(text_blocks) == 1
+    assert text_blocks[0]["text"] == ("News" if metadata_only else "News!")
+    if not with_supports:
+        assert not text_blocks[0].get("annotations")
+        return
+    citations = text_blocks[0]["annotations"]
+    assert len(citations) == 1
+    assert citations[0]["type"] == "citation"
+    assert citations[0]["url"] == "https://example.com/news"
+    assert citations[0]["cited_text"] == "News"
+    assert citations[0]["start_index"] == 0
+    assert citations[0]["end_index"] == 4
 
 
 def test_generation_config_gemini() -> None:
@@ -2740,3 +2832,228 @@ class TestAnthropicVertexCacheControl:
         blocks = params["messages"][-1]["content"]
         assert "cache_control" not in blocks[0]
         assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_cached_content_preserves_full_resource_path() -> None:
+    """Full cachedContent resource names must not be double-prefixed."""
+    llm = ChatVertexAI(
+        model=_DEFAULT_MODEL_NAME,
+        project="test-project",
+        location="us-central1",
+    )
+    full_name = "projects/other-proj/locations/global/cachedContents/cache-123"
+    req_full = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content=full_name
+    )
+    assert req_full.cached_content == full_name
+
+    req_short = llm._prepare_request_gemini(
+        [HumanMessage("Hello")], cached_content="cache-123"
+    )
+    assert (
+        req_short.cached_content
+        == "projects/test-project/locations/us-central1/cachedContents/cache-123"
+    )
+
+
+def test_usage_metadata_gemini_includes_thoughts_and_streaming_subtract() -> None:
+    """Verify thought/cache token details are preserved across streaming chunks."""
+    from langchain_core.messages.ai import subtract_usage
+
+    from langchain_google_vertexai.chat_models import _get_usage_metadata_gemini
+
+    chunk1 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 4,
+            "thoughts_token_count": 5,
+            "total_token_count": 29,
+            "cached_content_token_count": 5,
+        }
+    )
+    chunk2 = _get_usage_metadata_gemini(
+        {
+            "prompt_token_count": 20,
+            "candidates_token_count": 10,
+            "thoughts_token_count": 15,
+            "total_token_count": 45,
+            "cached_content_token_count": 5,
+        }
+    )
+    assert chunk1 is not None
+    assert chunk2 is not None
+    assert chunk2["input_tokens"] == 20
+    assert chunk2["output_tokens"] == 10
+    assert chunk2["total_tokens"] == 45
+    assert chunk2["output_token_details"] == {"reasoning": 15}
+    assert chunk2["input_token_details"] == {"cache_read": 5}
+
+    delta = subtract_usage(chunk2, chunk1)
+    assert delta["output_token_details"] == {"reasoning": 10}
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [
+        ("STOP", "stop"),
+        ("MAX_TOKENS", "length"),
+        ("SAFETY", "refusal"),
+        ("PROHIBITED_CONTENT", "refusal"),
+        ("BLOCKLIST", "refusal"),
+        ("RECITATION", "content_filter"),
+        ("SPII", "content_filter"),
+        ("MALFORMED_FUNCTION_CALL", "error"),
+        ("OTHER", "other"),
+    ],
+)
+def test_normalized_finish_reason(finish_reason: str, expected: str) -> None:
+    from vertexai.generative_models._generative_models import GenerationResponse
+
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+    response = GenerationResponse.from_dict(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hi"}], "role": "model"},
+                    "finish_reason": finish_reason,
+                }
+            ]
+        }
+    )
+
+    info = llm._gemini_response_to_chat_result(response).generations[0].generation_info
+
+    assert info is not None
+    assert info["finish_reason"] == finish_reason
+    assert info["normalized_finish_reason"] == expected
+    assert "finish_state" not in info
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [
+        ("STOP", "stop"),
+        ("LANGUAGE", "content_filter"),
+        ("IMAGE_SAFETY", "content_filter"),
+        ("IMAGE_PROHIBITED_CONTENT", "content_filter"),
+        ("IMAGE_RECITATION", "content_filter"),
+        ("UNKNOWN_999", "other"),
+        ("FINISH_REASON_UNSPECIFIED", "other"),
+        ("max_tokens", "length"),
+        (None, None),
+    ],
+)
+def test_finish_reason_fields(finish_reason: str | None, expected: str | None) -> None:
+    fields = _finish_reason_fields(finish_reason, has_tool_calls=False)
+
+    assert fields.get("normalized_finish_reason") == expected
+
+
+def test_normalized_finish_reason_tool_call(clear_prediction_client_cache: Any) -> None:
+    response = GenerateContentResponse(
+        candidates=[
+            Candidate(
+                content=Content(
+                    role="model",
+                    parts=[
+                        Part(
+                            function_call=FunctionCall(
+                                name="get_weather", args={"city": "Paris"}
+                            )
+                        )
+                    ],
+                ),
+                finish_reason="STOP",
+            )
+        ]
+    )
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.generate_content.return_value = response
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        message = model.invoke("hi")
+    _get_prediction_client.cache_clear()
+
+    assert message.response_metadata["finish_reason"] == "STOP"
+    assert message.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+def test_normalized_finish_reason_stream(clear_prediction_client_cache: Any) -> None:
+    responses = [
+        GenerateContentResponse(
+            candidates=[Candidate(content=Content(parts=[Part(text="Hel")]))]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="get_weather", args={"city": "Paris"}
+                                )
+                            )
+                        ]
+                    ),
+                    finish_reason="STOP",
+                )
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        chunks = list(model.stream("hi"))
+    _get_prediction_client.cache_clear()
+
+    assert "normalized_finish_reason" not in chunks[0].response_metadata
+    assert chunks[1].response_metadata["finish_reason"] == "STOP"
+    assert chunks[1].response_metadata["normalized_finish_reason"] == "tool_call"
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"
+
+
+def test_normalized_finish_reason_stream_split_tool_call(
+    clear_prediction_client_cache: Any,
+) -> None:
+    responses = [
+        GenerateContentResponse(
+            candidates=[
+                Candidate(
+                    content=Content(
+                        parts=[
+                            Part(
+                                function_call=FunctionCall(
+                                    name="get_weather", args={"city": "Paris"}
+                                )
+                            )
+                        ]
+                    )
+                )
+            ]
+        ),
+        GenerateContentResponse(
+            candidates=[
+                Candidate(content=Content(parts=[Part(text="")]), finish_reason="STOP")
+            ]
+        ),
+    ]
+    with patch(
+        "langchain_google_vertexai._client_utils.v1beta1PredictionServiceClient"
+    ) as client:
+        client.return_value.stream_generate_content.return_value = iter(responses)
+        model = ChatVertexAI(model=_DEFAULT_GEMINI_MODEL, project="test-project")
+        chunks = list(model.stream("hi"))
+    _get_prediction_client.cache_clear()
+
+    full = chunks[0]
+    for chunk in chunks[1:]:
+        full += chunk
+    assert isinstance(full, AIMessageChunk)
+    assert full.tool_calls
+    assert full.response_metadata["normalized_finish_reason"] == "tool_call"

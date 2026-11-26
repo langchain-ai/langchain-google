@@ -46,6 +46,7 @@ from langchain_google_genai._enums import (
 )
 from langchain_google_genai._version import __version__
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
+from langchain_google_genai.classifier import GoogleGenAIClassifier
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from langchain_google_genai.llms import GoogleGenerativeAI
 from langchain_google_genai.utils import create_context_cache
@@ -54,6 +55,7 @@ __all__ = [
     "ChatGoogleGenerativeAI",
     "ComputerUse",
     "Environment",
+    "GoogleGenAIClassifier",
     "GoogleGenerativeAI",
     "GoogleGenerativeAIEmbeddings",
     "HarmBlockThreshold",

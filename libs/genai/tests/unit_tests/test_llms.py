@@ -1,11 +1,13 @@
 from unittest.mock import ANY, Mock, patch
 
+import pytest
 from google.genai.types import (
     Candidate,
     Content,
     GenerateContentResponse,
     Part,
 )
+from langchain_core.messages import HumanMessage
 from pydantic import SecretStr
 
 from langchain_google_genai import __version__
@@ -22,8 +24,11 @@ def test_tracing_params() -> None:
         "ls_provider": "google_genai",
         "ls_model_type": "llm",
         "ls_model_name": MODEL_NAME,
-        "ls_temperature": 0.7,
     }
+    assert llm.client.temperature is None
+
+    llm_25 = GoogleGenerativeAI(model="gemini-2.5-flash", google_api_key="foo")
+    assert llm_25.client.temperature == 0.7
     assert llm.metadata is not None
     assert llm.metadata["lc_versions"]["langchain-google-genai"] == __version__
 
@@ -80,6 +85,22 @@ def test_generation_config_fields_are_passed_to_internal_chat_model() -> None:
     assert config.frequency_penalty == 0.2
     assert config.presence_penalty == 0.1
     assert config.candidate_count == 2
+
+
+def test_fixed_sampling_model_omits_sampling_parameters() -> None:
+    llm = GoogleGenerativeAI(
+        model="gemini-3.6-flash",
+        google_api_key="foo",
+        temperature=0.2,
+        top_k=10,
+        top_p=0.8,
+    )
+
+    with pytest.warns(UserWarning, match="will be ignored"):
+        request = llm.client._prepare_request([HumanMessage(content="test")])
+    request_config = request["config"].model_dump(exclude_unset=True)
+
+    assert {"temperature", "top_k", "top_p"}.isdisjoint(request_config)
 
 
 def test_base_url_support() -> None:
