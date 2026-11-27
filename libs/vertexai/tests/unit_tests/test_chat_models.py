@@ -2297,6 +2297,27 @@ def test_json_mode_with_pydantic_v2_fieldinfo_serialization() -> None:
     assert schema["properties"]["name"]["description"] == "Person's name"
 
 
+def test_with_structured_output_function_calling_method() -> None:
+    """`method="function_calling"` is accepted and uses tool calling."""
+
+    class Answer(BaseModel):
+        """An answer."""
+
+        answer: str
+
+    llm = ChatVertexAI(model=_DEFAULT_MODEL_NAME, project="test-project")
+
+    default_llm = llm.with_structured_output(Answer)
+    function_calling_llm = llm.with_structured_output(Answer, method="function_calling")
+
+    for structured_llm in (default_llm, function_calling_llm):
+        bound = structured_llm.first  # type: ignore[attr-defined]
+        assert bound.kwargs["ls_structured_output_format"]["kwargs"] == {
+            "method": "function_calling"
+        }
+        assert "response_mime_type" not in bound.kwargs
+
+
 @pytest.mark.skipif(
     sys.version_info >= (3, 14),
     reason="Pydantic v1 compatibility not supported on Python 3.14",
