@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import io
 import json
 import logging
@@ -51,6 +52,7 @@ from google.genai.types import (
     Part,
     PrebuiltVoiceConfig,
     SafetySetting,
+    Schema,
     SpeechConfig,
     ThinkingConfig,
     ToolCodeExecution,
@@ -1133,6 +1135,76 @@ def _contains_json_ref(value: Any) -> bool:
     if isinstance(value, list):
         return any(_contains_json_ref(item) for item in value)
     return False
+
+
+def _supported_response_schema_keys() -> frozenset[str]:
+    """JSON Schema keys accepted on Gemini's native `response_schema` channel.
+
+    Every field of `google.genai.types.Schema`, in both its snake_case name and
+    its camelCase alias, plus the keys the SDK's `process_schema()` consumes
+    while normalizing a schema (`$defs`, `$ref`, `const`).
+    """
+    keys = set()
+    for name, field in Schema.model_fields.items():
+        keys.add(name)
+        if field.alias:
+            keys.add(field.alias)
+    keys.update({"$defs", "$ref", "const"})
+    return frozenset(keys)
+
+
+def _strip_unsupported_schema_keys(schema: Any) -> Any:
+    """Recursively drop JSON Schema keys Gemini's native `Schema` rejects.
+
+    `google.genai.types.Schema` forbids extra fields, and the SDK's
+    `process_schema()` does not remove keys such as `examples`,
+    `exclusiveMinimum`, or `uniqueItems`, so a raw Pydantic JSON schema would
+    fail validation on the native channel. Keys the SDK consumes while
+    transforming the schema (`$defs`, `$ref`, `const`) are kept.
+
+    Name-to-schema maps (`properties`, `$defs`, `defs`) are recursed into
+    without filtering their keys: the keys there are field or definition
+    names, not schema keywords.
+    """
+    if isinstance(schema, Mapping):
+        allowed = _supported_response_schema_keys()
+        stripped: dict[str, Any] = {}
+        for key, value in schema.items():
+            if key in ("properties", "$defs", "defs") and isinstance(value, Mapping):
+                stripped[key] = {
+                    name: _strip_unsupported_schema_keys(sub_schema)
+                    for name, sub_schema in value.items()
+                }
+            elif key in allowed:
+                stripped[key] = _strip_unsupported_schema_keys(value)
+        return stripped
+    if isinstance(schema, list):
+        return [_strip_unsupported_schema_keys(item) for item in schema]
+    return schema
+
+
+def _convert_to_native_response_schema(schema: dict[str, Any]) -> Schema:
+    """Convert a JSON Schema dict to a native Gemini `Schema`.
+
+    Routes the schema through the Google GenAI SDK's `t_schema()` (which runs
+    `process_schema()`), so `$defs` are inlined, `$ref`s are resolved, `anyOf`
+    null branches become `nullable`, and `propertyOrdering` is set from field
+    order. The input dict is copied first: `process_schema()` mutates in place
+    and the caller's schema must not change.
+    """
+    cleaned = _strip_unsupported_schema_keys(copy.deepcopy(schema))
+    try:
+        from google.genai import _transformers as genai_transformers
+    except ImportError:
+        # SDK layouts without the internal transformer module: validate the
+        # cleaned dict directly. Schemas with `$defs`/`$ref` still need the
+        # SDK transformer and will raise a validation error here instead.
+        return Schema.model_validate(cleaned)
+    converted = genai_transformers.t_schema(None, cleaned)
+    if converted is None:
+        msg = "Could not convert response_schema to a native Gemini Schema."
+        raise ValueError(msg)
+    return converted
 
 
 def _convert_tool_message_to_parts(
@@ -2725,7 +2797,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             - Property ordering preservation
             - Support for streaming partial JSON chunks
 
-            Uses Gemini's `response_json_schema` API param. Refer to the Gemini API
+            Uses Gemini's `response_schema` API param. Refer to the Gemini API
             [docs](https://ai.google.dev/gemini-api/docs/structured-output) for more
             details. This method is recommended for better reliability as it
             constrains the model's generation process directly.
@@ -3954,27 +4026,54 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         """Add response-specific parameters to generation config.
 
         Includes `response_mime_type`, `response_schema`, and `response_json_schema`.
+
+        `response_schema` is sent on Gemini's native channel, so the schema is
+        converted to a `google.genai.types.Schema` (inlining `$defs`, setting
+        `propertyOrdering`). `response_json_schema` is forwarded verbatim.
+        An explicitly passed `response_schema` is never rewritten to
+        `response_json_schema`.
         """
         # Handle response mime type
         response_mime_type = kwargs.get("response_mime_type", self.response_mime_type)
+        if response_mime_type is None:
+            # e.g. passed inside `generation_config={...}` and merged above.
+            response_mime_type = gen_config.get("response_mime_type")
         if response_mime_type is not None:
             gen_config["response_mime_type"] = response_mime_type
 
         response_schema = kwargs.get("response_schema", self.response_schema)
         response_json_schema = kwargs.get("response_json_schema")  # If passed as kwarg
 
-        # Handle both response_schema and response_json_schema
-        # (Regardless, we use `response_json_schema` in the request)
-        schema_to_use = (
-            response_json_schema
-            if response_json_schema is not None
-            else response_schema
-        )
-        if schema_to_use:
+        # A `response_schema` passed inside `generation_config={...}` was merged
+        # into gen_config before this runs; treat it like an explicit
+        # `response_schema` so the raw dict never reaches `GenerationConfig`
+        # validation as-is.
+        explicit_schema = response_schema
+        if response_schema is None:
+            response_schema = gen_config.pop("response_schema", None)
+        else:
+            gen_config.pop("response_schema", None)
+
+        if response_json_schema:
+            # Explicit `response_json_schema` wins over `response_schema`
+            # (existing precedence); drop the native schema so both channels
+            # are never set at once.
             self._validate_and_add_response_schema(
                 gen_config=gen_config,
-                response_schema=schema_to_use,
+                response_schema=response_json_schema,
                 response_mime_type=response_mime_type,
+            )
+        elif response_schema:
+            if explicit_schema is not None:
+                # An explicitly passed `response_schema` supersedes a
+                # `response_json_schema` merged from `generation_config`
+                # (previous behavior overwrote it).
+                gen_config.pop("response_json_schema", None)
+            self._validate_and_add_response_schema(
+                gen_config=gen_config,
+                response_schema=response_schema,
+                response_mime_type=response_mime_type,
+                native=True,
             )
 
         return gen_config
@@ -3984,8 +4083,22 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         gen_config: dict[str, Any],
         response_schema: dict[str, Any],
         response_mime_type: str | None,
+        *,
+        native: bool = False,
     ) -> None:
-        """Validate and add response schema to generation config."""
+        """Validate and add response schema to generation config.
+
+        Args:
+            gen_config: Generation config dict to update.
+            response_schema: JSON Schema dict for the structured output.
+            response_mime_type: MIME type of the response; must be
+                `'application/json'` when a schema is set.
+            native: If `True`, send the schema on Gemini's native
+                `response_schema` channel (converted to a
+                `google.genai.types.Schema` so `$defs` are inlined and
+                `propertyOrdering` is set). If `False`, forward the dict
+                verbatim as `response_json_schema`.
+        """
         if response_mime_type != "application/json":
             error_message = (
                 "JSON schema structured output is only supported when "
@@ -3997,7 +4110,12 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 )
             raise ValueError(error_message)
 
-        gen_config["response_json_schema"] = response_schema
+        if native:
+            gen_config["response_schema"] = _convert_to_native_response_schema(
+                response_schema
+            )
+        else:
+            gen_config["response_json_schema"] = response_schema
 
     def _prepare_request(
         self,
@@ -4738,12 +4856,15 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
                 msg = f"Unsupported schema type {type(schema)}"
                 raise ValueError(msg)
 
-            # Note: The Google GenAI SDK automatically handles schema transformation
-            # (inlining $defs, resolving $ref) via its process_schema() function.
-            # This ensures Union types and nested schemas work correctly.
+            # The schema is sent on Gemini's native `response_schema` channel,
+            # so the Google GenAI SDK transforms it at request time via its
+            # process_schema() function (inlining $defs, resolving $ref,
+            # setting propertyOrdering). This ensures Union types and nested
+            # schemas work correctly. `response_schema` is bound here as the
+            # raw dict; `_prepare_params` converts it to a `types.Schema`.
             llm = self.bind(
                 response_mime_type="application/json",
-                response_json_schema=schema_json,
+                response_schema=schema_json,
                 ls_structured_output_format={
                     "kwargs": {"method": method},
                     "schema": ls_schema,

@@ -28,6 +28,7 @@ from google.genai.types import (
     Language,
     MediaProcessing,
     Part,
+    Schema,
     ThinkingConfig,
     ThinkingLevel,
     ToolCall,
@@ -5744,9 +5745,9 @@ def test_response_json_schema_parameter() -> None:
     assert bound_kwargs["response_json_schema"] == schema_dict
 
 
-def test_response_json_schema_param_mapping() -> None:
-    """Test both `response_schema` and `response_json_schema` map correctly to
-    `response_json_schema` in `GenerationConfig`."""
+def test_response_schema_param_mapping() -> None:
+    """Test `response_schema` maps to the native channel and
+    `response_json_schema` is forwarded verbatim in `GenerationConfig`."""
     llm = ChatGoogleGenerativeAI(
         model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
     )
@@ -5757,11 +5758,20 @@ def test_response_json_schema_param_mapping() -> None:
         "required": ["name"],
     }
 
-    # Test response_schema parameter maps to response_json_schema in gen_config
+    # Test response_schema parameter maps to response_schema in gen_config
+    # (native channel), not response_json_schema
     gen_config_1 = llm._prepare_params(
         stop=None, response_mime_type="application/json", response_schema=schema_dict
     )
-    assert gen_config_1.response_json_schema == schema_dict
+    assert isinstance(gen_config_1.response_schema, Schema)
+    assert gen_config_1.response_json_schema is None
+    assert gen_config_1.response_schema.model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    ) == {
+        "type": "OBJECT",
+        "properties": {"name": {"type": "STRING"}},
+        "required": ["name"],
+    }
 
     # Test response_json_schema parameter maps directly to response_json_schema in
     # gen_config
@@ -5771,6 +5781,7 @@ def test_response_json_schema_param_mapping() -> None:
         response_json_schema=schema_dict,
     )
     assert gen_config_2.response_json_schema == schema_dict
+    assert gen_config_2.response_schema is None
 
     # Test that response_json_schema takes precedence over response_schema
     different_schema = {
@@ -5788,6 +5799,7 @@ def test_response_json_schema_param_mapping() -> None:
     assert (
         gen_config_3.response_json_schema == different_schema
     )  # response_json_schema takes precedence
+    assert gen_config_3.response_schema is None
 
 
 def test_with_struct_out() -> None:
@@ -5840,7 +5852,7 @@ def test_ref_preservation() -> None:
     structured = llm.with_structured_output(RecursiveModel, method="json_schema")
     llm = cast("Any", structured).first
 
-    schema = llm.kwargs["response_json_schema"]
+    schema = llm.kwargs["response_schema"]
 
     assert "$defs" in schema, "json_schema should preserve $defs definitions"
     assert schema == raw_schema, "json_schema should preserve raw schema exactly"
@@ -5955,7 +5967,7 @@ def test_union_schema_support() -> None:
 
     llm = cast("Any", structured).first
 
-    assert "response_json_schema" in llm.kwargs
+    assert "response_schema" in llm.kwargs
 
 
 def test_response_schema_mime_type_validation() -> None:
@@ -5974,6 +5986,13 @@ def test_response_schema_mime_type_validation() -> None:
             stop=None, response_schema=schema, response_mime_type="text/plain"
         )
 
+    # Test that a valid mime type routes response_schema to the native channel
+    gen_config = llm._prepare_params(
+        stop=None, response_schema=schema, response_mime_type="application/json"
+    )
+    assert isinstance(gen_config.response_schema, Schema)
+    assert gen_config.response_json_schema is None
+
     # Test that binding succeeds (validation happens later during generation)
     llm_with_schema = llm.bind(
         response_schema=schema, response_mime_type="application/json"
@@ -5984,6 +6003,83 @@ def test_response_schema_mime_type_validation() -> None:
         response_json_schema=schema, response_mime_type="application/json"
     )
     assert llm_with_json_schema is not None
+
+
+def test_with_structured_output_uses_native_response_schema() -> None:
+    """Test `with_structured_output` sends the schema on the native
+    `response_schema` channel, with `$defs` inlined and `propertyOrdering`
+    set (langchain-ai/langchain-google#2069)."""
+
+    class Item(BaseModel):
+        name: str = Field(examples=["bolt"])
+        qty: float | None = None
+
+    class Doc(BaseModel):
+        reasoning: str
+        items: list[Item]
+
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+
+    structured_llm = llm.with_structured_output(Doc, method="json_schema")
+    bound_llm = cast("Any", structured_llm).first
+
+    # The bound runnable carries the raw schema; conversion happens when the
+    # request is prepared.
+    assert bound_llm.kwargs["response_schema"] == Doc.model_json_schema()
+    assert "response_json_schema" not in bound_llm.kwargs
+
+    messages: list[BaseMessage] = [HumanMessage(content="extract")]
+    config = llm._prepare_request(
+        messages,
+        response_mime_type="application/json",
+        response_schema=bound_llm.kwargs["response_schema"],
+    )["config"]
+
+    assert config.response_schema is not None
+    assert config.response_json_schema is None
+    schema = config.response_schema
+    assert schema["property_ordering"] == ["reasoning", "items"]
+    assert schema["properties"]["items"]["items"]["property_ordering"] == [
+        "name",
+        "qty",
+    ]
+    assert schema["properties"]["items"]["items"]["properties"]["qty"]["nullable"]
+    assert "$defs" not in schema
+    assert "examples" not in json.dumps(schema)
+
+
+def test_explicit_response_schema_not_rewritten() -> None:
+    """Regression test: an explicit `response_schema=` kwarg stays on the
+    native channel and is never rewritten to `response_json_schema`
+    (langchain-ai/langchain-google#2069)."""
+    llm = ChatGoogleGenerativeAI(
+        model=MODEL_NAME, google_api_key=SecretStr(FAKE_API_KEY)
+    )
+
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
+
+    messages: list[BaseMessage] = [HumanMessage(content="Hello")]
+    request = llm._prepare_request(
+        messages,
+        response_mime_type="application/json",
+        response_schema=schema,
+    )
+    config = request["config"]
+
+    assert config.response_schema is not None
+    assert config.response_json_schema is None
+    # Request preparation must not mutate the caller's schema dict.
+    assert schema == {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "required": ["name"],
+    }
 
 
 def test_thinking_budget_preserved_with_structured_output() -> None:
