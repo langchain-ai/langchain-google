@@ -34,7 +34,7 @@ Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=0.35.0"]
+anthropic = ["anthropic>=0.64.0,<3.0.0"]
 mistral = ["langchain-mistralai>=0.2.0,<2.0.0"]
 vectorsearch_v2 = [
   "google-cloud-vectorsearch",
@@ -43,11 +43,11 @@ vectorsearch_v2 = [
 [dependency-groups]
 lint = ["ruff>=0.13.1,<0.16.0"]
 typing = [
-    "mypy>=1.18.1,<1.21.0",
+    "mypy>=1.18.1,<2.5.0",
     "types-requests>=2.31.0,<3.0.0",
     "types-google-cloud-ndb>=2.2.0.20240106,<3.0.0.0",
-    "types-protobuf>=4.24.0.4,<7.0.0.0",
-    "anthropic>=0.64.0,<1.0.0",
+    "types-protobuf>=4.24.0.4,<8.0.0.0",
+    "anthropic>=0.64.0,<3.0.0",
 ]
 test = [
     "pytest>=8.4.0,<10.0.0",
@@ -61,10 +61,10 @@ test = [
     "pytest-asyncio>=0.21.0,<2.0.0",
     "pytest-socket>=0.7.0,<1.0.0",
     "types-requests>=2.31.0,<3.0.0",
-    "types-protobuf>=4.24.0.4,<7.0.0.0",
+    "types-protobuf>=4.24.0.4,<8.0.0.0",
     "google-api-python-client>=2.117.0,<3.0.0",
     "langchain>=1.0.0rc2,<2.0.0",
-    "anthropic>=0.64.0,<1.0.0",
+    "anthropic>=0.64.0,<3.0.0",
     "validators>=0.35.0,<1.0.0",
     "langchain-tests>=1.1.2,<2.0.0",
     "pytest-recording>=0.13.4,<1.0.0",
