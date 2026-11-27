@@ -2669,7 +2669,7 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
         schema: dict | type[BaseModel] | type,
         *,
         include_raw: bool = False,
-        method: Literal["json_mode"] | None = None,
+        method: Literal["function_calling", "json_mode"] | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, dict | BaseModel]:
         """Model wrapper that returns outputs formatted to match the given schema.
@@ -2705,8 +2705,12 @@ class ChatVertexAI(_VertexAICommon, BaseChatModel):
 
                 The final output is always a `dict` with keys `'raw'`, `'parsed'`, and
                 `'parsing_error'`.
-            method: If set to `'json_schema'` it will use controlled generation to
-                generate the response rather than function calling.
+            method: The method for steering model generation.
+
+                - `'function_calling'` (or `None`, the default): uses tool calling
+                    to generate the structured output.
+                - `'json_mode'`: uses controlled generation (a response schema) to
+                    generate the response rather than function calling.
 
                 Does not work with schemas with references or Pydantic models with
                 self-references.
