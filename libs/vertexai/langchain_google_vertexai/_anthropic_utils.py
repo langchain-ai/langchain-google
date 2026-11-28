@@ -180,6 +180,17 @@ def _format_message_anthropic(
                     msg = "Dict content block must have a type key"
                     raise ValueError(msg)
 
+                # Drop OpenAI Responses blocks written by another provider; the
+                # tool call is sent from `message.tool_calls`. A missing
+                # `model_provider` is kept: `ChatAnthropicVertex` does not set it.
+                if (
+                    block["type"] in ("reasoning", "function_call")
+                    and isinstance(message, AIMessage)
+                    and message.response_metadata.get("model_provider")
+                    not in (None, "anthropic")
+                ):
+                    continue
+
                 new_block = {}
 
                 for copy_attr in ["type", "cache_control"]:
