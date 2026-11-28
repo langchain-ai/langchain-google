@@ -9683,3 +9683,34 @@ def test_cached_content_function_calling_include_raw_reports_parsing_error() -> 
     assert result["raw"].content == "test response"
     assert result["parsed"] is None
     assert isinstance(result["parsing_error"], OutputParserException)
+
+
+def test_vertex_only_model_profiles() -> None:
+    """Vertex-only Gemini model IDs should have populated default profiles."""
+    for model_id in (
+        "gemini-2.5-flash-tts",
+        "gemini-2.5-pro-tts",
+    ):
+        chat = ChatGoogleGenerativeAI(model=model_id, api_key=SecretStr(FAKE_API_KEY))
+        assert chat.profile, f"Expected non-empty profile for {model_id}"
+        assert chat.profile.get("audio_outputs") is True
+        assert chat.profile.get("text_outputs") is False
+        assert chat.profile.get("max_input_tokens") == 32768
+        assert chat.profile.get("max_output_tokens") == 16384
+        assert chat.profile.get("temperature") is False
+
+    banana = ChatGoogleGenerativeAI(
+        model="gemini-nano-banana-2.1", api_key=SecretStr(FAKE_API_KEY)
+    )
+    assert banana.profile
+    assert banana.profile.get("image_outputs") is True
+    assert banana.profile.get("text_outputs") is True
+    assert banana.profile.get("max_input_tokens") == 131072
+    assert banana.profile.get("max_output_tokens") == 32768
+    assert banana.profile.get("temperature") is False
+
+    regional_tts = ChatGoogleGenerativeAI(
+        model="publishers/google/models/gemini-2.5-flash-tts",
+        api_key=SecretStr(FAKE_API_KEY),
+    )
+    assert regional_tts.profile == _get_default_model_profile("gemini-2.5-flash-tts")
