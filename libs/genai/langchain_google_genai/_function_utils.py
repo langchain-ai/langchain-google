@@ -737,7 +737,11 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
         for i, v in enumerate(schema):
             items[f"item{i}"] = _get_properties_from_schema_any(v)
     elif isinstance(schema, dict):
-        items["type"] = _get_type_from_schema(schema)
+        # An anyOf alternative can constrain the item without declaring a type.
+        # Fall back to the type on the item itself when no alternative supplies one.
+        items["type"] = _get_nullable_type_from_schema(schema) or _get_type_from_schema(
+            {"type": schema.get("type", schema.get("type_"))}
+        )
         if items["type"] == types.Type.OBJECT and "properties" in schema:
             items["properties"] = _get_properties_from_schema_any(schema["properties"])
         if items["type"] == types.Type.ARRAY and "items" in schema:
@@ -748,7 +752,7 @@ def _get_items_from_schema(schema: dict | list | str) -> dict[str, Any]:
             items["enum"] = schema["enum"]
         if _is_nullable_schema(schema):
             items["nullable"] = True
-        if "required" in schema:
+        if items.get("properties") and "required" in schema:
             items["required"] = schema["required"]
         if "enum" in schema:
             items["enum"] = schema["enum"]
@@ -799,22 +803,13 @@ def _get_nullable_type_from_schema(schema: dict[str, Any]) -> types.Type | None:
 
 
 def _is_nullable_schema(schema: dict[str, Any]) -> bool:
-    if "anyOf" in schema:
-        schema_types = [
-            _get_nullable_type_from_schema(sub_schema) for sub_schema in schema["anyOf"]
-        ]
-        return any(t is None for t in schema_types)
-    if "type" in schema or "type_" in schema:
-        type_ = schema["type"] if "type" in schema else schema["type_"]
-        if isinstance(type_, types.Type):
-            return False
-        if isinstance(type_, int):
-            # Handle integer type values (from tool_to_dict serialization)
-            # Integer types are never null (except for NULL type handled separately)
-            return type_ == 7  # 7 corresponds to NULL type
-    else:
-        pass
-    return False
+    type_ = schema.get("type", schema.get("type_"))
+    if isinstance(type_, dict):
+        type_ = type_.get("_value_")
+    # 7 is the legacy serialized NULL type.
+    return type_ in ("null", types.Type.NULL, 7) or any(
+        _is_nullable_schema(alternative) for alternative in schema.get("anyOf", [])
+    )
 
 
 _ToolChoiceType = (
