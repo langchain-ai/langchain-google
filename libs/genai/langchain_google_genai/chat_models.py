@@ -231,6 +231,89 @@ _FINISH_REASONS: dict[str, str] = {
 
 _MODEL_PROFILES = cast("ModelProfileRegistry", _PROFILES)
 
+# Vertex-only Gemini model IDs from models.dev `google-vertex` provider that are absent
+# from the `google` provider used to generate `data/_profiles.py`.
+_VERTEX_ONLY_MODEL_PROFILES = cast(
+    "ModelProfileRegistry",
+    {
+        "gemini-2.5-flash-tts": {
+            "name": "Gemini 2.5 Flash TTS",
+            "release_date": "2025-09-30",
+            "last_updated": "2025-12-10",
+            "open_weights": False,
+            "max_input_tokens": 32768,
+            "max_output_tokens": 16384,
+            "text_inputs": True,
+            "image_inputs": False,
+            "audio_inputs": False,
+            "video_inputs": False,
+            "text_outputs": False,
+            "image_outputs": False,
+            "audio_outputs": True,
+            "video_outputs": False,
+            "reasoning_output": False,
+            "tool_calling": False,
+            "attachment": False,
+            "temperature": False,
+            "image_url_inputs": True,
+            "pdf_inputs": True,
+            "image_tool_message": True,
+            "tool_choice": True,
+            "structured_output": True,
+        },
+        "gemini-2.5-pro-tts": {
+            "name": "Gemini 2.5 Pro TTS",
+            "release_date": "2025-09-30",
+            "last_updated": "2025-12-10",
+            "open_weights": False,
+            "max_input_tokens": 32768,
+            "max_output_tokens": 16384,
+            "text_inputs": True,
+            "image_inputs": False,
+            "audio_inputs": False,
+            "video_inputs": False,
+            "text_outputs": False,
+            "image_outputs": False,
+            "audio_outputs": True,
+            "video_outputs": False,
+            "reasoning_output": False,
+            "tool_calling": False,
+            "attachment": False,
+            "temperature": False,
+            "image_url_inputs": True,
+            "pdf_inputs": True,
+            "image_tool_message": True,
+            "tool_choice": True,
+            "structured_output": True,
+        },
+        "gemini-nano-banana-2.1": {
+            "name": "Nano Banana 2.1",
+            "release_date": "2026-10-06",
+            "last_updated": "2026-10-06",
+            "open_weights": False,
+            "max_input_tokens": 131072,
+            "max_output_tokens": 32768,
+            "text_inputs": True,
+            "image_inputs": True,
+            "audio_inputs": False,
+            "pdf_inputs": True,
+            "video_inputs": True,
+            "text_outputs": True,
+            "image_outputs": True,
+            "audio_outputs": False,
+            "video_outputs": False,
+            "reasoning_output": True,
+            "tool_calling": False,
+            "structured_output": True,
+            "attachment": True,
+            "temperature": False,
+            "image_url_inputs": True,
+            "image_tool_message": True,
+            "tool_choice": True,
+        },
+    },
+)
+
 
 class ChatGoogleGenerativeAIError(GoogleGenerativeAIError):
     """Wrapper exception class for errors associated with the `Google GenAI` API.
@@ -454,7 +537,11 @@ async def _aclassified_stream(
 
 
 def _get_default_model_profile(model_name: str) -> ModelProfile:
-    default = _MODEL_PROFILES.get(model_name) or {}
+    default = (
+        _MODEL_PROFILES.get(model_name)
+        or _VERTEX_ONLY_MODEL_PROFILES.get(model_name)
+        or {}
+    )
     return default.copy()
 
 
