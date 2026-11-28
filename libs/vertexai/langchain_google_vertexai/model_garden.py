@@ -51,6 +51,7 @@ from langchain_google_vertexai._anthropic_utils import (
     _create_usage_metadata,
     _documents_in_params,
     _format_messages_anthropic,
+    _is_anthropic_builtin_tool,
     _make_message_chunk_from_anthropic_event,
     _thinking_in_params,
     _tools_in_params,
@@ -508,12 +509,18 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             and not _documents_in_params(params)
             and not _thinking_in_params(params)
         )
+        block_types: dict[int, str] = {}
         for event in stream:
+            if event.type == "content_block_start":
+                block_types[event.index] = event.content_block.type
             msg = _make_message_chunk_from_anthropic_event(
                 event,
                 stream_usage=stream_usage,
                 coerce_content_to_string=coerce_content_to_string,
+                block_type=block_types.get(getattr(event, "index", -1)),
             )
+            if event.type == "content_block_stop":
+                block_types.pop(event.index, None)
             if msg is not None:
                 chunk = ChatGenerationChunk(message=msg)
                 if run_manager and isinstance(msg.content, str):
@@ -554,12 +561,18 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
             and not _documents_in_params(params)
             and not _thinking_in_params(params)
         )
+        block_types: dict[int, str] = {}
         async for event in stream:
+            if event.type == "content_block_start":
+                block_types[event.index] = event.content_block.type
             msg = _make_message_chunk_from_anthropic_event(
                 event,
                 stream_usage=stream_usage,
                 coerce_content_to_string=coerce_content_to_string,
+                block_type=block_types.get(getattr(event, "index", -1)),
             )
+            if event.type == "content_block_stop":
+                block_types.pop(event.index, None)
             if msg is not None:
                 chunk = ChatGenerationChunk(message=msg)
                 if run_manager and isinstance(msg.content, str):
@@ -573,8 +586,40 @@ class ChatAnthropicVertex(_VertexAICommon, BaseChatModel):
         tool_choice: dict[str, str] | Literal["any", "auto"] | str | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
-        """Bind tool-like objects to this chat model."""
-        formatted_tools = [convert_to_anthropic_tool(tool) for tool in tools]
+        """Bind tool-like objects to this chat model.
+
+        Supports Anthropic tool schemas, LangChain tools, callables, Pydantic models,
+        and Anthropic server-side tools such as web search.
+
+        Example:
+            ```python
+            from langchain_google_vertexai import ChatAnthropicVertex
+
+            model = ChatAnthropicVertex(
+                model="claude-sonnet-4-5@20250929",
+                project="my-project",
+                location="us-east5",
+            )
+            model_with_search = model.bind_tools(
+                [
+                    {
+                        "type": "web_search_20250305",
+                        "name": "web_search",
+                        "max_uses": 5,
+                    }
+                ]
+            )
+            response = model_with_search.invoke(
+                "Search the web for today's weather in San Francisco."
+            )
+            ```
+        """
+        formatted_tools = [
+            tool
+            if _is_anthropic_builtin_tool(tool)
+            else convert_to_anthropic_tool(tool)
+            for tool in tools
+        ]
         if not tool_choice:
             pass
         elif isinstance(tool_choice, dict):

@@ -5,10 +5,20 @@ import json
 import sys
 import warnings
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from anthropic.types import (
+    Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    ServerToolUseBlock,
+    WebSearchResultBlock,
+    WebSearchToolResultBlock,
+)
+from anthropic.types.input_json_delta import InputJSONDelta
 from google.cloud.aiplatform_v1beta1.types import (
     Blob,
     Candidate,
@@ -34,6 +44,7 @@ from langchain_core.messages.tool import tool_call as create_tool_call
 from langchain_core.output_parsers.openai_tools import (
     PydanticToolsParser,
 )
+from langchain_core.runnables import RunnableBinding
 from pydantic import BaseModel
 from vertexai.generative_models import (
     SafetySetting as VertexSafetySetting,  # TODO: migrate to google-genai
@@ -361,6 +372,173 @@ def test_init_client_with_custom_model_kwargs() -> None:
 
     default_params = llm._default_params
     assert default_params["thinking"] == {"type": "enabled", "budget_tokens": 1024}
+
+
+def test_anthropic_vertex_bind_web_search_and_custom_tool() -> None:
+    """Test mixing Anthropic server-side and client-side tools."""
+    model = ChatAnthropicVertex(project="test-project", location="test-location")
+    web_search_tool = {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 3,
+        "allowed_domains": ["example.com"],
+    }
+
+    def get_weather(city: str) -> str:
+        """Get the weather for a city."""
+        return f"Sunny in {city}"
+
+    model_with_tools = cast(
+        "RunnableBinding", model.bind_tools([web_search_tool, get_weather])
+    )
+
+    assert model_with_tools.kwargs["tools"] == [
+        web_search_tool,
+        {
+            "name": "get_weather",
+            "description": "Get the weather for a city.",
+            "input_schema": {
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+                "type": "object",
+            },
+        },
+    ]
+
+
+def test_anthropic_vertex_web_search_request_and_response() -> None:
+    """Test the web search tool across request and response conversion."""
+    model = ChatAnthropicVertex(
+        model="claude-sonnet-4-5@20250929",
+        project="test-project",
+        location="test-location",
+    )
+    model.client = MagicMock()
+    model.client.messages.create.return_value = Message(
+        id="msg_test",
+        content=[
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_test",
+                "name": "web_search",
+                "input": {"query": "weather in San Francisco"},
+            },
+            {
+                "type": "web_search_tool_result",
+                "tool_use_id": "srvtoolu_test",
+                "content": [
+                    {
+                        "type": "web_search_result",
+                        "url": "https://example.com/weather",
+                        "title": "San Francisco weather",
+                        "encrypted_content": "encrypted",
+                    }
+                ],
+            },
+            {"type": "text", "text": "It is sunny."},
+        ],
+        model="claude-sonnet-4-5@20250929",
+        role="assistant",
+        stop_reason="end_turn",
+        stop_sequence=None,
+        type="message",
+        usage={"input_tokens": 10, "output_tokens": 5},
+    )
+    web_search_tool = {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 5,
+    }
+
+    response = model.bind_tools([web_search_tool]).invoke(
+        "Search for the weather in San Francisco."
+    )
+
+    request = model.client.messages.create.call_args.kwargs
+    assert request["tools"] == [web_search_tool]
+    response_content = cast("list[dict[str, Any]]", response.content)
+    assert [block["type"] for block in response_content] == [
+        "server_tool_use",
+        "web_search_tool_result",
+        "text",
+    ]
+    assert response.usage_metadata == {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "total_tokens": 15,
+    }
+
+
+def test_anthropic_vertex_web_search_stream() -> None:
+    """Test streamed server tool arguments are not exposed as client tool calls."""
+    model = ChatAnthropicVertex(
+        model="claude-sonnet-4-5@20250929",
+        project="test-project",
+        location="test-location",
+    )
+    model.client = MagicMock()
+    model.client.messages.create.return_value = iter(
+        [
+            RawContentBlockStartEvent(
+                type="content_block_start",
+                index=0,
+                content_block=ServerToolUseBlock(
+                    type="server_tool_use",
+                    id="srvtoolu_test",
+                    name="web_search",
+                    input={},
+                ),
+            ),
+            RawContentBlockDeltaEvent(
+                type="content_block_delta",
+                index=0,
+                delta=InputJSONDelta(
+                    type="input_json_delta",
+                    partial_json='{"query":"weather in San Francisco"}',
+                ),
+            ),
+            RawContentBlockStopEvent(type="content_block_stop", index=0),
+            RawContentBlockStartEvent(
+                type="content_block_start",
+                index=1,
+                content_block=WebSearchToolResultBlock(
+                    type="web_search_tool_result",
+                    tool_use_id="srvtoolu_test",
+                    content=[
+                        WebSearchResultBlock(
+                            type="web_search_result",
+                            url="https://example.com/weather",
+                            title="San Francisco weather",
+                            encrypted_content="encrypted",
+                        )
+                    ],
+                ),
+            ),
+            RawContentBlockStopEvent(type="content_block_stop", index=1),
+        ]
+    )
+    web_search_tool = {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 5,
+    }
+
+    chunks = list(
+        model._stream(
+            [HumanMessage("Search for the weather in San Francisco.")],
+            tools=[web_search_tool],
+        )
+    )
+
+    messages = [cast("AIMessageChunk", chunk.message) for chunk in chunks]
+    assert len(messages) == 3
+    assert all(not message.tool_call_chunks for message in messages)
+    combined = messages[0] + messages[1] + messages[2]
+    combined_content = cast("list[dict[str, Any]]", combined.content)
+    assert [block["type"] for block in combined_content] == [
+        "server_tool_use",
+        "web_search_tool_result",
+    ]
 
 
 @pytest.mark.parametrize(
