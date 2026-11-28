@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import datetime
 import io
 import json
 import logging
@@ -557,6 +558,8 @@ _FIXED_SAMPLING_AND_NO_PREFILL_MODELS = frozenset(
     {
         "gemini-3.5-flash-lite",
         "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
         "gemini-4-carbon",
         "gemini-4-hydrogen",
         "gemini-4-neon",
@@ -591,6 +594,30 @@ def _is_gemini_3_or_later(model_name: str) -> bool:
     if not normalized:
         return False
     return any(int(major) >= 3 for major in _GEMINI_MAJOR_VERSION.findall(normalized))
+
+
+_GEMINI_25_ROUTING_DATE = datetime.date(2026, 12, 1)
+_GEMINI_25_ROUTED_MODELS = {
+    "gemini-2.5-flash": "gemini-3.5-flash-lite",
+    "gemini-2.5-pro": "gemini-3.8-flash",
+}
+
+
+def _utc_today() -> datetime.date:
+    """Return the current UTC date."""
+    return datetime.datetime.now(datetime.UTC).date()
+
+
+def _gemini_25_routing_target(model_name: str, *, use_vertexai: bool) -> str | None:
+    """Return the model the Gemini Developer API routes a retired 2.5 model to.
+
+    Starting December 1, 2026, Google serves `gemini-2.5-flash` with
+    `gemini-3.5-flash-lite` and `gemini-2.5-pro` with `gemini-3.8-flash`, applying
+    the newer model's request validation. Vertex AI is not affected.
+    """
+    if use_vertexai:
+        return None
+    return _GEMINI_25_ROUTED_MODELS.get(_normalize_gemini_model_name(model_name))
 
 
 def _is_gemini_25_model(model_name: str) -> bool:
@@ -3490,6 +3517,16 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         return self.reasoning_effort
 
     @property
+    def _request_model(self) -> str:
+        """Model whose request rules apply, accounting for Google-side routing."""
+        if _utc_today() < _GEMINI_25_ROUTING_DATE:
+            return self.model
+        target = _gemini_25_routing_target(
+            self.model, use_vertexai=getattr(self, "_use_vertexai", False)
+        )
+        return target or self.model
+
+    @property
     def _supports_xhigh_thinking_level(self) -> bool:
         levels = (self.profile or {}).get("reasoning_effort_levels") or []
         return "xhigh" in levels
@@ -3548,8 +3585,21 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     @model_validator(mode="after")
     def validate_environment(self) -> Self:
         """Validates params and builds client."""
+        routing_target = _gemini_25_routing_target(
+            self.model,
+            use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
+        )
+        if routing_target is not None:
+            warnings.warn(
+                f"Starting December 1, 2026, the Gemini API serves '{self.model}' "
+                f"with '{routing_target}', billed at the new model's rates. Update "
+                f"the model to '{routing_target}' or another current Gemini model.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         if "temperature" not in self.model_fields_set and _is_gemini_3_or_later(
-            self.model
+            self._request_model
         ):
             self.temperature = None
 
@@ -3683,7 +3733,9 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
     def _set_model_profile(self) -> Self:
         """Set model profile if not overridden."""
         if self.profile is None:
-            model_id = re.sub(r"-\d{3}$", "", _normalize_gemini_model_name(self.model))
+            model_id = re.sub(
+                r"-\d{3}$", "", _normalize_gemini_model_name(self._request_model)
+            )
             self.profile = _get_default_model_profile(model_id)
         return self
 
@@ -4024,11 +4076,11 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
         system_instruction, history = _parse_chat_history(
             filtered_messages,
             convert_system_message_to_human=self.convert_system_message_to_human,
-            model=self.model,
+            model=self._request_model,
             use_vertexai=self._use_vertexai,  # type: ignore[attr-defined]
         )
         if (
-            _uses_fixed_sampling_and_disallows_prefill(self.model)
+            _uses_fixed_sampling_and_disallows_prefill(self._request_model)
             and history
             and history[-1].role == "model"
         ):
@@ -4321,7 +4373,7 @@ class ChatGoogleGenerativeAI(_BaseGoogleGenerativeAI, BaseChatModel):
             image_config_obj = ImageConfig(**image_config_dict)
 
         request_params = params.model_dump(exclude_unset=True)
-        if _uses_fixed_sampling_and_disallows_prefill(self.model):
+        if _uses_fixed_sampling_and_disallows_prefill(self._request_model):
             # These models use fixed sampling defaults and ignore custom sampling
             # parameters. Drop them from the request and warn so an explicitly-set
             # value isn't silently discarded (consistent with how superseded
